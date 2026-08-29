@@ -1,10 +1,13 @@
 #ifndef TYPEDJSON_TYPEDJSON_H
 #define TYPEDJSON_TYPEDJSON_H
 
+#include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include <cpp11.hpp>
+#include <Rversion.h>
 
 #include "yyjson.h"
 
@@ -72,6 +75,40 @@ inline const char *ztag_text(ZTag tag) {
     if (table[i].tag == tag) return table[i].text;
   }
   return "";
+}
+
+struct Attrib {
+  SEXP tag;
+  SEXP value;
+};
+
+#if defined(R_VERSION) && R_VERSION >= R_Version(4, 6, 0)
+inline SEXP collect_attrib(SEXP tag, SEXP value, void *data) {
+  Attrib entry = {tag, value};
+  static_cast<std::vector<Attrib> *>(data)->push_back(entry);
+  return nullptr;
+}
+#endif
+
+// R 4.6 withdrew the ATTRIB() declaration in favour of R_mapAttrib(), which
+// walks the same raw pairlist, so compact row names stay as they are stored.
+inline void attributes_of(SEXP x, std::vector<Attrib> *out) {
+  if (!ANY_ATTRIB(x)) return;
+#if defined(R_VERSION) && R_VERSION >= R_Version(4, 6, 0)
+  R_mapAttrib(x, collect_attrib, out);
+#else
+  for (SEXP a = ATTRIB(x); a != R_NilValue; a = CDR(a)) {
+    Attrib entry = {TAG(a), CAR(a)};
+    out->push_back(entry);
+  }
+#endif
+}
+
+inline SEXP attrib_value(const std::vector<Attrib> &attrs, SEXP tag) {
+  for (size_t i = 0; i < attrs.size(); ++i) {
+    if (attrs[i].tag == tag) return attrs[i].value;
+  }
+  return R_NilValue;
 }
 
 // A yyjson document outlives every C++ frame that could clean it up, since

@@ -1,6 +1,6 @@
-#include <cctype>
 #include <climits>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -331,7 +331,7 @@ SEXP Reader::build_raw(yyjson_val *v) {
 }
 
 SEXP Reader::coerce(SEXP x, SEXPTYPE type) {
-  if (TYPEOF(x) == type) return x;
+  if ((SEXPTYPE)TYPEOF(x) == type) return x;
 
   SEXP nms = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
   SEXP out = PROTECT(Rf_coerceVector(x, type));

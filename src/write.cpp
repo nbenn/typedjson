@@ -1,3 +1,4 @@
+#include <cstring>
 #include <string>
 #include <utility>
 #include <unordered_map>
@@ -29,8 +30,9 @@ class Writer {
  private:
   yyjson_mut_val *emit_state(SEXP x);
   yyjson_mut_val *emit_plain(SEXP x, SEXP nms);
-  yyjson_mut_val *emit_tagged(SEXP x, SEXP nms);
-  yyjson_mut_val *emit_attribs(SEXP x, SEXP nms);
+  yyjson_mut_val *emit_tagged(SEXP x, const std::vector<Attrib> &attrs,
+                              SEXP nms);
+  yyjson_mut_val *emit_attribs(const std::vector<Attrib> &attrs, SEXP nms);
   yyjson_mut_val *emit_payload(SEXP x, SEXP nms);
   yyjson_mut_val *emit_element(SEXP x, R_xlen_t i, SEXP nms);
   yyjson_mut_val *emit_complex(SEXP x);
@@ -42,8 +44,8 @@ class Writer {
   yyjson_mut_val *ztag_val(ZTag tag);
 
   bool needs_state(SEXP klass);
-  SEXP usable_names(SEXP x);
-  bool escalate(SEXP x, SEXP nms);
+  SEXP usable_names(SEXP x, const std::vector<Attrib> &attrs);
+  bool escalate(SEXP x, const std::vector<Attrib> &attrs, SEXP nms);
 
   std::string path() const;
   [[noreturn]] void fail(const std::string &msg) const;
@@ -144,33 +146,28 @@ bool Writer::needs_state(SEXP klass) {
   return needs;
 }
 
-SEXP Writer::usable_names(SEXP x) {
+SEXP Writer::usable_names(SEXP x, const std::vector<Attrib> &attrs) {
   int type = TYPEOF(x);
   if (type == CPLXSXP || type == RAWSXP || type == OBJSXP) return R_NilValue;
 
-  SEXP nms = R_NilValue;
-  for (SEXP a = ATTRIB(x); a != R_NilValue; a = CDR(a)) {
-    if (TAG(a) == R_NamesSymbol) {
-      nms = CAR(a);
-      break;
-    }
-  }
+  SEXP nms = attrib_value(attrs, R_NamesSymbol);
   if (nms == R_NilValue) return R_NilValue;
-  if (TYPEOF(nms) != STRSXP || ATTRIB(nms) != R_NilValue ||
+
+  if (TYPEOF(nms) != STRSXP || ANY_ATTRIB(nms) ||
       XLENGTH(nms) != XLENGTH(x)) {
     return R_NilValue;
   }
   return nms;
 }
 
-bool Writer::escalate(SEXP x, SEXP nms) {
+bool Writer::escalate(SEXP x, const std::vector<Attrib> &attrs, SEXP nms) {
   int type = TYPEOF(x);
   if (type == CPLXSXP || type == RAWSXP || type == OBJSXP) return true;
   if (XLENGTH(x) == 0 && type != VECSXP) return true;
   if (Rf_isS4(x)) return true;
 
-  for (SEXP a = ATTRIB(x); a != R_NilValue; a = CDR(a)) {
-    if (TAG(a) == R_NamesSymbol && CAR(a) == nms) continue;
+  for (size_t i = 0; i < attrs.size(); ++i) {
+    if (attrs[i].tag == R_NamesSymbol && attrs[i].value == nms) continue;
     return true;
   }
   return false;
@@ -179,13 +176,10 @@ bool Writer::escalate(SEXP x, SEXP nms) {
 yyjson_mut_val *Writer::emit(SEXP x) {
   if (x == R_NilValue) return yyjson_mut_null(doc_);
 
-  SEXP klass = R_NilValue;
-  for (SEXP a = ATTRIB(x); a != R_NilValue; a = CDR(a)) {
-    if (TAG(a) == R_ClassSymbol) {
-      klass = CAR(a);
-      break;
-    }
-  }
+  std::vector<Attrib> attrs;
+  attributes_of(x, &attrs);
+
+  SEXP klass = attrib_value(attrs, R_ClassSymbol);
   if (klass != R_NilValue && TYPEOF(klass) == STRSXP && needs_state(klass)) {
     yyjson_mut_val *out = emit_state(x);
     if (out != nullptr) return out;
@@ -206,8 +200,8 @@ yyjson_mut_val *Writer::emit(SEXP x) {
            Rf_type2char(TYPEOF(x)) + "'");
   }
 
-  SEXP nms = usable_names(x);
-  if (escalate(x, nms)) return emit_tagged(x, nms);
+  SEXP nms = usable_names(x, attrs);
+  if (escalate(x, attrs, nms)) return emit_tagged(x, attrs, nms);
   return emit_plain(x, nms);
 }
 
@@ -342,21 +336,23 @@ yyjson_mut_val *Writer::emit_payload(SEXP x, SEXP nms) {
   return emit_plain(x, nms);
 }
 
-yyjson_mut_val *Writer::emit_attribs(SEXP x, SEXP nms) {
+yyjson_mut_val *Writer::emit_attribs(const std::vector<Attrib> &attrs,
+                                     SEXP nms) {
   yyjson_mut_val *obj = nullptr;
 
-  for (SEXP a = ATTRIB(x); a != R_NilValue; a = CDR(a)) {
-    if (TAG(a) == R_NamesSymbol && CAR(a) == nms) continue;
+  for (size_t i = 0; i < attrs.size(); ++i) {
+    if (attrs[i].tag == R_NamesSymbol && attrs[i].value == nms) continue;
     if (obj == nullptr) obj = yyjson_mut_obj(doc_);
 
-    SEXP name = PRINTNAME(TAG(a));
+    SEXP name = PRINTNAME(attrs[i].tag);
     Step step(this, name, 0);
-    yyjson_mut_obj_add(obj, str_val(name), emit(CAR(a)));
+    yyjson_mut_obj_add(obj, str_val(name), emit(attrs[i].value));
   }
   return obj;
 }
 
-yyjson_mut_val *Writer::emit_tagged(SEXP x, SEXP nms) {
+yyjson_mut_val *Writer::emit_tagged(SEXP x, const std::vector<Attrib> &attrs,
+                                    SEXP nms) {
   yyjson_mut_val *obj = yyjson_mut_obj(doc_);
   bool s4 = Rf_isS4(x);
   const char *type = TYPEOF(x) == OBJSXP ? (s4 ? "S4" : "object")
@@ -369,7 +365,7 @@ yyjson_mut_val *Writer::emit_tagged(SEXP x, SEXP nms) {
                        yyjson_mut_bool(doc_, true));
   }
 
-  yyjson_mut_val *attribs = emit_attribs(x, nms);
+  yyjson_mut_val *attribs = emit_attribs(attrs, nms);
   if (attribs != nullptr) {
     yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kTagAttr), attribs);
   }
