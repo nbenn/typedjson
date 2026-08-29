@@ -1,0 +1,30 @@
+Package: typedjson
+Title: Type-Faithful and Human-Readable JSON for R Values
+Version: 0.1.0
+Authors@R: c(
+    person("Nicolas", "Bennett", , "3158446+nbenn@users.noreply.github.com",
+           role = c("aut", "cre")),
+    person("YaoYuan", role = c("ctb", "cph"),
+           comment = "Author of the vendored yyjson library")
+  )
+Description: Writing an R value as JSON that a human can read, and reading
+    it back unchanged. The 'jsonlite' package offers either a readable but
+    lossy pair of functions or a faithful but verbose one; this package
+    emits ordinary JSON for ordinary values and annotates only what JSON
+    cannot express, namely the distinction between integer and double,
+    typed missing values, non-finite numbers, attributes, and objects from
+    the S3, S4, S7 and 'R6' systems. Foreign documents are read under the
+    same grammar, so files stay diffable, greppable and editable by hand.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 8.0.0
+LinkingTo: cpp11
+Suggests:
+    R6,
+    S7,
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3
+URL: https://github.com/nbenn/typedjson
+BugReports: https://github.com/nbenn/typedjson/issues

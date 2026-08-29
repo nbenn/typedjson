@@ -1,0 +1,7 @@
+^DESIGN\.md$
+^LICENSE\.note$
+^\.github$
+^.*\.Rproj$
+^\.Rproj\.user$
+^bench$
+^\.lintr$

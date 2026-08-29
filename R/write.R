@@ -1,0 +1,85 @@
+#' Write and read R values as JSON
+#'
+#' Writing an R value produces JSON that a human can read, and reading it
+#' back produces the same value. Ordinary values are emitted as ordinary
+#' JSON; only what JSON cannot express is annotated, which keeps the
+#' document diffable, greppable and editable by hand.
+#'
+#' Two properties hold, and are what the test suite checks:
+#'
+#' ```r
+#' identical(json_read_str(json_write_str(x)), x)
+#' json_write_str(json_read_str(doc)) == doc
+#' ```
+#'
+#' The first holds for every supported value: every atomic type, missing
+#' values of each type, the non-finite doubles, attributes of any shape,
+#' and objects built with S3, S4, S7 or `R6`. The second holds for every
+#' document this package can write. Foreign documents are read under the
+#' same grammar and normalise on the first round trip, since a mixed-type
+#' array such as `[1, "a"]` has to come back as a list.
+#'
+#' Values that are handles rather than data stay out: environments (other
+#' than the ones an `R6` generator can rebuild), closures, external
+#' pointers and language objects are refused rather than silently written
+#' as something else. A class that owns such a handle can still be
+#' persisted by writing a [json_state()] method for it.
+#'
+#' @param x Value to write.
+#' @param path Path to write to or read from.
+#' @param pretty Whether to indent the output. Files default to indented,
+#'   because a persistence format is read in diffs; strings default to
+#'   compact.
+#'
+#' @return The `json_write()` function returns `path` invisibly and
+#'   `json_write_str()` a length-one character vector. Both readers return
+#'   the value the document describes.
+#'
+#' @examples
+#' json_write_str(list(n = 1L, x = 2.5, missing = NA_character_))
+#'
+#' json_write_str(as.Date("2026-01-01"))
+#'
+#' x <- c(a = 1, b = Inf)
+#' identical(json_read_str(json_write_str(x)), x)
+#'
+#' @export
+json_write <- function(x, path, pretty = TRUE) {
+
+  stopifnot(is.character(path), length(path) == 1L, !is.na(path))
+
+  con <- file(path, open = "wb")
+  on.exit(close(con))
+  writeLines(json_write_str(x, pretty = pretty), con = con, useBytes = TRUE)
+
+  invisible(path)
+}
+
+#' @rdname json_write
+#' @export
+json_write_str <- function(x, pretty = FALSE) {
+
+  stopifnot(is.logical(pretty), length(pretty) == 1L, !is.na(pretty))
+
+  typedjson_write_(x, pretty, list(kind = writer_kind, state = writer_state))
+}
+
+writer_kind <- function(class) {
+  for (cls in class) {
+    if (!is.na(cls) && has_state_method(cls)) {
+      return(TRUE)
+    }
+  }
+  FALSE
+}
+
+writer_state <- function(x) {
+
+  state <- json_state(x)
+
+  if (inherits(state, "typedjson_state")) {
+    return(unclass(state))
+  }
+
+  list(tag_ext, list(class = class(x), state = state))
+}

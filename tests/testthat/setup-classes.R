@@ -1,0 +1,75 @@
+global <- globalenv()
+
+methods::setClass(
+  "CorpusS4", methods::representation(a = "numeric", b = "character"),
+  where = global
+)
+
+methods::setClass(
+  "CorpusS4Numeric", contains = "numeric",
+  methods::representation(unit = "character"), where = global
+)
+
+assign(
+  "CorpusR6Base",
+  R6::R6Class(
+    "CorpusR6Base",
+    public = list(
+      n = 1,
+      initialize = function(n = 1) {
+        self$n <- n
+        private$seed <- 42L
+      },
+      bump = function() {
+        self$n <- self$n + 1
+        invisible(self)
+      }
+    ),
+    private = list(seed = NULL),
+    parent_env = global
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusR6",
+  R6::R6Class(
+    "CorpusR6",
+    inherit = CorpusR6Base,
+    public = list(
+      tag = NA_character_,
+      initialize = function(n = 1, tag = "t") {
+        super$initialize(n)
+        self$tag <- tag
+        private$extra <- "e"
+      }
+    ),
+    private = list(extra = NULL),
+    active = list(
+      doubled = function(value) {
+        if (missing(value)) self$n * 2 else stop("read-only")
+      }
+    ),
+    parent_env = global
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusS7",
+  S7::new_class(
+    "CorpusS7",
+    properties = list(x = S7::class_numeric, y = S7::class_character),
+    package = NULL
+  ),
+  envir = global
+)
+
+withr::defer(
+  {
+    methods::removeClass("CorpusS4", where = global)
+    methods::removeClass("CorpusS4Numeric", where = global)
+    rm(list = c("CorpusR6", "CorpusR6Base", "CorpusS7"), envir = global)
+  },
+  teardown_env()
+)

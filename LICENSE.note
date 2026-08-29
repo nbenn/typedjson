@@ -1,0 +1,7 @@
+The typedjson package as a whole is distributed under the MIT licence, as
+recorded in DESCRIPTION and LICENSE.
+
+It bundles the yyjson library (version 0.12.0) in src/yyjson.c and
+src/yyjson.h, which is itself distributed under the MIT licence. The full
+text of that licence is reproduced in inst/YYJSON-LICENSE, and upstream
+lives at https://github.com/ibireme/yyjson.
