@@ -1,5 +1,7 @@
 pkgload::load_all(".", quiet = TRUE)
 
+# A synthetic payload, deliberately rich in named atomic vectors. Good for
+# timing, not representative for document size; see the README.
 payload <- local({
 
   set.seed(1)

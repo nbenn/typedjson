@@ -178,8 +178,6 @@ corpus_payloads <- function() {
   )
 }
 
-corpus <- c(corpus_atomic(), corpus_edges(), corpus_payloads())
-
 round_trip_failures <- function(values) {
 
   failed <- character()
@@ -214,3 +212,101 @@ local_state_method <- function(class, state, revive = NULL,
 
   invisible(names)
 }
+
+corpus_shapes <- function() {
+
+  types <- list(
+    logical = c(TRUE, FALSE, NA, TRUE),
+    integer = c(1L, -2L, NA_integer_, 2147483647L),
+    double = c(1, -2.5, NA_real_, Inf),
+    character = c("a", "~", NA_character_, "")
+  )
+
+  name_kinds <- list(
+    unnamed = NULL,
+    named = c("a", "b", "c", "d"),
+    partly = c("a", "", "c", ""),
+    duplicated = c("a", "a", "b", "b"),
+    missing = c("a", NA, "c", NA),
+    tilde = c("~t", "~v", "~zInf", "~~")
+  )
+
+  out <- list()
+
+  for (type in names(types)) {
+    for (len in 0:4) {
+      for (kind in names(name_kinds)) {
+
+        x <- types[[type]][seq_len(len)]
+        nms <- name_kinds[[kind]]
+
+        if (!is.null(nms)) {
+          names(x) <- nms[seq_len(len)]
+        }
+
+        out[[sprintf("shape/%s/%d/%s", type, len, kind)]] <- x
+      }
+    }
+  }
+
+  out
+}
+
+corpus_lists <- function() {
+
+  elements <- list(
+    scalar = 1L,
+    vector = c(1L, 2L),
+    empty = integer(),
+    string = "a",
+    tilde = "~zInf",
+    null = NULL,
+    list = list(1L),
+    named_vector = c(a = 1L),
+    named_list = list(a = 1L),
+    classed = structure(1L, class = "corpus_class"),
+    date = as.Date("2026-01-01"),
+    frame = data.frame(x = 1:2)
+  )
+
+  out <- list()
+
+  for (nm in names(elements)) {
+
+    el <- elements[[nm]]
+
+    out[[paste0("list/one/", nm)]] <- list(el)
+    out[[paste0("list/two/", nm)]] <- list(el, el)
+    out[[paste0("list/named-one/", nm)]] <- list(a = el)
+    out[[paste0("list/named-two/", nm)]] <- list(a = el, b = el)
+    out[[paste0("list/partly-named/", nm)]] <- list(a = el, el)
+    out[[paste0("list/duplicate-names/", nm)]] <- list(a = el, a = el)
+    out[[paste0("list/tilde-name/", nm)]] <- list(`~t` = el, `~zInf` = el)
+    out[[paste0("list/deep/", nm)]] <- list(a = list(b = list(el)))
+    out[[paste0("list/mixed/", nm)]] <- list(el, "x", list(el), NULL)
+  }
+
+  out
+}
+
+corpus_positions <- function(x) {
+
+  out <- list(
+    root = x,
+    object_value = list(a = x),
+    array_element = list(x),
+    two_object_values = list(a = x, b = x),
+    two_array_elements = list(x, x),
+    deep = list(a = list(list(b = x)))
+  )
+
+  if (!is.null(x)) {
+    out[["attribute"]] <- structure(1L, meta = x)
+    out[["tagged_payload"]] <- structure(x, class = "corpus_wrapper")
+  }
+
+  out
+}
+
+corpus <- c(corpus_atomic(), corpus_edges(), corpus_payloads(), corpus_shapes(),
+            corpus_lists(), list("payload/blockr-board" = corpus_board))

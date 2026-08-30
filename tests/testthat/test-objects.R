@@ -5,7 +5,7 @@ test_that("an S3 object needs no special case", {
   expect_identical(json_read_str(json_write_str(obj)), obj)
   expect_identical(
     json_write_str(as.Date("2026-01-01")),
-    '{"~t":"double","~a":{"class":["Date"]},"~v":[20454.0]}'
+    '{"~t":"double","~a":{"class":"Date"},"~v":20454.0}'
   )
 })
 
@@ -47,7 +47,7 @@ test_that("an S7 class generator is recorded by name rather than serialised", {
   doc <- json_write_str(CorpusS7)
 
   expect_identical(
-    doc, '{"~s7":{"class":["CorpusS7"],"package":null}}'
+    doc, '{"~s7":{"class":"CorpusS7","package":null}}'
   )
   expect_identical(json_read_str(doc), CorpusS7)
 })
@@ -76,8 +76,8 @@ test_that("an R6 document records identity and state, not behaviour", {
   doc <- json_write_str(CorpusR6$new(1, "t"))
 
   expect_match(doc, '"~r6"', fixed = TRUE)
-  expect_match(doc, '"class":["CorpusR6"]', fixed = TRUE)
-  expect_match(doc, '"package":["R_GlobalEnv"]', fixed = TRUE)
+  expect_match(doc, '"class":"CorpusR6"', fixed = TRUE)
+  expect_match(doc, '"package":"R_GlobalEnv"', fixed = TRUE)
   expect_no_match(doc, "function", fixed = TRUE)
 })
 
@@ -102,7 +102,7 @@ test_that("reviving an R6 object does not run initialize", {
 
   doc <- paste0(
     '{"~r6":{"class":["CorpusR6Loud"],"package":["R_GlobalEnv"],',
-    '"public":{"n":[7.0]},"private":null}}'
+    '"public":{"n":7.0},"private":null}}'
   )
 
   expect_identical(json_read_str(doc)$n, 7)
@@ -144,7 +144,7 @@ test_that("a class supplies its own state through the extension protocol", {
   back <- json_read_str(doc)
 
   expect_identical(
-    doc, '{"~x":{"class":["corpus_handle"],"state":{"path":["/tmp/x"]}}}'
+    doc, '{"~x":{"class":"corpus_handle","state":{"path":"/tmp/x"}}}'
   )
   expect_identical(back[["path"]], "/tmp/x")
   expect_null(back[["con"]])

@@ -19,6 +19,15 @@
 #' same grammar and normalise on the first round trip, since a mixed-type
 #' array such as `[1, "a"]` has to come back as a list.
 #'
+#' Two rules decide the shape of a document. A JSON array of scalars is an
+#' atomic vector and a JSON object is a named list, so the two containers
+#' mean what they mean everywhere else. A length-one vector is written
+#' bare wherever an array could not be mistaken for it, which is at the
+#' document root, as an object value, as an attribute and as the payload
+#' of a tagged object; only as an array element does it keep its brackets,
+#' because there the brackets are the sole thing separating `list(1, 2)`
+#' from `c(1, 2)`.
+#'
 #' Values that are handles rather than data stay out: environments (other
 #' than the ones an `R6` generator can rebuild), closures, external
 #' pointers and language objects are refused rather than silently written

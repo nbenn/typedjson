@@ -56,18 +56,28 @@ test_that("an array mixing integer and real lexemes reads as double", {
   expect_identical(json_read_str("[1,true]"), list(1L, TRUE))
 })
 
-test_that("an object of scalars is a named vector, of values a named list", {
-  expect_identical(json_read_str('{"a":1,"b":2}'), c(a = 1L, b = 2L))
+test_that("an object is always a named list", {
+  expect_identical(json_read_str('{"a":1,"b":2}'), list(a = 1L, b = 2L))
   expect_identical(json_read_str('{"a":[1],"b":[2]}'), list(a = 1L, b = 2L))
   expect_identical(json_read_str('{"a":1,"b":"x"}'), list(a = 1L, b = "x"))
+  expect_identical(json_read_str('{"a":{"b":1}}'), list(a = list(b = 1L)))
   expect_identical(json_read_str("{}"), stats::setNames(list(), character()))
+})
+
+test_that("a bare constant is a document in its own right", {
+  expect_identical(json_read_str("1"), 1L)
+  expect_identical(json_read_str("1.0"), 1)
+  expect_identical(json_read_str('"a"'), "a")
+  expect_identical(json_read_str("true"), TRUE)
+  expect_identical(json_read_str('"~zNA"'), NA)
+  expect_identical(json_read_str('"~zInf"'), Inf)
 })
 
 test_that("nothing is inferred from the content of a string or an object", {
 
   expect_identical(
     json_read_str('[{"x":1,"y":2},{"x":3,"y":4}]'),
-    list(c(x = 1L, y = 2L), c(x = 3L, y = 4L))
+    list(list(x = 1L, y = 2L), list(x = 3L, y = 4L))
   )
 
   expect_false(inherits(json_read_str('["2026-01-01"]'), "Date"))
@@ -121,7 +131,7 @@ test_that("a document from a foreign writer reads under the same grammar", {
     json_read_str(doc),
     list(
       name = "config", retries = 3L, timeout = 2.5, enabled = TRUE,
-      tags = c("a", "b"), limits = c(low = 1L, high = 10L), missing = NULL
+      tags = c("a", "b"), limits = list(low = 1L, high = 10L), missing = NULL
     )
   )
 })

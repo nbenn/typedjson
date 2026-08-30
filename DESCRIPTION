@@ -1,6 +1,6 @@
 Package: typedjson
 Title: Type-Faithful and Human-Readable JSON for R Values
-Version: 0.1.0
+Version: 0.1.0.9000
 Authors@R: c(
     person("Nicolas", "Bennett", , "3158446+nbenn@users.noreply.github.com",
            role = c("aut", "cre")),
@@ -29,5 +29,5 @@ Suggests:
     withr
 VignetteBuilder: knitr
 Config/testthat/edition: 3
-URL: https://github.com/nbenn/typedjson
+URL: https://nbenn.github.io/typedjson/, https://github.com/nbenn/typedjson
 BugReports: https://github.com/nbenn/typedjson/issues

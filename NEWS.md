@@ -1,3 +1,17 @@
+# typedjson 0.1.0.9000
+
+## Format
+
+Breaking changes to the document shape, settled before any documents exist in the wild.
+
+* A JSON object is now always a named list, and its values are written bare rather than wrapped in a one-element array. A record therefore reads the way any other tool would write it: `{"name":"config","retries":3}` rather than `{"name":["config"],"retries":[3]}`.
+
+* A named atomic vector no longer takes the object form. It escalates through the ordinary attribute rule instead, since names are an attribute like any other, which removes a special case rather than adding one.
+
+* A length-one vector is written bare wherever an array cannot be mistaken for it: at the document root, as an object value, as an attribute value, and as the payload of a tagged object. Brackets survive only around an array element, where they are the one thing separating `list(1, 2)` from `c(1, 2)`.
+
+Measured on a board produced by `blockr.core::blockr_ser()`, this unwraps all 55 wrapped scalars and shortens the document from 2284 to 2174 bytes. A payload rich in named atomic vectors moves the other way, since those now escalate.
+
 # typedjson 0.1.0
 
 First release, carrying the format and the two round-trip contracts described in `DESIGN.md`.

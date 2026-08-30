@@ -259,23 +259,14 @@ SEXP Reader::build_obj(yyjson_val *v) {
   size_t idx, max;
   yyjson_val *key, *val;
 
-  Kind kind = K_LIST;
-  if (n > 0) {
-    bool first = true;
-    yyjson_obj_foreach(v, idx, max, key, val) {
-      Kind here = kind_of(val);
-      kind = first ? here : unify(kind, here);
-      first = false;
-      if (kind == K_LIST) break;
-    }
-  }
-
-  SEXP out = PROTECT(build_vector(kind, n));
+  SEXP out = PROTECT(Rf_allocVector(VECSXP, (R_xlen_t)n));
   SEXP nms = PROTECT(Rf_allocVector(STRSXP, (R_xlen_t)n));
+
   yyjson_obj_foreach(v, idx, max, key, val) {
     SET_STRING_ELT(nms, (R_xlen_t)idx, as_chr(key));
-    fill(out, kind, idx, val);
+    SET_VECTOR_ELT(out, (R_xlen_t)idx, build(val));
   }
+
   Rf_setAttrib(out, R_NamesSymbol, nms);
   UNPROTECT(2);
   return out;

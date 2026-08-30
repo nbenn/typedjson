@@ -54,7 +54,7 @@ test_that("the reader does not care where a tag sits in an object", {
 
   expect_identical(
     json_read_str(
-      '{"~v": [20454.0], "~a": {"class": ["Date"]}, "~t": "double"}'
+      '{"~v": 20454.0, "~a": {"class": "Date"}, "~t": "double"}'
     ),
     as.Date("2026-01-01")
   )
@@ -82,8 +82,10 @@ test_that("indenting changes whitespace and nothing else", {
 })
 
 test_that("a double keeps its type through the lexeme", {
-  expect_identical(json_write_str(1), "[1.0]")
-  expect_identical(json_write_str(1L), "[1]")
+  expect_identical(json_write_str(1), "1.0")
+  expect_identical(json_write_str(1L), "1")
+  expect_identical(json_read_str("1.0"), 1)
+  expect_identical(json_read_str("1"), 1L)
   expect_identical(json_read_str("[1.0]"), 1)
   expect_identical(json_read_str("[1]"), 1L)
   expect_identical(json_read_str("[1e3]"), 1000)

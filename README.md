@@ -1,5 +1,10 @@
 # Typed JSON for R values
 
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/nbenn/typedjson/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/nbenn/typedjson/actions/workflows/R-CMD-check.yaml)
+[![Codecov test coverage](https://codecov.io/gh/nbenn/typedjson/graph/badge.svg)](https://app.codecov.io/gh/nbenn/typedjson)
+<!-- badges: end -->
+
 The typedjson package writes an R value as JSON a human can read, and reads it back unchanged.
 
 R already has fast JSON, queryable JSON, and faithful-but-verbose JSON. Nothing was faithful *and* terse. The `jsonlite::toJSON()` / `fromJSON()` pair is readable and lossy — doubles come back as integers, all-`NA` vectors lose their type, names are dropped, `character()` and `integer()` both become `list()`. The `serializeJSON()` / `unserializeJSON()` pair is faithful and unreadable, and its default `digits = 8` silently changes doubles.
@@ -15,7 +20,7 @@ pak::pak("nbenn/typedjson")
 
 ## Two contracts
 
-Both are properties rather than examples, and both are what the test suite checks over a corpus of 150 hand-picked values plus a thousand fuzzed ones.
+Both are properties rather than examples, and both are what the test suite checks over a corpus of about 380 values — every atomic type at every length crossed with every way of naming it, every list configuration, a board produced by `blockr.core::blockr_ser()` — each of them also checked in every position it can occupy, plus a thousand fuzzed values on top.
 
 ```r
 identical(json_read(json_write(x, path)), x)   # for every supported R value
@@ -26,41 +31,47 @@ The second holds modulo whitespace and key order: attributes come back as a set,
 
 ## What the format looks like
 
-An attribute-free vector is a flat array, and its type rides on the number lexeme — a double writes with a decimal point or an exponent, an integer without.
+Two rules decide the shape. A JSON array of scalars is an atomic vector and a JSON object is a named list, so both containers mean what they mean everywhere else. A length-one vector is written bare wherever an array could not be mistaken for it.
 
 | R value | Document |
 | --- | --- |
+| `1L` | `1` |
+| `1` | `1.0` |
+| `"a"` | `"a"` |
+| `TRUE` | `true` |
+| `NULL` | `null` |
 | `c(1, 2.5)` | `[1.0,2.5]` |
 | `c(1L, 2L)` | `[1,2]` |
-| `c("a", "b")` | `["a","b"]` |
-| `TRUE` | `[true]` |
-| `list(1L, 2L)` | `[[1],[2]]` |
-| `c(a = 1, b = 2)` | `{"a":1.0,"b":2.0}` |
-| `list(a = 1)` | `{"a":[1.0]}` |
-| `NULL` | `null` |
+| `list(a = 1, b = 2)` | `{"a":1.0,"b":2.0}` |
+| `list(name = "config", retries = 3L)` | `{"name":"config","retries":3}` |
+| `list(list(id = "a"), list(id = "b"))` | `[{"id":"a"},{"id":"b"}]` |
+| `list(1, 2)` | `[[1.0],[2.0]]` |
+| `c(a = 1, b = 2)` | `{"~t":"double","~a":{"names":["a","b"]},"~v":[1.0,2.0]}` |
 
-Nesting is what separates a vector from a list: a flat array of scalars is a vector, an array of arrays or objects is a list. The same rule applies to objects, so an object whose values are all scalars is a named vector and one whose values are arrays is a named list.
+Brackets survive in exactly one position, and there they are load-bearing: around an array element they are the only thing separating `list(1, 2)` from `c(1, 2)`. Everywhere else — the document root, an object value, an attribute value, the payload of a tagged object — a length-one vector is bare, so a record reads the way any other tool would write it.
+
+A named atomic vector is the one value that pays for this. It is not an object, because that spelling belongs to the named list; it escalates through the ordinary attribute rule instead, since names are an attribute like any other.
 
 Typed `NA`, `Inf`, `-Inf` and `NaN` become prefix-tagged strings, and any ordinary string beginning with the prefix is escaped by doubling it. The escape closes the ambiguity by construction rather than by choosing a spelling nobody uses, which is what makes a link input of `"Inf"` restore as the string it was.
 
 | R value | Document |
 | --- | --- |
-| `NA_real_` | `["~zNA_real_"]` |
+| `NA_real_` | `"~zNA_real_"` |
 | `c(1, Inf)` | `[1.0,"~zInf"]` |
-| `"~foo"` | `["~~foo"]` |
-| `"Inf"` | `["Inf"]` |
+| `"~foo"` | `"~~foo"` |
+| `"Inf"` | `"Inf"` |
 
 Anything carrying attributes escalates to a tagged object naming the type and carrying the attributes recursively. One rule covers `Date`, `POSIXct`, factors, matrices, data frames and classed lists, because in R every one of them is a base type plus attributes. Empty typed vectors escalate for the same reason: `[]` has no element in which to carry a type.
 
 ```r
 json_write_str(as.Date("2026-01-01"))
-#> {"~t":"double","~a":{"class":["Date"]},"~v":[20454.0]}
+#> {"~t":"double","~a":{"class":"Date"},"~v":20454.0}
 
 json_write_str(character())
 #> {"~t":"character","~v":[]}
 
 json_write_str(data.frame(x = 1:2))
-#> {"~t":"list","~a":{"class":["data.frame"],"row.names":["~zNA_integer_",-2]},"~v":{"x":[1,2]}}
+#> {"~t":"list","~a":{"class":"data.frame","row.names":["~zNA_integer_",-2]},"~v":{"x":[1,2]}}
 ```
 
 Names ride in the payload rather than in the attribute object, which is why a data frame shows its columns keyed by name. The `row.names` above is R's own compact spelling of `1:2`, kept as stored so that a million-row frame does not pay a million row labels.
@@ -76,7 +87,7 @@ R6 is rescuable because an R6 object is a generator plus state; methods, the `se
 ```r
 Counter <- R6::R6Class("Counter", public = list(n = 0, bump = function() self$n <- self$n + 1))
 json_write_str(Counter$new())
-#> {"~r6":{"class":["Counter"],"package":["R_GlobalEnv"],"public":{"n":[0.0]},"private":null}}
+#> {"~r6":{"class":"Counter","package":"R_GlobalEnv","public":{"n":0.0},"private":null}}
 ```
 
 Revival finds the generator, allocates an instance without running `initialize`, populates the fields, and locks the environment again if the generator asked for that.
@@ -118,15 +129,17 @@ Worked through end to end in `vignette("handles", package = "typedjson")`: a chu
 
 ## Speed and size
 
-Measured by `bench/benchmark.R` on one machine, over a 522 KB R value of the shape a saved board file has — nested lists of character, double, integer and logical vectors, some named, one `POSIXct`:
+Measured by `bench/benchmark.R` on one machine, over a 522 KB R value of nested lists of character, double, integer and logical vectors:
 
 | | document | write | read | round-trips exactly |
 | --- | --- | --- | --- | --- |
-| `json_write_str()` / `json_read_str()` | 86 KB | 2.1 ms | 2.0 ms | yes |
-| `toJSON()` / `fromJSON()` | 61 KB | 182 ms | 4.4 ms | no |
-| `serializeJSON()` / `unserializeJSON()` | 186 KB | 715 ms | 255 ms | no |
+| `json_write_str()` / `json_read_str()` | 92 KB | 1.9 ms | 1.7 ms | yes |
+| `toJSON()` / `fromJSON()` | 61 KB | 184 ms | 4.5 ms | no |
+| `serializeJSON()` / `unserializeJSON()` | 186 KB | 721 ms | 260 ms | no |
 
-The read column is not quite like for like: `fromJSON()` was called with `simplifyVector = FALSE`, so it builds plain lists and does less work than the other two, and it still returns a different value from the one that went in. The write column is: writing this payload is roughly 85 times faster than `toJSON()` and 330 times faster than `serializeJSON()`, because both of those walk the value in R before anything reaches C.
+Writing is roughly 97 times faster than `toJSON()` and 380 times faster than `serializeJSON()`, because both of those walk the value in R before anything reaches C. The read column is not like for like: `fromJSON()` was called with `simplifyVector = FALSE`, so it builds plain lists and does less work than the other two, and it still returns a different value from the one that went in.
+
+Size depends on what the payload is made of, and this one is not typical. It is synthetic, and deliberately rich in named atomic vectors, which are the one value that pays for the format's shape. On a board actually produced by `blockr.core::blockr_ser()` — no named atomic vectors, 55 scalars that used to be wrapped — the document is 2174 bytes rather than 2284, or 4.8% smaller.
 
 The engine is [yyjson](https://github.com/ibireme/yyjson) 0.12.0, vendored, with the glue written against cpp11. Two properties of that library carry the format: it formats doubles to their shortest round-trip representation, so the integer-versus-double lexeme costs nothing, and it reports `UINT` / `SINT` / `REAL` subtypes on parse, so reading costs nothing either.
 
