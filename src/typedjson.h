@@ -27,6 +27,9 @@ const char *const kTagR6 = "~r6";
 const char *const kTagS7 = "~s7";
 const char *const kTagExt = "~x";
 
+const char *const kPartRe = "re";
+const char *const kPartIm = "im";
+
 enum ZTag {
   Z_NONE = 0,
   Z_NA_LGL,

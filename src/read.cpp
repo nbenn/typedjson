@@ -273,28 +273,35 @@ SEXP Reader::build_obj(yyjson_val *v) {
 }
 
 SEXP Reader::build_complex(yyjson_val *v) {
-  if (!yyjson_is_arr(v)) {
-    cpp11::stop("a complex value needs an array of alternating real and "
-                "imaginary parts under `%s`", kTagValue);
-  }
-  size_t n = yyjson_arr_size(v);
-  if (n % 2 != 0) {
-    cpp11::stop("a complex value needs an even number of parts under `%s`",
-                kTagValue);
+  yyjson_val *re = yyjson_is_obj(v) ? yyjson_obj_get(v, kPartRe) : nullptr;
+  yyjson_val *im = yyjson_is_obj(v) ? yyjson_obj_get(v, kPartIm) : nullptr;
+
+  if (re == nullptr || im == nullptr) {
+    cpp11::stop("a complex value needs `%s` and `%s` parts under `%s`", kPartRe,
+                kPartIm, kTagValue);
   }
 
-  SEXP out = PROTECT(Rf_allocVector(CPLXSXP, (R_xlen_t)(n / 2)));
-  size_t idx, max;
-  yyjson_val *elt;
-  yyjson_arr_foreach(v, idx, max, elt) {
-    Rcomplex *at = COMPLEX(out) + idx / 2;
-    if (idx % 2 == 0) {
-      at->r = as_real(elt);
-    } else {
-      at->i = as_real(elt);
-    }
+  SEXP real = PROTECT(coerce(build(re), REALSXP));
+  SEXP imag = PROTECT(coerce(build(im), REALSXP));
+
+  R_xlen_t n = XLENGTH(real);
+  if (XLENGTH(imag) != n) {
+    UNPROTECT(2);
+    cpp11::stop("the `%s` and `%s` parts of a complex value need the same "
+                "length", kPartRe, kPartIm);
   }
-  UNPROTECT(1);
+
+  SEXP out = PROTECT(Rf_allocVector(CPLXSXP, n));
+  Rcomplex *at = COMPLEX(out);
+  const double *re_at = REAL(real);
+  const double *im_at = REAL(imag);
+
+  for (R_xlen_t i = 0; i < n; ++i) {
+    at[i].r = re_at[i];
+    at[i].i = im_at[i];
+  }
+
+  UNPROTECT(3);
   return out;
 }
 

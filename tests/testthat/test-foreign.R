@@ -110,7 +110,13 @@ test_that("a tagged form that makes no sense is refused", {
   expect_error(
     json_read_str('{"~t":"double","~a":[1],"~v":[1.0]}'), "attributes"
   )
-  expect_error(json_read_str('{"~t":"complex","~v":[1.0]}'), "even number")
+  expect_error(
+    json_read_str('{"~t":"complex","~v":[1.0,2.0]}'), "`re` and `im`",
+    fixed = TRUE
+  )
+  expect_error(
+    json_read_str('{"~t":"complex","~v":{"re":[1,2],"im":1}}'), "same length"
+  )
   expect_error(json_read_str('{"~t":"raw","~v":"0g"}'), "non-hexadecimal")
   expect_error(json_read_str('{"~t":"raw","~v":"0"}'), "even number")
 })

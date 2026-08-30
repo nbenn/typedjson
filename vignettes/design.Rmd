@@ -87,6 +87,8 @@ A length-one vector is written bare wherever an array could not be mistaken for 
 show_documents(TRUE, 1L, list(1, 2))
 ```
 
+A length-one vector is written bare wherever an array cannot be mistaken for it: at the document root, as an object value, as an attribute value, and as the payload of a tagged object. Brackets survive only around an array element, where they are the one thing separating `list(1, 2)` from `c(1, 2)`.
+
 ### Values JSON cannot carry
 
 Typed `NA`, `Inf`, `-Inf` and `NaN` become prefix-tagged strings, and any ordinary string beginning with the prefix is escaped by doubling it.
@@ -110,6 +112,24 @@ show_documents(as.Date("2026-01-01"), c(a = 1, b = 2), character())
 This single rule covers `Date`, `POSIXct`, factors, named vectors, matrices, data frames and classed lists, because in R every one of them is a base type plus attributes. Empty typed vectors escalate for the same reason — `[]` has no element in which to carry a type.
 
 Names ride in the payload rather than in the attribute object wherever the payload is an object, which is why a data frame shows its columns keyed by name.
+
+### Types with no lexeme
+
+Complex and raw escalate unconditionally, since neither has a plain JSON form to fall back to, and each replaces the ordinary payload with a shape of its own.
+
+A complex vector splits into two named parts, one per component. Each part is an ordinary double payload, so the unboxing rule and the `~z` tags apply to it independently, and a value missing only one component still comes back exact.
+
+```{r, echo = FALSE}
+show_documents(1 + 2i, c(1 + 2i, 3 - 4i), complex(real = NA, imaginary = Inf))
+```
+
+Two columns rather than an object per element, because it stays compact for long vectors and matches how R stores a complex vector. The part names are the ones Julia's `JSON.jl` and the usual hand-rolled Python encoder already reach for, so the scalar case reads as a foreign consumer would write it. Writing R's own `1+2i` notation is the one spelling to avoid, and it is the one `jsonlite` picks: it loses precision, and a value with a missing component collapses to `"NA"` with the other component gone entirely.
+
+A raw vector is one lower-case hexadecimal string, two digits per byte, which is the form every hex dump already uses and is shorter than an array of small integers.
+
+```{r, echo = FALSE}
+show_documents(as.raw(c(0, 15, 255)))
+```
 
 ### Object systems
 
