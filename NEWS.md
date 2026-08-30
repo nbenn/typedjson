@@ -16,7 +16,7 @@ Measured on a board produced by `blockr.core::blockr_ser()`, this unwraps all 55
 
 # typedjson 0.1.0
 
-First release, carrying the format and the two round-trip contracts described in `DESIGN.md`.
+First release, carrying the format and the two round-trip contracts described in `vignette("design")`.
 
 * Writing and reading through `json_write()`, `json_read()`, `json_write_str()` and `json_read_str()`.
 
