@@ -121,6 +121,77 @@ test_that("a tagged form that makes no sense is refused", {
   expect_error(json_read_str('{"~t":"raw","~v":"0"}'), "even number")
 })
 
+test_that("an unrecognised tag is refused rather than read as data", {
+
+  expect_error(json_read_str('{"~ref":3}'), "not a tag")
+  expect_error(json_read_str('{"~":3}'), "not a tag")
+  expect_error(json_read_str('{"a":1,"~ref":3}'), "not a tag")
+  expect_error(json_read_str('{"a":{"~ref":3}}'), "not a tag")
+  expect_error(json_read_str('{"~s4":true}'), "not a tag")
+  expect_error(json_read_str('{"~zNope":3}'), "not a tag")
+
+  expect_error(json_read_str('{"~zInf":1}'), "cannot name a key")
+  expect_error(json_read_str('{"~zNA":1}'), "cannot name a key")
+  expect_error(json_read_str('{"~zNaN":1}'), "cannot name a key")
+  expect_error(json_read_str('{"~zNA_real_":1}'), "cannot name a key")
+  expect_error(
+    json_read_str('{"~t":"integer","~a":{"~zInf":1},"~v":1}'),
+    "cannot name a key"
+  )
+
+  expect_error(json_read_str('{"~t":"integer","~id":3,"~v":1}'), "not a tag")
+  expect_error(
+    json_read_str('{"~t":"integer","~a":{"~q":1},"~v":1}'), "not a tag"
+  )
+  expect_error(
+    json_read_str('{"~t":"complex","~v":{"re":1.0,"im":2.0,"~q":1}}'),
+    "not a tag"
+  )
+  expect_error(json_read_str('{"~r6":{},"~s7":{}}'), "not a tag")
+  expect_error(
+    json_read_str('{"~x":{"class":"nope","state":1},"~id":3}'), "not a tag"
+  )
+})
+
+test_that("a key that is not a format tag is data", {
+
+  expect_identical(json_read_str('{"~~ref":3}'), list(`~ref` = 3L))
+  expect_identical(json_read_str('{"~~":3}'), list(`~` = 3L))
+  expect_identical(
+    json_read_str('{"~t":"integer","~a":{"~~q":1},"~v":1}'),
+    structure(1L, `~q` = 1L)
+  )
+
+  expect_identical(
+    json_read_str('{"~zNA_character_":3}'),
+    stats::setNames(list(3L), NA_character_)
+  )
+  expect_identical(json_read_str('{"":3}'), stats::setNames(list(3L), ""))
+
+  named_na <- stats::setNames(list(1L, 2L), c("a", NA))
+  expect_identical(json_write_str(named_na), '{"a":1,"~zNA_character_":2}')
+  expect_identical(json_read_str(json_write_str(named_na)), named_na)
+})
+
+test_that("every name the writer can put at key position reads back", {
+
+  nms <- c(
+    "a", "", "\u00e9", "~", "~~", "~t", "~v", "~x", "~s4", "~r6", "~zInf",
+    "~zNA_character_", "~zNope", NA
+  )
+
+  for (nm in nms) {
+    keyed <- stats::setNames(list(1L), nm)
+    expect_identical(json_read_str(json_write_str(keyed)), keyed)
+  }
+
+  for (nm in nms[!is.na(nms) & nzchar(nms)]) {
+    attributed <- 1L
+    attr(attributed, nm) <- "v"
+    expect_identical(json_read_str(json_write_str(attributed)), attributed)
+  }
+})
+
 test_that("a document from a foreign writer reads under the same grammar", {
 
   doc <- '{
