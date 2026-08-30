@@ -281,14 +281,12 @@ SEXP Reader::build_complex(yyjson_val *v) {
                 kPartIm, kTagValue);
   }
 
-  SEXP real = PROTECT(build(re));
-  SEXP imag = PROTECT(build(im));
-  real = PROTECT(coerce(real, REALSXP));
-  imag = PROTECT(coerce(imag, REALSXP));
+  SEXP real = PROTECT(coerce(build(re), REALSXP));
+  SEXP imag = PROTECT(coerce(build(im), REALSXP));
 
   R_xlen_t n = XLENGTH(real);
   if (XLENGTH(imag) != n) {
-    UNPROTECT(4);
+    UNPROTECT(2);
     cpp11::stop("the `%s` and `%s` parts of a complex value need the same "
                 "length", kPartRe, kPartIm);
   }
@@ -303,7 +301,7 @@ SEXP Reader::build_complex(yyjson_val *v) {
     at[i].i = im_at[i];
   }
 
-  UNPROTECT(5);
+  UNPROTECT(3);
   return out;
 }
 
