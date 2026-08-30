@@ -149,4 +149,4 @@ Worked through with the code that produced every number, and the round trips beh
 
 ## Design notes
 
-The notes in `DESIGN.md` carry the reasoning: what was measured, which prior art was borrowed from (the escaped prefix token comes from Transit, the identity-plus-state model from pickle), and what was considered and not taken.
+The reasoning is in `vignette("design", package = "typedjson")`: what was measured, which prior art was borrowed from (the escaped prefix token comes from Transit, the identity-plus-state model from pickle), and what was considered and not taken.
