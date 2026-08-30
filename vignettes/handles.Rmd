@@ -1,0 +1,214 @@
+---
+title: "Persisting a class that owns a handle"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Persisting a class that owns a handle}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+## Where the default rule stops
+
+Most classes need nothing from this page. An S3, S4 or S7 object is a base type plus attributes, so `json_write()` records it without help and the value that comes back is the value that went in. That rule stops at values which are handles rather than data. Environments, closures, language objects and external pointers all name something that exists only inside the running session, and none of them survives being written down.
+
+A connection is the case worth walking through, because it does not look like a handle. It prints as a small integer, and an integer is data.
+
+```{r}
+library(typedjson)
+
+path <- file.path(tempdir(), "events.log")
+writeLines(sprintf("event %d", 1:6), path)
+
+con <- file(path, open = "r")
+str(unclass(con))
+```
+
+The integer is a slot in this process's table of open connections, and the external pointer beside it is what makes using that slot safe. Neither means anything in the session that reads the document back, so the writer refuses.
+
+```{r, error = TRUE}
+json_write_str(con)
+```
+
+```{r, include = FALSE}
+close(con)
+```
+
+Refusing is the whole point. Writing the integer would hand back a number indexing whatever connection occupies that slot next, and writing `null` would drop the handle quietly; either way the damage surfaces later and somewhere else. The error instead names the path it stopped at, so a handle buried deep in a large value is reported by where it sits.
+
+## A reader that owns a connection
+
+Here is a small class of the shape that runs into this: a reader that walks a file in chunks, holding the connection open between calls.
+
+```{r}
+chunk_reader <- function(path, size = 2L) {
+  structure(
+    list(path = path, size = size, con = file(path, open = "r")),
+    class = "chunk_reader"
+  )
+}
+
+read_next <- function(x) {
+  readLines(x$con, n = x$size)
+}
+```
+
+```{r}
+reader <- chunk_reader(path)
+
+read_next(reader)
+read_next(reader)
+```
+
+Two chunks in, the reader is a perfectly ordinary list of a string, an integer and a connection, and writing it fails on the third field.
+
+```{r, error = TRUE}
+json_write_str(reader)
+```
+
+## What to record
+
+The extension protocol is a pair of generics modelled on the `__getstate__` and `__setstate__` methods of Python's pickle. A `json_state()` method returns a plain list of what to persist, and is free to leave out anything that can be rebuilt.
+
+The judgement it asks for is which parts of the object are the state and which are only the means. Here the connection is the means: what identifies this reader is the file it walks, the chunk size it walks in, and how far into the file it has got.
+
+```{r}
+json_state.chunk_reader <- function(x) {
+  list(path = x$path, size = x$size, offset = seek(x$con))
+}
+```
+
+That is enough to write it.
+
+```{r}
+cat(json_write_str(reader, pretty = TRUE))
+```
+
+Nothing in the document is opaque. The `~x` tag says an extension method produced it, `class` is what dispatches on the way back, and the rest is the state as the method returned it — read under the ordinary rules, so `offset` is a double because `seek()` returns one.
+
+## Getting it back
+
+Reviving is the other half. Dispatch happens on the recorded class through an empty object carrying it, so the first argument is the class token rather than the object being rebuilt, which does not exist yet.
+
+```{r}
+json_revive.chunk_reader <- function(class, state) {
+  con <- file(state$path, open = "r")
+  seek(con, state$offset)
+
+  structure(
+    list(path = state$path, size = state$size, con = con),
+    class = "chunk_reader"
+  )
+}
+```
+
+The reader that comes back is a different connection on the same file, positioned where the old one stopped, and it carries on.
+
+```{r}
+doc <- json_write_str(reader)
+
+revived <- json_read_str(doc)
+read_next(revived)
+```
+
+```{r, include = FALSE}
+close(reader$con)
+close(revived$con)
+```
+
+## The document is the interface
+
+The offset is a number in a text file, which means it can be edited. Winding this reader back to the start of the file is a matter of changing one number, and there is nothing else that has to be kept in step with it.
+
+```{r}
+rewound <- json_read_str(sub('"offset":\\[[0-9.]+\\]', '"offset":[0.0]', doc))
+read_next(rewound)
+```
+
+```{r, include = FALSE}
+close(rewound$con)
+```
+
+That is the argument for the format in one line. The persisted state of a handle-owning object is exactly the kind of thing worth reading in a diff and worth fixing by hand, and neither is possible once it is a blob only R can open.
+
+## When the resource is gone
+
+Reviving runs your code, so what happens when the file has moved is your method's decision rather than the format's. The method above opens eagerly, so it reports the problem as soon as the document is read.
+
+```{r, error = TRUE}
+json_read_str(sub(basename(path), "no-such-file", doc, fixed = TRUE))
+```
+
+Opening lazily on the first `read_next()` call, or falling back to offset zero when the file is shorter than the recorded position, are equally valid; the protocol takes no view.
+
+## Methods have no privileges
+
+Whatever a `json_state()` method returns is written under the same rules as any other value, which is what keeps the guarantee honest: a method cannot smuggle a handle out by wrapping it in a list.
+
+```{r, error = TRUE}
+json_state.leaky <- function(x) list(con = x$con)
+
+leaky <- structure(list(con = file(path)), class = "leaky")
+json_write_str(leaky)
+```
+
+```{r, include = FALSE}
+close(leaky$con)
+```
+
+## Classes that already have a method
+
+An R6 object is written through a generator lookup plus its field values, so `json_state.R6` ships with the package. That method collects the fields, and a field holding a connection is then refused exactly as before.
+
+```{r, error = TRUE, eval = requireNamespace("R6", quietly = TRUE)}
+ChunkReader <- R6::R6Class("ChunkReader",
+  public = list(
+    path = NULL,
+    size = NULL,
+    con = NULL,
+    initialize = function(path, size = 2L) {
+      self$path <- path
+      self$size <- size
+      self$con <- file(path, open = "r")
+    },
+    read_next = function() {
+      readLines(self$con, n = self$size)
+    }
+  )
+)
+
+reader <- ChunkReader$new(path)
+json_write_str(reader)
+```
+
+Ordinary dispatch settles it. The class vector is `c("ChunkReader", "R6")`, so a method on the class is found ahead of the one on `R6`, and the record that gets written is an ordinary extension record rather than the `~r6` one.
+
+```{r, eval = requireNamespace("R6", quietly = TRUE)}
+json_state.ChunkReader <- function(x) {
+  list(path = x$path, size = x$size, offset = seek(x$con))
+}
+
+json_revive.ChunkReader <- function(class, state) {
+  out <- ChunkReader$new(state$path, state$size)
+  seek(out$con, state$offset)
+  out
+}
+
+reader$read_next()
+
+doc <- json_write_str(reader)
+cat(doc)
+
+revived <- json_read_str(doc)
+revived$read_next()
+```
+
+```{r, include = FALSE, eval = requireNamespace("R6", quietly = TRUE)}
+close(reader$con)
+close(revived$con)
+```
+
+Going through `$new()` on the way back is the usual shape for a class whose constructor acquires the resource. The state list records what the constructor needs, and whatever the constructor cannot know — here the offset — is applied to the instance afterwards.

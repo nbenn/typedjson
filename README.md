@@ -114,6 +114,8 @@ json_revive.file_handle <- function(class, state) {
 
 Dispatch on the way back happens on the recorded class name through an empty object carrying it, so the method signature starts with the class rather than the object being rebuilt.
 
+Worked through end to end in `vignette("handles", package = "typedjson")`: a chunked file reader that holds a connection open between calls, refused by the default rule, and then persisted as the file it walks and the offset it has reached.
+
 ## Speed and size
 
 Measured by `bench/benchmark.R` on one machine, over a 522 KB R value of the shape a saved board file has — nested lists of character, double, integer and logical vectors, some named, one `POSIXct`:
