@@ -28,4 +28,6 @@ Breaking changes to the document shape, settled before any documents exist in th
 
 * A length-one vector is written bare wherever an array cannot be mistaken for it: at the document root, as an object value, as an attribute value, and as the payload of a tagged object. Brackets survive only around an array element, where they are the one thing separating `list(1, 2)` from `c(1, 2)`.
 
+* A key beginning with a single `~` is reserved throughout the document, and one the reader cannot use as a name is now an error rather than data. A name is a string and JSON keys are strings, so `NA_character_` is the only name JSON cannot carry: `~zNA_character_` is the one string tag a key may hold, and the rest are refused there, which also settles `{"~zInf":1}` and `{"~~zInf":1}` having both rebuilt the name `"~zInf"`. The escape rule already doubled the prefix on any name of your own, so nothing this package writes is affected, and a later tag can land without every reader built before it silently returning a wrong value.
+
 Measured on a board produced by `blockr.core::blockr_ser()`, this unwraps all 55 wrapped scalars and shortens the document from 2284 to 2174 bytes. A payload rich in named atomic vectors moves the other way, since those now escalate.
