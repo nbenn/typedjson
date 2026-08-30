@@ -189,6 +189,8 @@ Revival, verified end to end on a two-level class with private fields at both le
 
 Bare environments, closures, language objects and external pointers stay out. The principled line is that an environment is rescuable exactly when something else can supply its shape; for R6 that is the generator, and for a bare environment nothing can. What the writer refuses, it refuses loudly, naming the path it stopped at.
 
+A non-portable R6 class is on the far side of that line too, one level up. With `portable = FALSE` the object environment is also the environment its methods close over, so it binds `self` and `private` beside the fields and the generator stops accounting for everything that is not state. An instance of one is refused where it is written, naming the class, since making the class portable or giving it a `json_state()` method is what changes the answer.
+
 ```{r, error = TRUE}
 json_write_str(list(a = 1, e = new.env()))
 ```

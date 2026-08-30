@@ -283,7 +283,21 @@ corpus_refused <- function() {
     "r6/ambiguous-generator" = list(
       value = corpus_generator("CorpusR6Amb2")$new(),
       message = ambiguous, path = "x"
+    ),
+    "r6/non-portable" = list(
+      value = corpus_generator("CorpusR6Bound")$new(),
+      message = non_portable("CorpusR6Bound"), path = "x"
+    ),
+    "r6/non-portable-bare" = list(
+      value = corpus_generator("CorpusR6BoundBare")$new(),
+      message = non_portable("CorpusR6BoundBare"), path = "x"
     )
+  )
+}
+
+non_portable <- function(class) {
+  paste0(
+    "cannot write an instance of the non-portable R6 class `", class, "/R6`"
   )
 }
 
