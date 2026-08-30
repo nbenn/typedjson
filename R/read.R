@@ -29,6 +29,7 @@ reader_revive <- function(tag, state) {
   switch(
     tag,
     `~r6` = r6_revive(state),
+    `~r6class` = r6_class_revive(state),
     `~s7` = s7_revive(state),
     `~x` = json_revive(class_token(state[["class"]]), state[["state"]]),
     stop("`", tag, "` is not a tag this reader knows", call. = FALSE)

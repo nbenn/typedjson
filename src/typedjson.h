@@ -34,8 +34,15 @@ const char *const kTagAttr = "~a";
 const char *const kTagValue = "~v";
 const char *const kTagS4 = "~s4";
 const char *const kTagR6 = "~r6";
+const char *const kTagR6Class = "~r6class";
 const char *const kTagS7 = "~s7";
 const char *const kTagExt = "~x";
+
+// A state recorded by name revives to the object it was written from, so the
+// writer's cycle and sharing bookkeeping has nothing to track under this tag.
+inline bool records_by_name(const char *tag) {
+  return std::strcmp(tag, kTagR6Class) == 0;
+}
 
 const char *const kPartRe = "re";
 const char *const kPartIm = "im";

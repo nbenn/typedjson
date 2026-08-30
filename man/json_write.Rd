@@ -68,9 +68,9 @@ because there the brackets are the sole thing separating \code{list(1, 2)}
 from \code{c(1, 2)}.
 
 Values that are handles rather than data stay out: environments (other
-than the ones an \code{R6} generator can rebuild), closures, external
-pointers and language objects are refused rather than silently written
-as something else. A class that owns such a handle can still be
+than an \code{R6} generator and the instances it can rebuild), closures,
+external pointers and language objects are refused rather than silently
+written as something else. A class that owns such a handle can still be
 persisted by writing a \code{\link[=json_state]{json_state()}} method for it.
 }
 \examples{

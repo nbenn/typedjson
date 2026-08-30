@@ -38,8 +38,8 @@ that list next to the class vector of the object. On the way back,
 carrying it, so a method signature always starts with the class token
 rather than the object being rebuilt.
 
-Methods for \code{R6} objects and for S7 class generators ship with the
-package and follow the same protocol.
+Methods for \code{R6} objects and for the class generators of both \code{R6} and
+S7 ship with the package and follow the same protocol.
 }
 \examples{
 handle <- structure(list(path = "/tmp/log", con = "a live connection"),

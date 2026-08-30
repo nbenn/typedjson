@@ -155,6 +155,8 @@ assign(
   envir = global
 )
 
+corpus <- c(corpus, list("r6/generator" = get("CorpusR6", envir = global)))
+
 withr::defer(
   {
     methods::removeClass("CorpusS4", where = global)

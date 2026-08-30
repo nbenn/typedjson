@@ -28,6 +28,26 @@ json_state.R6 <- function(x) {
 }
 
 #' @export
+json_state.R6ClassGenerator <- function(x) {
+
+  if (!is_one_string(x$classname)) {
+    refuse("cannot write an R6 generator that names no class")
+  }
+
+  classes <- r6_classes(x)
+  package <- environmentName(x$parent_env)
+
+  if (!identical(r6_generator(classes, package), x)) {
+    refuse(
+      "the class `", class_text(classes), "` names a different generator in ",
+      package
+    )
+  }
+
+  tagged_state(tag_r6_class, list(class = classes, package = package))
+}
+
+#' @export
 json_state.S7_class <- function(x) {
   tagged_state(
     tag_s7, list(class = attr(x, "name"), package = attr(x, "package"))
@@ -76,13 +96,20 @@ declared_names <- function(chain, slot) {
   unlist(lapply(lapply(chain, `[[`, slot), names))
 }
 
+r6_class_revive <- function(state) {
+
+  check_r6_state(state, tag_r6_class)
+
+  r6_generator(state[["class"]], state[["package"]])
+}
+
 r6_revive <- function(state) {
 
   if (!requireNamespace("R6", quietly = TRUE)) {
     stop("the R6 package is needed to revive an R6 object", call. = FALSE)
   }
 
-  check_r6_state(state)
+  check_r6_state(state, tag_r6)
 
   classes <- state[["class"]]
 
@@ -108,19 +135,19 @@ r6_revive <- function(state) {
   obj
 }
 
-check_r6_state <- function(state) {
+check_r6_state <- function(state, tag) {
 
   if (!is_named_list(state)) {
-    stop("a `~r6` payload has to be an object", call. = FALSE)
+    stop("a `", tag, "` payload has to be an object", call. = FALSE)
   }
 
   if (is.null(state[["package"]])) {
-    stop("a `~r6` payload needs a `package` key", call. = FALSE)
+    stop("a `", tag, "` payload needs a `package` key", call. = FALSE)
   }
 
   if (!is_one_string(state[["package"]])) {
     stop(
-      "the `package` key of a `~r6` payload has to be one string",
+      "the `package` key of a `", tag, "` payload has to be one string",
       call. = FALSE
     )
   }
@@ -128,7 +155,7 @@ check_r6_state <- function(state) {
   for (key in c("public", "private")) {
     if (!is.null(state[[key]]) && !is_named_list(state[[key]])) {
       stop(
-        "the `", key, "` key of a `~r6` payload has to be an object",
+        "the `", key, "` key of a `", tag, "` payload has to be an object",
         call. = FALSE
       )
     }

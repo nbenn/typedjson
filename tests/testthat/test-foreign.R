@@ -249,8 +249,8 @@ test_that("a key that is not a format tag is data", {
 test_that("every name the writer can put at key position reads back", {
 
   nms <- c(
-    "a", "", "\u00e9", "~", "~~", "~t", "~v", "~x", "~s4", "~r6", "~zInf",
-    "~zNA_character_", "~zNope", NA
+    "a", "", "\u00e9", "~", "~~", "~t", "~v", "~x", "~s4", "~r6", "~r6class",
+    "~zInf", "~zNA_character_", "~zNope", NA
   )
 
   for (nm in nms) {
