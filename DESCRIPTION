@@ -16,6 +16,9 @@ Description: Writing an R value as JSON that a human can read, and reading
     the S3, S4, S7 and 'R6' systems. Foreign documents are read under the
     same grammar, so files stay diffable, greppable and editable by hand.
 License: MIT + file LICENSE
+Copyright: The bundled 'yyjson' code in src/ is Copyright (c) 2020
+    YaoYuan and distributed under the MIT licence. See file
+    YYJSON-LICENSE for its full text.
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
