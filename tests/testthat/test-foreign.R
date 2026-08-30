@@ -163,6 +163,25 @@ test_that("a key that is not a format tag is data", {
   expect_identical(json_read_str(json_write_str(named_na)), named_na)
 })
 
+test_that("every name the writer can put at key position reads back", {
+
+  nms <- c(
+    "a", "", "\u00e9", "~", "~~", "~t", "~v", "~x", "~s4", "~r6", "~zInf",
+    "~zNA_character_", "~zNope", NA
+  )
+
+  for (nm in nms) {
+    keyed <- stats::setNames(list(1L), nm)
+    expect_identical(json_read_str(json_write_str(keyed)), keyed)
+  }
+
+  for (nm in nms[!is.na(nms) & nzchar(nms)]) {
+    attributed <- 1L
+    attr(attributed, nm) <- "v"
+    expect_identical(json_read_str(json_write_str(attributed)), attributed)
+  }
+})
+
 test_that("a document from a foreign writer reads under the same grammar", {
 
   doc <- '{
