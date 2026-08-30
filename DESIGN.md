@@ -41,7 +41,7 @@ An attribute-free vector emits as a flat array, and its type rides on the number
 c(1.0, 2.5)   ->  [1.0, 2.5]
 c(1L, 2L)     ->  [1, 2]
 c("a", "b")   ->  ["a", "b"]
-TRUE          ->  [true]
+TRUE          ->  true
 list(1L, 2L)  ->  [[1], [2]]
 ```
 
@@ -49,14 +49,16 @@ A double writes with a decimal point or an exponent, an integer without. The yyj
 
 Nesting distinguishes a vector from a list: a flat array of scalars is a vector, an array of arrays or objects is a list.
 
+A length-one vector is written bare wherever an array cannot be mistaken for it: at the document root, as an object value, as an attribute value, and as the payload of a tagged object. Brackets survive only around an array element, where they are the one thing separating `list(1, 2)` from `c(1, 2)`.
+
 ### Values JSON cannot carry
 
 Typed `NA`, `Inf`, `-Inf` and `NaN` become prefix-tagged strings, and any ordinary string beginning with the prefix is escaped by doubling it.
 
 ```r
-NA_real_      ->  ["~zNA_real_"]
+NA_real_      ->  "~zNA_real_"
 c(1, Inf)     ->  [1.0, "~zInf"]
-"~foo"        ->  ["~~foo"]
+"~foo"        ->  "~~foo"
 ```
 
 Borrowed from Transit, whose spec escapes any data string beginning with `~`, `^` or a backtick by prepending `~`. The escape closes the ambiguity by construction rather than by choosing a spelling nobody uses, which is what makes it a genuine fix for the class of bug where a link input of `"Inf"` restores as numeric infinity.
@@ -69,7 +71,7 @@ Anything carrying attributes escalates to a tagged object naming the type and ca
 
 ```r
 as.Date("2026-01-01")
-->  {"~t": "double", "~a": {"class": ["Date"]}, "~v": [20454]}
+->  {"~t": "double", "~a": {"class": "Date"}, "~v": 20454.0}
 ```
 
 This single rule covers `Date`, `POSIXct`, factor, named vectors, matrices, data.frames and classed lists, because in R every one of them is a base type plus attributes. Empty typed vectors escalate for the same reason — `[]` has no element in which to carry a type.
