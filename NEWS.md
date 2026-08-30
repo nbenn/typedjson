@@ -10,7 +10,7 @@ First release, carrying the format and the two round-trip contracts described in
 
 * A tagged `~a` / `~v` object for anything carrying attributes, which covers `Date`, `POSIXct`, factors, matrices, data frames and classed lists through one rule, with a `~t` naming the type only where the payload cannot.
 
-* Objects from all four systems: S3 and S4 through the attribute rule, S7 through a recorded class reference, and R6 through a generator lookup that rebuilds an instance without running `initialize`. The `R6` lookup runs on the way out as well, so a class no reader could find again is refused where it is written, naming the path it stopped at, rather than producing a document that fails on the read.
+* Objects from all four systems: S3 and S4 through the attribute rule, S7 through a recorded class reference, and R6 through a generator lookup that rebuilds an instance without running `initialize`. The `R6` lookup runs on the way out as well, so a class no reader could find again is refused where it is written, naming the path it stopped at, rather than producing a document that fails on the read. The generator settles the instance's shape as well as its lock, so recorded state a class no longer declares is dropped with a warning naming it rather than bound into an object no constructor could produce.
 
 * An extension protocol, `json_state()` and `json_revive()`, for classes the default rule does not fit.
 

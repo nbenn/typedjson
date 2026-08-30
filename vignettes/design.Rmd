@@ -185,7 +185,11 @@ Revival, verified end to end on a two-level class with private fields at both le
 
 1. Find the generator. The expression `environmentName(parent.env(x$.__enclos_env__))` gives where the class was defined; scan that namespace for an `is.R6Class()` object whose `$classname` matches. Scanning is necessary rather than fussy, because the generator variable need not be named after the class — and for the same reason it can turn up two, which is an error rather than a coin toss. The recorded `class` is the instance's whole class vector, so the generator that answers has to declare the same chain, `c(gen$classname, ..., "R6")` walked through `get_inherit()`. A class prepended on the instance survives as the part of the vector no generator accounts for.
 2. Allocate without running `initialize`. Rebuild a twin generator from the original's `public_fields`, `public_methods`, `private_*`, `active`, `inherit` and `parent_env`, with a no-op `initialize` shadowing the real one — and the inherited one, which is what bites on subclasses — and `lock_objects = FALSE`.
-3. Populate and re-lock. Assign public fields into the object and private fields into `.__enclos_env__$private`, then call `lockEnvironment()` if the original was locked.
+3. Populate and re-lock. Assign public fields into the object and private fields into `.__enclos_env__$private`, then call `lockEnvironment()` where the generator's `lock_objects` asks for it.
+
+The lock therefore comes from the generator rather than from the instance the document was written from. A lock a user placed on one object, or on a single binding inside it, is not recorded and does not come back: the `~r6` payload carries field values and says nothing about how they are bound.
+
+The generator settles the shape too. Where it locks its instances, recorded state it no longer declares has nowhere to go, so that state is dropped with a warning naming it rather than bound into an object no constructor could produce. The mirror case needs nothing, since a field the generator has gained since the document was written arrives at its default. Where instances take new bindings the recorded state is restored whole, because a field assigned to one by hand is state like any other.
 
 Bare environments, closures, language objects and external pointers stay out. The principled line is that an environment is rescuable exactly when something else can supply its shape; for R6 that is the generator, and for a bare environment nothing can. What the writer refuses, it refuses loudly, naming the path it stopped at.
 
