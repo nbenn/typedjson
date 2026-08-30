@@ -58,6 +58,8 @@ Kind unify(Kind a, Kind b) {
   return K_LIST;
 }
 
+const SEXPTYPE kNoType = ANYSXP;
+
 SEXPTYPE sexptype_of(const char *name) {
   if (std::strcmp(name, "logical") == 0) return LGLSXP;
   if (std::strcmp(name, "integer") == 0) return INTSXP;
@@ -104,6 +106,12 @@ void check_tags(yyjson_val *v,
       cpp11::stop("`%s` is not a tag this reader knows", tag.c_str());
     }
   }
+}
+
+bool is_tagged(yyjson_val *v) {
+  return yyjson_obj_get(v, kTagType) != nullptr ||
+         yyjson_obj_get(v, kTagAttr) != nullptr ||
+         yyjson_obj_get(v, kTagValue) != nullptr;
 }
 
 int nibble(char c) {
@@ -283,7 +291,7 @@ SEXP Reader::build_arr(yyjson_val *v) {
 }
 
 SEXP Reader::build_obj(yyjson_val *v) {
-  if (yyjson_obj_get(v, kTagType) != nullptr) return build_tagged(v);
+  if (is_tagged(v)) return build_tagged(v);
   if (yyjson_obj_get(v, kTagR6) != nullptr) return build_hooked(v, kTagR6);
   if (yyjson_obj_get(v, kTagS7) != nullptr) return build_hooked(v, kTagS7);
   if (yyjson_obj_get(v, kTagExt) != nullptr) return build_hooked(v, kTagExt);
@@ -381,18 +389,22 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   check_tags(v, {kTagType, kTagAttr, kTagValue, kTagS4});
 
   yyjson_val *type_val = yyjson_obj_get(v, kTagType);
-  if (!yyjson_is_str(type_val)) {
-    cpp11::stop("`%s` needs to name a type", kTagType);
-  }
-  const char *type_name = yyjson_get_str(type_val);
-  SEXPTYPE type = sexptype_of(type_name);
-
   yyjson_val *payload = yyjson_obj_get(v, kTagValue);
   yyjson_val *attribs = yyjson_obj_get(v, kTagAttr);
   yyjson_val *s4 = yyjson_obj_get(v, kTagS4);
 
+  const char *type_name = nullptr;
+  if (type_val != nullptr) {
+    if (!yyjson_is_str(type_val)) {
+      cpp11::stop("`%s` needs to name a type", kTagType);
+    }
+    type_name = yyjson_get_str(type_val);
+  }
+
+  SEXPTYPE type = type_name == nullptr ? kNoType : sexptype_of(type_name);
   bool wants_s4 = ((s4 != nullptr) && yyjson_get_bool(s4)) ||
-                  std::strcmp(type_name, "S4") == 0;
+                  (type_name != nullptr && std::strcmp(type_name, "S4") == 0);
+
   SEXP out;
   if (type == OBJSXP) {
     out = Rf_allocS4Object();
@@ -400,13 +412,14 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   } else if (type == NILSXP) {
     out = R_NilValue;
   } else if (payload == nullptr) {
-    cpp11::stop("`%s` needs a value under `%s`", kTagType, kTagValue);
+    cpp11::stop("a tagged object needs a value under `%s`", kTagValue);
   } else if (type == CPLXSXP) {
     out = build_complex(payload);
   } else if (type == RAWSXP) {
     out = build_raw(payload);
   } else {
-    out = coerce(build(payload), type);
+    out = build(payload);
+    if (type != kNoType) out = coerce(out, type);
     if (wants_s4) out = Rf_asS4(out, TRUE, 0);
   }
   PROTECT(out);

@@ -70,31 +70,26 @@ test_that("a list of records reads as one anywhere else would write it", {
 test_that("a named atomic vector takes the ordinary attribute rule", {
 
   expect_identical(
-    json_write_str(c(a = 1, b = 2)),
-    '{"~t":"double","~a":{"names":["a","b"]},"~v":[1.0,2.0]}'
+    json_write_str(c(a = 1, b = 2)), '{"~a":{"names":["a","b"]},"~v":[1.0,2.0]}'
   )
 
-  expect_identical(
-    json_write_str(c(a = 1L)),
-    '{"~t":"integer","~a":{"names":"a"},"~v":1}'
-  )
+  expect_identical(json_write_str(c(a = 1L)), '{"~a":{"names":"a"},"~v":1}')
 })
 
 test_that("attributes escalate to a tagged object", {
 
   expect_identical(
     json_write_str(as.Date("2026-01-01")),
-    '{"~t":"double","~a":{"class":"Date"},"~v":20454.0}'
+    '{"~a":{"class":"Date"},"~v":20454.0}'
   )
 
   expect_identical(
     json_write_str(factor("a")),
-    '{"~t":"integer","~a":{"levels":"a","class":"factor"},"~v":1}'
+    '{"~a":{"levels":"a","class":"factor"},"~v":1}'
   )
 
   expect_identical(
-    json_write_str(matrix(1:4, 2)),
-    '{"~t":"integer","~a":{"dim":[2,2]},"~v":[1,2,3,4]}'
+    json_write_str(matrix(1:4, 2)), '{"~a":{"dim":[2,2]},"~v":[1,2,3,4]}'
   )
 })
 
@@ -116,6 +111,16 @@ test_that("an empty vector escalates because no element carries its type", {
   expect_identical(json_write_str(integer()), '{"~t":"integer","~v":[]}')
   expect_identical(json_write_str(double()), '{"~t":"double","~v":[]}')
   expect_identical(json_write_str(logical()), '{"~t":"logical","~v":[]}')
+})
+
+test_that("the type tag returns when a vector is emptied", {
+
+  expect_identical(json_write_str(c(a = 1)), '{"~a":{"names":"a"},"~v":1.0}')
+
+  expect_identical(
+    json_write_str(c(a = 1)[0]),
+    '{"~t":"double","~a":{"names":{"~t":"character","~v":[]}},"~v":[]}'
+  )
 })
 
 test_that("a name starting with the prefix is escaped like any string", {
@@ -161,8 +166,8 @@ test_that("a data frame keeps its columns keyed by name", {
   expect_identical(
     json_write_str(data.frame(x = 1:2, y = c("a", "b"))),
     paste0(
-      '{"~t":"list","~a":{"class":"data.frame",',
-      '"row.names":["~zNA_integer_",-2]},"~v":{"x":[1,2],"y":["a","b"]}}'
+      '{"~a":{"class":"data.frame","row.names":["~zNA_integer_",-2]},',
+      '"~v":{"x":[1,2],"y":["a","b"]}}'
     )
   )
 })

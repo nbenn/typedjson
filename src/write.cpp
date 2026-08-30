@@ -16,6 +16,12 @@ struct Crumb {
   R_xlen_t index;
 };
 
+bool needs_type(SEXP x) {
+  int type = TYPEOF(x);
+  if (type == CPLXSXP || type == RAWSXP || type == OBJSXP) return true;
+  return XLENGTH(x) == 0 && type != VECSXP;
+}
+
 class Writer {
  public:
   Writer(yyjson_mut_doc *doc, cpp11::list hooks)
@@ -160,10 +166,7 @@ SEXP Writer::usable_names(SEXP x, const std::vector<Attrib> &attrs) {
 }
 
 bool Writer::escalate(SEXP x, const std::vector<Attrib> &attrs, SEXP nms) {
-  int type = TYPEOF(x);
-  if (type == CPLXSXP || type == RAWSXP || type == OBJSXP) return true;
-  if (XLENGTH(x) == 0 && type != VECSXP) return true;
-  if (Rf_isS4(x)) return true;
+  if (needs_type(x) || Rf_isS4(x)) return true;
 
   for (size_t i = 0; i < attrs.size(); ++i) {
     if (attrs[i].tag == R_NamesSymbol && attrs[i].value == nms) continue;
@@ -365,11 +368,14 @@ yyjson_mut_val *Writer::emit_tagged(SEXP x, const std::vector<Attrib> &attrs,
                                     SEXP nms) {
   yyjson_mut_val *obj = yyjson_mut_obj(doc_);
   bool s4 = Rf_isS4(x);
-  const char *type = TYPEOF(x) == OBJSXP ? (s4 ? "S4" : "object")
-                                         : Rf_type2char(TYPEOF(x));
 
-  yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kTagType),
-                     yyjson_mut_strncpy(doc_, type, std::strlen(type)));
+  if (needs_type(x)) {
+    const char *type = TYPEOF(x) == OBJSXP ? (s4 ? "S4" : "object")
+                                           : Rf_type2char(TYPEOF(x));
+    yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kTagType),
+                       yyjson_mut_strncpy(doc_, type, std::strlen(type)));
+  }
+
   if (s4 && TYPEOF(x) != OBJSXP) {
     yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kTagS4),
                        yyjson_mut_bool(doc_, true));
