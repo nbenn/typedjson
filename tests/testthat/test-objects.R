@@ -77,7 +77,9 @@ test_that("an R6 document records identity and state, not behaviour", {
   doc <- json_write_str(CorpusR6$new(1, "t"))
 
   expect_match(doc, '"~r6"', fixed = TRUE)
-  expect_match(doc, '"class":"CorpusR6"', fixed = TRUE)
+  expect_match(
+    doc, '"class":["CorpusR6","CorpusR6Base","R6"]', fixed = TRUE
+  )
   expect_match(doc, '"package":"R_GlobalEnv"', fixed = TRUE)
   expect_no_match(doc, "function", fixed = TRUE)
 })
@@ -146,6 +148,113 @@ test_that("a class that owns a callback records it through json_state()", {
   expect_identical(back$f(), 1)
 })
 
+test_that("a document no reader could revive is refused as it is written", {
+  expect_identical(refusal_failures(corpus_refused()), character())
+})
+
+test_that("a document records the class vector the instance carries", {
+
+  obj <- CorpusR6Plain$new()
+  class(obj) <- c("corpus_tagged", class(obj))
+
+  doc <- json_write_str(obj)
+
+  expect_match(
+    doc, '"class":["corpus_tagged","CorpusR6Plain","R6"]', fixed = TRUE
+  )
+  expect_identical(class(json_read_str(doc)), class(obj))
+  expect_identical(json_read_str(doc)$n, 1)
+})
+
+test_that("a recorded class vector the generator contradicts is an error", {
+
+  revive <- function(class) {
+    json_read_str(
+      paste0(
+        '{"~r6":{"class":', class, ',"package":"R_GlobalEnv",',
+        '"public":null,"private":null}}'
+      )
+    )
+  }
+
+  expect_error(
+    revive('["CorpusR6","CorpusR6Base","R6"]'), NA
+  )
+  expect_error(
+    revive('["CorpusR6","R6"]'),
+    "declares class `CorpusR6/CorpusR6Base/R6` where `CorpusR6/R6`",
+    fixed = TRUE
+  )
+  expect_error(revive('["CorpusR6Base"]'), "was recorded", fixed = TRUE)
+  expect_error(revive('"CorpusR6Missing"'), "no R6 generator", fixed = TRUE)
+  expect_error(revive("null"), "needs a class vector", fixed = TRUE)
+})
+
+test_that("a class naming more than one generator is refused at both ends", {
+
+  expect_error(
+    json_write_str(CorpusR6Amb2$new()),
+    "names more than one generator", fixed = TRUE
+  )
+  expect_error(
+    json_read_str(
+      paste0(
+        '{"~r6":{"class":["CorpusR6Amb","R6"],"package":"R_GlobalEnv",',
+        '"public":null,"private":null}}'
+      )
+    ),
+    "`CorpusR6Amb1`, `CorpusR6Amb2`", fixed = TRUE
+  )
+})
+
+test_that("a class is resolved once per call rather than once per object", {
+
+  resolve <- find_r6_generator
+  calls <- 0L
+
+  local_mocked_bindings(
+    find_r6_generator = function(class, package) {
+      calls <<- calls + 1L
+      resolve(class, package)
+    }
+  )
+
+  doc <- json_write_str(replicate(20L, CorpusR6Plain$new(), simplify = FALSE))
+
+  expect_identical(calls, 1L)
+
+  calls <- 0L
+  json_read_str(doc)
+
+  expect_identical(calls, 1L)
+})
+
+test_that("a resolved generator does not outlive the call that found it", {
+
+  doc <- paste0(
+    '{"~r6":{"class":["CorpusR6Swap","R6"],"package":"R_GlobalEnv",',
+    '"public":null,"private":null}}'
+  )
+
+  swap <- function(v) {
+    assign(
+      "CorpusR6Swap",
+      R6::R6Class("CorpusR6Swap", public = list(v = v), parent_env = global),
+      envir = globalenv()
+    )
+  }
+
+  withr::defer(rm("CorpusR6Swap", envir = globalenv()))
+
+  swap(1)
+  first <- json_read_str(doc)$v
+
+  swap(2)
+
+  expect_identical(first, 1)
+  expect_identical(json_read_str(doc)$v, 2)
+})
+
 test_that("reviving an R6 object does not run initialize", {
 
   loud <- R6::R6Class(
@@ -166,7 +275,7 @@ test_that("reviving an R6 object does not run initialize", {
   expect_error(loud$new(), "must not run")
 
   doc <- paste0(
-    '{"~r6":{"class":["CorpusR6Loud"],"package":["R_GlobalEnv"],',
+    '{"~r6":{"class":["CorpusR6Loud","R6"],"package":["R_GlobalEnv"],',
     '"public":{"n":7.0},"private":null}}'
   )
 

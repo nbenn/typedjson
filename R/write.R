@@ -73,7 +73,9 @@ json_write_str <- function(x, pretty = FALSE) {
 
   stopifnot(is.logical(pretty), length(pretty) == 1L, !is.na(pretty))
 
-  typedjson_write_(x, pretty, list(kind = writer_kind, state = writer_state))
+  generator_cache$scope(
+    typedjson_write_(x, pretty, list(kind = writer_kind, state = writer_state))
+  )
 }
 
 writer_kind <- function(class) {
@@ -85,9 +87,14 @@ writer_kind <- function(class) {
   FALSE
 }
 
-writer_state <- function(x) {
+writer_state <- function(x, where) {
 
-  state <- json_state(x)
+  state <- tryCatch(
+    json_state(x),
+    typedjson_refusal = function(cnd) {
+      stop(conditionMessage(cnd), " at `", where, "`", call. = FALSE)
+    }
+  )
 
   if (inherits(state, "typedjson_state")) {
     return(unclass(state))

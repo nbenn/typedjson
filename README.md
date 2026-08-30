@@ -89,10 +89,10 @@ R6 is rescuable because an R6 object is a generator plus state; methods, the `se
 ```r
 Counter <- R6::R6Class("Counter", public = list(n = 0, bump = function() self$n <- self$n + 1))
 json_write_str(Counter$new())
-#> {"~r6":{"class":"Counter","package":"R_GlobalEnv","public":{"n":0.0},"private":null}}
+#> {"~r6":{"class":["Counter","R6"],"package":"R_GlobalEnv","public":{"n":0.0},"private":null}}
 ```
 
-Revival finds the generator, allocates an instance without running `initialize`, populates the fields, and locks the environment again if the generator asked for that.
+The class vector is recorded whole, so revival can check the generator it finds against what was written rather than trusting the name. Revival then allocates an instance without running `initialize`, populates the fields, and locks the environment again if the generator asked for that. Both halves run on the way out too: a document whose generator cannot be found again, or whose class names more than one, is refused where it is written rather than on the read that fails months later.
 
 ## What stays out
 

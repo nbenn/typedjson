@@ -205,11 +205,43 @@ corpus_r6 <- function() {
   list(
     "r6/plain" = corpus_generator("CorpusR6Plain")$new(),
     "r6/base" = corpus_generator("CorpusR6Base")$new(2),
-    "r6/inherited" = corpus_generator("CorpusR6")$new(3, "t1")
+    "r6/inherited" = corpus_generator("CorpusR6")$new(3, "t1"),
+    "r6/prepended-class" = corpus_prepended_r6()
   )
 }
 
+corpus_prepended_r6 <- function() {
+
+  obj <- corpus_generator("CorpusR6Plain")$new()
+  class(obj) <- c("corpus_tagged", class(obj))
+
+  obj
+}
+
+corpus_local_r6 <- function() {
+  (function() R6::R6Class("CorpusR6Local", public = list(v = 1)))()$new()
+}
+
+corpus_holder_r6 <- function() {
+
+  obj <- corpus_generator("CorpusR6Holder")$new()
+  obj$inner <- corpus_local_r6()
+
+  obj
+}
+
 corpus_refused <- function() {
+
+  unnameable <- paste0(
+    "the class was defined in an environment ",
+    "that cannot be found again"
+  )
+
+  ambiguous <- paste0(
+    "the class `CorpusR6Amb` names more than one generator in R_GlobalEnv: ",
+    "`CorpusR6Amb1`, `CorpusR6Amb2`"
+  )
+
   list(
     "handle/environment" = list(
       value = new.env(), type = "environment", path = "x"
@@ -237,6 +269,20 @@ corpus_refused <- function() {
     "r6/private-closure" = list(
       value = corpus_generator("CorpusR6PrivateHook")$new(),
       type = "closure", path = "x$private$fn"
+    ),
+    "r6/local-generator" = list(
+      value = corpus_local_r6(), message = unnameable, path = "x"
+    ),
+    "r6/nested-local-generator" = list(
+      value = corpus_holder_r6(), message = unnameable, path = "x$public$inner"
+    ),
+    "r6/anonymous-generator" = list(
+      value = corpus_generator("CorpusR6Anon")$new(),
+      message = "no R6 generator for class `R6` in R_GlobalEnv", path = "x"
+    ),
+    "r6/ambiguous-generator" = list(
+      value = corpus_generator("CorpusR6Amb2")$new(),
+      message = ambiguous, path = "x"
     )
   )
 }
@@ -257,12 +303,13 @@ refusal_failures <- function(cases) {
       error = conditionMessage
     )
 
-    want <- paste0(
-      "cannot write a value of type '", case[["type"]], "' at `",
-      case[["path"]], "`"
-    )
+    reason <- case[["message"]]
 
-    if (!identical(got, want)) {
+    if (is.null(reason)) {
+      reason <- paste0("cannot write a value of type '", case[["type"]], "'")
+    }
+
+    if (!identical(got, paste0(reason, " at `", case[["path"]], "`"))) {
       failed <- c(failed, nm)
     }
   }

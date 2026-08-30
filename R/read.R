@@ -22,7 +22,7 @@ json_read_str <- function(txt) {
 }
 
 json_read_bytes <- function(bytes) {
-  typedjson_read_(bytes, list(revive = reader_revive))
+  generator_cache$scope(typedjson_read_(bytes, list(revive = reader_revive)))
 }
 
 reader_revive <- function(tag, state) {
