@@ -304,25 +304,27 @@ yyjson_mut_val *Writer::emit_plain(SEXP x, SEXP nms, bool boxed) {
 
 yyjson_mut_val *Writer::emit_complex(SEXP x) {
   R_xlen_t n = XLENGTH(x);
+
+  SEXP re = PROTECT(Rf_allocVector(REALSXP, n));
+  SEXP im = PROTECT(Rf_allocVector(REALSXP, n));
+
   const Rcomplex *vals = COMPLEX(x);
+  double *re_at = REAL(re);
+  double *im_at = REAL(im);
 
-  bool finite = true;
   for (R_xlen_t i = 0; i < n; ++i) {
-    if (!R_FINITE(vals[i].r) || !R_FINITE(vals[i].i)) {
-      finite = false;
-      break;
-    }
-  }
-  if (finite && n > 0) {
-    return yyjson_mut_arr_with_real(doc_, (const double *)vals, (size_t)(2 * n));
+    re_at[i] = vals[i].r;
+    im_at[i] = vals[i].i;
   }
 
-  yyjson_mut_val *arr = yyjson_mut_arr(doc_);
-  for (R_xlen_t i = 0; i < n; ++i) {
-    yyjson_mut_arr_append(arr, real_val(vals[i].r));
-    yyjson_mut_arr_append(arr, real_val(vals[i].i));
-  }
-  return arr;
+  yyjson_mut_val *obj = yyjson_mut_obj(doc_);
+  yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kPartRe),
+                     emit_plain(re, R_NilValue, false));
+  yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kPartIm),
+                     emit_plain(im, R_NilValue, false));
+
+  UNPROTECT(2);
+  return obj;
 }
 
 yyjson_mut_val *Writer::emit_raw(SEXP x) {

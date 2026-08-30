@@ -126,12 +126,34 @@ test_that("a name starting with the prefix is escaped like any string", {
 test_that("complex and raw carry payloads JSON has no lexeme for", {
 
   expect_identical(
+    json_write_str(1 + 2i), '{"~t":"complex","~v":{"re":1.0,"im":2.0}}'
+  )
+
+  expect_identical(
     json_write_str(c(1 + 2i, 3 - 4i)),
-    '{"~t":"complex","~v":[1.0,2.0,3.0,-4.0]}'
+    '{"~t":"complex","~v":{"re":[1.0,3.0],"im":[2.0,-4.0]}}'
   )
 
   expect_identical(
     json_write_str(as.raw(c(0, 15, 255))), '{"~t":"raw","~v":"000fff"}'
+  )
+})
+
+test_that("each part of a complex value carries its own tag", {
+
+  expect_identical(
+    json_write_str(complex(real = NA, imaginary = Inf)),
+    '{"~t":"complex","~v":{"re":"~zNA_real_","im":"~zInf"}}'
+  )
+
+  expect_identical(
+    json_write_str(c(1 + 2i, complex(real = Inf, imaginary = NaN))),
+    '{"~t":"complex","~v":{"re":[1.0,"~zInf"],"im":[2.0,"~zNaN"]}}'
+  )
+
+  expect_identical(
+    json_read_str('{"~t":"complex","~v":{"re":"~zNA_real_","im":"~zInf"}}'),
+    complex(real = NA, imaginary = Inf)
   )
 })
 
