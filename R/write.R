@@ -17,10 +17,14 @@
 #' and objects built with S3, S4, S7 or `R6`. The second holds for every
 #' document this package can write. Foreign documents are read under the
 #' same grammar and normalise on the first round trip, since a mixed-type
-#' array such as `[1, "a"]` has to come back as a list. One is refused
-#' instead of normalised: a key beginning with a single `~` is reserved
-#' for the format, and one this reader does not know is an error rather
-#' than a name.
+#' array such as `[1, "a"]` has to come back as a list. Two things are
+#' refused instead of normalised, both inside the namespace the `~`
+#' prefix reserves. A key beginning with a single `~` is a format tag,
+#' and one this reader does not know is an error rather than a name. A
+#' string beginning with `~` and a reserved discriminator, which is `z`
+#' today with `:` held for later, is a tag as well, and an unknown one
+#' is an error rather than text; every other tilde-leading string stays
+#' a string, so `~/data` is a path.
 #'
 #' Two rules decide the shape of a document. A JSON array of scalars is an
 #' atomic vector and a JSON object is a named list, so the two containers

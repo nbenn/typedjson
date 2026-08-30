@@ -19,6 +19,16 @@ namespace typedjson {
 
 const char kEscape = '~';
 
+// The discriminators the format has claimed at string position, where the
+// bare escape cannot be reserved because `~/data` has to stay a path. Nothing
+// spends `:` yet; reserving it later would not reach a reader shipped today.
+const char *const kReserved = "z:";
+
+inline bool is_reserved(char discriminator) {
+  return discriminator != '\0' &&
+         std::strchr(kReserved, discriminator) != nullptr;
+}
+
 const char *const kTagType = "~t";
 const char *const kTagAttr = "~a";
 const char *const kTagValue = "~v";

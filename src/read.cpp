@@ -76,9 +76,13 @@ SEXPTYPE sexptype_of(const char *name) {
               kTagType);
 }
 
-bool is_tag(const char *s, size_t len) {
+bool is_key_tag(const char *s, size_t len) {
   return len > 0 && s[0] == kEscape && (len < 2 || s[1] != kEscape) &&
          ztag_of(s, len) != Z_NA_STR;
+}
+
+bool is_str_tag(const char *s, size_t len) {
+  return len > 1 && s[0] == kEscape && is_reserved(s[1]);
 }
 
 void check_tags(yyjson_val *v,
@@ -88,7 +92,7 @@ void check_tags(yyjson_val *v,
   yyjson_obj_foreach(v, idx, max, key, val) {
     const char *s = yyjson_get_str(key);
     size_t len = yyjson_get_len(key);
-    if (!is_tag(s, len)) continue;
+    if (!is_key_tag(s, len)) continue;
 
     bool found = false;
     for (const char *const *at = known.begin(); at != known.end(); ++at) {
@@ -226,9 +230,15 @@ SEXP Reader::as_chr(yyjson_val *v) {
   if (len > (size_t)INT_MAX) {
     cpp11::stop("a string of %g bytes is longer than R can hold", (double)len);
   }
-  if (ztag_of(s, len) == Z_NA_STR) return NA_STRING;
+
+  ZTag tag = ztag_of(s, len);
+  if (tag == Z_NA_STR) return NA_STRING;
   if (len >= 2 && s[0] == kEscape && s[1] == kEscape) {
     return Rf_mkCharLenCE(s + 1, (int)(len - 1), CE_UTF8);
+  }
+  if (tag == Z_NONE && is_str_tag(s, len)) {
+    std::string lexeme(s, len);
+    cpp11::stop("`%s` is not a tag this reader knows", lexeme.c_str());
   }
   return Rf_mkCharLenCE(s, (int)len, CE_UTF8);
 }
