@@ -3,13 +3,18 @@ json_state.R6 <- function(x) {
 
   enclos <- x[[".__enclos_env__"]]
 
+  name <- class(x)[1L]
+  package <- environmentName(parent.env(enclos))
+
+  methods <- r6_methods(r6_generator(name, package))
+
   tagged_state(
     tag_r6,
     list(
-      class = class(x)[1L],
-      package = environmentName(parent.env(enclos)),
-      public = env_state(x),
-      private = env_state(enclos[["private"]])
+      class = name,
+      package = package,
+      public = env_state(x, methods[["public"]]),
+      private = env_state(enclos[["private"]], methods[["private"]])
     )
   )
 }
@@ -21,18 +26,31 @@ json_state.S7_class <- function(x) {
   )
 }
 
-env_state <- function(env) {
+env_state <- function(env, methods) {
 
   if (!is.environment(env)) {
     return(NULL)
   }
 
-  nms <- setdiff(ls(env, all.names = TRUE), ".__enclos_env__")
+  nms <- setdiff(ls(env, all.names = TRUE), c(".__enclos_env__", methods))
   nms <- nms[!vapply(nms, bindingIsActive, logical(1L), env = env)]
 
-  vals <- mget(nms, envir = env)
+  mget(nms, envir = env)
+}
 
-  vals[!vapply(vals, is.function, logical(1L))]
+r6_methods <- function(gen) {
+
+  out <- list(public = character(), private = character())
+
+  while (inherits(gen, "R6ClassGenerator")) {
+
+    out[["public"]] <- c(out[["public"]], names(gen[["public_methods"]]))
+    out[["private"]] <- c(out[["private"]], names(gen[["private_methods"]]))
+
+    gen <- gen$get_inherit()
+  }
+
+  out
 }
 
 r6_revive <- function(state) {
@@ -41,16 +59,7 @@ r6_revive <- function(state) {
     stop("the R6 package is needed to revive an R6 object", call. = FALSE)
   }
 
-  gen <- find_generator(
-    generator_env(state[["package"]]), state[["class"]], is_r6_generator
-  )
-
-  if (is.null(gen)) {
-    stop(
-      "no R6 generator for class `", state[["class"]], "` in ",
-      format(state[["package"]]), call. = FALSE
-    )
-  }
+  gen <- r6_generator(state[["class"]], state[["package"]])
 
   obj <- r6_allocate(gen)
   private <- obj[[".__enclos_env__"]][["private"]]
@@ -66,6 +75,20 @@ r6_revive <- function(state) {
   }
 
   obj
+}
+
+r6_generator <- function(class, package) {
+
+  gen <- find_generator(generator_env(package), class, is_r6_generator)
+
+  if (is.null(gen)) {
+    stop(
+      "no R6 generator for class `", class, "` in ", format(package),
+      call. = FALSE
+    )
+  }
+
+  gen
 }
 
 r6_allocate <- function(gen) {
@@ -88,7 +111,13 @@ r6_allocate <- function(gen) {
 
   twin$inherit <- gen$inherit
 
-  twin$new()
+  obj <- twin$new()
+
+  if (!"initialize" %in% r6_methods(gen)[["public"]]) {
+    rm("initialize", envir = obj)
+  }
+
+  obj
 }
 
 fill_env <- function(env, values) {

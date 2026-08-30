@@ -81,6 +81,70 @@ test_that("an R6 document records identity and state, not behaviour", {
   expect_no_match(doc, "function", fixed = TRUE)
 })
 
+test_that("a method is dropped wherever the generator chain declares it", {
+
+  obj <- CorpusR6$new(3, "t1")
+  doc <- json_write_str(obj)
+
+  expect_no_match(doc, "bump", fixed = TRUE)
+  expect_no_match(doc, "clone", fixed = TRUE)
+  expect_no_match(doc, "doubled", fixed = TRUE)
+
+  expect_identical(json_read_str(doc)$bump()$n, 4)
+})
+
+test_that("a document for an R6 object writes back to itself", {
+
+  values <- corpus_r6()
+  drifting <- character()
+
+  for (nm in names(values)) {
+
+    doc <- json_write_str(values[[nm]])
+
+    if (!identical(json_write_str(json_read_str(doc)), doc)) {
+      drifting <- c(drifting, nm)
+    }
+  }
+
+  expect_identical(drifting, character())
+})
+
+test_that("a field holding a closure is refused rather than dropped", {
+
+  expect_error(
+    json_write_str(CorpusR6PublicHook$new()),
+    "type 'closure' at `x$public$f`", fixed = TRUE
+  )
+  expect_error(
+    json_write_str(CorpusR6PrivateHook$new()),
+    "type 'closure' at `x$private$fn`", fixed = TRUE
+  )
+})
+
+test_that("a class that owns a callback records it through json_state()", {
+
+  local_state_method(
+    "CorpusR6PublicHook",
+    function(x) list(a = x[["a"]], b = x[["b"]]),
+    function(class, state) {
+      out <- CorpusR6PublicHook$new()
+      out$a <- state[["a"]]
+      out$b <- state[["b"]]
+      out
+    }
+  )
+
+  obj <- CorpusR6PublicHook$new()
+  obj$a <- 7
+
+  back <- json_read_str(json_write_str(obj))
+
+  expect_identical(back$a, 7)
+  expect_identical(back$b, 2)
+  expect_identical(back$f(), 1)
+})
+
 test_that("reviving an R6 object does not run initialize", {
 
   loud <- R6::R6Class(

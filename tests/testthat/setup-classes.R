@@ -56,6 +56,45 @@ assign(
 )
 
 assign(
+  "CorpusR6Plain",
+  R6::R6Class(
+    "CorpusR6Plain",
+    public = list(n = 1, tag = "t", scale = function(by) self$n * by),
+    parent_env = global
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusR6PublicHook",
+  R6::R6Class(
+    "CorpusR6PublicHook",
+    public = list(
+      a = 1,
+      b = 2,
+      f = NULL,
+      initialize = function() self$f <- function() 1
+    ),
+    parent_env = global
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusR6PrivateHook",
+  R6::R6Class(
+    "CorpusR6PrivateHook",
+    public = list(
+      initialize = function(f = function(x) x + 1) private$fn <- f,
+      run = function(x) private$fn(x)
+    ),
+    private = list(fn = NULL),
+    parent_env = global
+  ),
+  envir = global
+)
+
+assign(
   "CorpusS7",
   S7::new_class(
     "CorpusS7",
@@ -69,7 +108,13 @@ withr::defer(
   {
     methods::removeClass("CorpusS4", where = global)
     methods::removeClass("CorpusS4Numeric", where = global)
-    rm(list = c("CorpusR6", "CorpusR6Base", "CorpusS7"), envir = global)
+    rm(
+      list = c(
+        "CorpusR6", "CorpusR6Base", "CorpusR6Plain", "CorpusR6PublicHook",
+        "CorpusR6PrivateHook", "CorpusS7"
+      ),
+      envir = global
+    )
   },
   teardown_env()
 )

@@ -46,14 +46,7 @@ test_that("a reference written twice is reported, not refused", {
 })
 
 test_that("a handle rather than data is refused, with the path", {
-  expect_error(json_write_str(new.env()), "type 'environment'")
-  expect_error(json_write_str(list(a = 1, e = new.env())), "x$e", fixed = TRUE)
-  expect_error(json_write_str(list(f = mean)), "type 'closure'")
-  expect_error(json_write_str(quote(x + 1)), "type 'language'")
-  expect_error(
-    json_write_str(list(list(new.env()))), "x[[1]][[1]]", fixed = TRUE
-  )
-  expect_error(json_write_str(as.symbol("x")), "type 'symbol'")
+  expect_identical(refusal_failures(corpus_refused()), character())
 })
 
 test_that("an error leaves the session able to write again", {
