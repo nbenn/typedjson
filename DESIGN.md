@@ -74,6 +74,31 @@ as.Date("2026-01-01")
 
 This single rule covers `Date`, `POSIXct`, factor, named vectors, matrices, data.frames and classed lists, because in R every one of them is a base type plus attributes. Empty typed vectors escalate for the same reason — `[]` has no element in which to carry a type.
 
+### Types with no lexeme
+
+Complex and raw escalate unconditionally, since neither has a plain JSON form to fall back to, and each replaces the ordinary payload with a shape of its own.
+
+A complex vector splits into two named parts, one per component. Each part is an ordinary double payload, so the unboxing rule and the `~z` tags apply to it independently, and a value missing only one component still comes back exact.
+
+```r
+1 + 2i
+->  {"~t": "complex", "~v": {"re": 1.0, "im": 2.0}}
+
+c(1 + 2i, 3 - 4i)
+->  {"~t": "complex", "~v": {"re": [1.0, 3.0], "im": [2.0, -4.0]}}
+
+complex(real = NA, imaginary = Inf)
+->  {"~t": "complex", "~v": {"re": "~zNA_real_", "im": "~zInf"}}
+```
+
+Two columns rather than an object per element, because it stays compact for long vectors and matches how R stores a complex vector. The part names are the ones Julia's `JSON.jl` and the usual hand-rolled Python encoder already reach for, so the scalar case reads as a foreign consumer would write it. Writing R's own `1+2i` notation is the one spelling to avoid, and it is the one `jsonlite` picks: it loses precision, and a value with a missing component collapses to `"NA"` with the other component gone entirely.
+
+A raw vector is one lower-case hexadecimal string, two digits per byte, which is the form every hex dump already uses and is shorter than an array of small integers.
+
+```r
+as.raw(c(0, 15, 255))  ->  {"~t": "raw", "~v": "000fff"}
+```
+
 ### Object systems
 
 S3 falls out with no special case at all: an S3 object is a base type plus a `class` attribute.
