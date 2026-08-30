@@ -2,7 +2,7 @@ Package: typedjson
 Title: Type-Faithful and Human-Readable JSON for R Values
 Version: 0.1.0.9000
 Authors@R: c(
-    person("Nicolas", "Bennett", , "3158446+nbenn@users.noreply.github.com",
+    person("Nicolas", "Bennett", , "nicolas@cynkra.com",
            role = c("aut", "cre")),
     person("YaoYuan", role = c("ctb", "cph"),
            comment = "Author of the vendored yyjson library")
