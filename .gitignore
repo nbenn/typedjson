@@ -6,3 +6,4 @@ src/*.so
 src/*.dll
 vignettes/*.R
 vignettes/*.html
+docs

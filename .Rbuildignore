@@ -4,3 +4,7 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
 ^\.lintr$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.covrignore$

@@ -2,7 +2,7 @@
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/nbenn/typedjson/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/nbenn/typedjson/actions/workflows/R-CMD-check.yaml)
-[![Codecov test coverage](https://codecov.io/gh/nbenn/typedjson/graph/badge.svg)](https://app.codecov.io/gh/nbenn/typedjson)
+[![codecov](https://codecov.io/gh/nbenn/typedjson/graph/badge.svg?token=S92ZXN953A)](https://codecov.io/gh/nbenn/typedjson)
 <!-- badges: end -->
 
 The typedjson package writes an R value as JSON a human can read, and reads it back unchanged.
