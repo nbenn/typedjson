@@ -101,6 +101,14 @@ Borrowed from Transit, whose spec escapes any data string beginning with `~`, `^
 
 On read, only the known tags are interpreted. An unrecognised `~`-prefixed string is a literal, so "a string is always a string" holds for everything except a foreign document containing a string exactly equal to one of our tags.
 
+The prefix is reserved at key position too, and there the reservation is total rather than tag-by-tag: a key beginning with a single `~` is a format tag, and one this reader does not know is refused rather than rebuilt as data. No document this package writes is affected, since a name of your own carries the doubled prefix.
+
+```{r, error = TRUE}
+json_read_str('{"~ref": 3}')
+```
+
+Refusing is what lets the format grow. Back-references are deferred rather than dropped, and the natural spelling for them is a new tag; a reader carrying this rule refuses a document written against that tag instead of quietly returning a wrong value. That is the useful half of a version stamp for zero bytes, and a stamp itself does not fit, since an attribute-free vector emits as a bare array and so would need a wrapper that the foreign round trip cannot afford.
+
 ### Attributes
 
 Anything carrying attributes escalates to a tagged object naming the type and carrying the attributes recursively.
@@ -186,6 +194,7 @@ One grammar, applied to whatever is handed to us. Nothing is inferred from conte
 | `[1,2,3]` | integer vector | shape |
 | `[[1],[2]]`, `[1,"a"]` | list | shape |
 | `{…}` | named list | nothing |
+| `{"~foo": …}` | an error | the reserved prefix at key position |
 
 No `NA` from `"NA"`, no `Inf` from `"Inf"`, no date from an ISO-8601-looking string, no data frame from an array of objects. There is no strict mode and no lossy mode, because there is only one set of rules.
 

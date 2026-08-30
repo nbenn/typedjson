@@ -111,6 +111,8 @@ One grammar, applied to whatever is handed over. Nothing is inferred from conten
 
 Integers beyond what R holds are read as doubles, and a number that cannot survive that conversion exactly is reported through a warning naming the literal rather than passed off as exact.
 
+One thing is refused outright. A key beginning with a single `~` is a format tag, so one this reader does not know is an error rather than a name; the writer doubles the prefix on a name of your own, which is what makes the whole namespace safe to reserve. A document written against a later version of the format therefore fails loudly here instead of coming back as the wrong value.
+
 ## Persisting a class the default rule does not fit
 
 A class whose instances hold something outside the base-type-plus-attributes model supplies a pair of methods, modelled on the `__getstate__` and `__setstate__` protocol of Python's pickle.

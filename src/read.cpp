@@ -1,6 +1,7 @@
 #include <climits>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -71,6 +72,35 @@ SEXPTYPE sexptype_of(const char *name) {
   if (std::strcmp(name, "NULL") == 0) return NILSXP;
   cpp11::stop("`%s` under `%s` is not a type this reader can rebuild", name,
               kTagType);
+}
+
+bool is_tag(const char *s, size_t len) {
+  return len > 0 && s[0] == kEscape && (len < 2 || s[1] != kEscape) &&
+         ztag_of(s, len) == Z_NONE;
+}
+
+void check_tags(yyjson_val *v,
+                std::initializer_list<const char *> known = {}) {
+  size_t idx, max;
+  yyjson_val *key, *val;
+  yyjson_obj_foreach(v, idx, max, key, val) {
+    const char *s = yyjson_get_str(key);
+    size_t len = yyjson_get_len(key);
+    if (!is_tag(s, len)) continue;
+
+    bool found = false;
+    for (const char *const *at = known.begin(); at != known.end(); ++at) {
+      if (std::strlen(*at) == len && std::memcmp(*at, s, len) == 0) {
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      cpp11::stop("`%s` is not a tag this reader knows",
+                  std::string(s, len).c_str());
+    }
+  }
 }
 
 int nibble(char c) {
@@ -255,6 +285,8 @@ SEXP Reader::build_obj(yyjson_val *v) {
   if (yyjson_obj_get(v, kTagS7) != nullptr) return build_hooked(v, kTagS7);
   if (yyjson_obj_get(v, kTagExt) != nullptr) return build_hooked(v, kTagExt);
 
+  check_tags(v);
+
   size_t n = yyjson_obj_size(v);
   size_t idx, max;
   yyjson_val *key, *val;
@@ -273,6 +305,8 @@ SEXP Reader::build_obj(yyjson_val *v) {
 }
 
 SEXP Reader::build_complex(yyjson_val *v) {
+  check_tags(v);
+
   yyjson_val *re = yyjson_is_obj(v) ? yyjson_obj_get(v, kPartRe) : nullptr;
   yyjson_val *im = yyjson_is_obj(v) ? yyjson_obj_get(v, kPartIm) : nullptr;
 
@@ -341,6 +375,8 @@ SEXP Reader::coerce(SEXP x, SEXPTYPE type) {
 }
 
 SEXP Reader::build_tagged(yyjson_val *v) {
+  check_tags(v, {kTagType, kTagAttr, kTagValue, kTagS4});
+
   yyjson_val *type_val = yyjson_obj_get(v, kTagType);
   if (!yyjson_is_str(type_val)) {
     cpp11::stop("`%s` needs to name a type", kTagType);
@@ -382,6 +418,8 @@ SEXP Reader::build_tagged(yyjson_val *v) {
       UNPROTECT(1);
       cpp11::stop("`%s` needs to hold an object of attributes", kTagAttr);
     }
+    check_tags(attribs);
+
     for (int rank = 0; rank <= 4; ++rank) {
       size_t idx, max;
       yyjson_val *key, *val;
@@ -407,6 +445,8 @@ SEXP Reader::build_tagged(yyjson_val *v) {
 }
 
 SEXP Reader::build_hooked(yyjson_val *v, const char *tag) {
+  check_tags(v, {tag});
+
   SEXP state = PROTECT(build(yyjson_obj_get(v, tag)));
   cpp11::sexp out = revive_(cpp11::as_sexp(std::string(tag)), state);
   UNPROTECT(1);
