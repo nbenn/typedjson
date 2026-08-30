@@ -117,7 +117,7 @@ Refusing is what lets the format grow. Back-references are deferred rather than 
 
 ### Attributes
 
-Anything carrying attributes escalates to a tagged object naming the type and carrying the attributes recursively.
+Anything carrying attributes escalates to a tagged object carrying the attributes recursively.
 
 ```{r, echo = FALSE}
 show_documents(as.Date("2026-01-01"), c(a = 1, b = 2), character())
@@ -127,9 +127,29 @@ This single rule covers `Date`, `POSIXct`, factors, named vectors, matrices, dat
 
 Names ride in the payload rather than in the attribute object wherever the payload is an object, which is why a data frame shows its columns keyed by name.
 
+The type rides in the payload too, wherever the payload can state it. The decimal points in `[1.0,2.0]` are what make that a double vector under the rules above, so a `~t` naming the type would only repeat them, and the key is emitted exactly where it is not a repetition: where reading the payload on its own would escalate it in turn.
+
+| Value | Payload | Read on its own |
+| --- | --- | --- |
+| `character()` | `[]` | `list()`, since no element carries a type |
+| `1+2i` | `{"re":1.0,"im":2.0}` | a named list |
+| `as.raw(1)` | `"01"` | a string |
+
+Objects from S4 and S7 need it for the same reason, since `~t` names `"S4"` or `"object"` and there is no payload to read. Everywhere else — `Date`, `POSIXct`, factors, named vectors, matrices, data frames, classed lists — the lexemes already say it.
+
+What this asks a reader to know is that the presence of `~t` is a property of the value's type rather than of the document, so emptying a vector brings it back.
+
+```{r, echo = FALSE}
+show_documents(c(a = 1), c(a = 1)[0])
+```
+
+That is stable under ordinary edits and never depends on a sibling. It does leave the hand editor unguarded, since deleting a `.0` turns a double into an integer with nothing to catch it — but that was already true of every vector that does not escalate, which is what would have made the tag an inconsistent guard rather than a protective one.
+
+A reader recognises the tagged form by any of `~t`, `~a` and `~v` at key position, which under the reservation rule above is the same test rather than a new one, since a single `~` at key position is a format tag either way. A `~t` that repeats what its payload says is still honoured on the way in and dropped on the way out, so a document written by hand against the older shape reads, and then settles.
+
 ### Types with no lexeme
 
-Complex and raw escalate unconditionally, since neither has a plain JSON form to fall back to, and each replaces the ordinary payload with a shape of its own.
+Complex and raw escalate unconditionally, since neither has a plain JSON form to fall back to, and each replaces the ordinary payload with a shape of its own, which is why both keep their `~t`.
 
 A complex vector splits into two named parts, one per component. Each part is an ordinary double payload, so the unboxing rule and the `~z` tags apply to it independently, and a value missing only one component still comes back exact.
 

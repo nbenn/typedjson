@@ -66,7 +66,7 @@ test_that("position decides boxing, and nothing else does", {
     expect_identical(json_write_str(list(a = x)), sprintf('{"a":%s}', bare))
     expect_identical(json_write_str(list(x)), sprintf("[[%s]]", bare))
     expect_identical(json_write_str(structure(1L, meta = x)),
-                     sprintf('{"~t":"integer","~a":{"meta":%s},"~v":1}', bare))
+                     sprintf('{"~a":{"meta":%s},"~v":1}', bare))
   }
 })
 

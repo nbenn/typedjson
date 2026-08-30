@@ -5,7 +5,7 @@ test_that("an S3 object needs no special case", {
   expect_identical(json_read_str(json_write_str(obj)), obj)
   expect_identical(
     json_write_str(as.Date("2026-01-01")),
-    '{"~t":"double","~a":{"class":"Date"},"~v":20454.0}'
+    '{"~a":{"class":"Date"},"~v":20454.0}'
   )
 })
 
@@ -28,6 +28,7 @@ test_that("an S4 object extending a basic type keeps its data part", {
   expect_true(isS4(back))
   expect_identical(as.numeric(back), c(1.5, 2.5))
   expect_match(json_write_str(obj), '"~s4":true', fixed = TRUE)
+  expect_no_match(json_write_str(obj), '"~t":"double"', fixed = TRUE)
 })
 
 test_that("an S7 object comes back through its generator", {

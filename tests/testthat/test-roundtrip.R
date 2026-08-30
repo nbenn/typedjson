@@ -31,6 +31,35 @@ test_that("a document this package writes reads and writes back to itself", {
   expect_identical(drifting, character())
 })
 
+test_that("a type tag is emitted only where the payload cannot state it", {
+
+  bare <- character()
+  redundant <- character()
+
+  for (nm in names(corpus)) {
+
+    doc <- json_write_str(corpus[[nm]])
+
+    if (startsWith(doc, '{"~a":')) {
+      bare <- c(bare, nm)
+    }
+
+    if (!startsWith(doc, '{"~t":')) {
+      next
+    }
+
+    dropped <- sub('^\\{"~t":"[A-Za-z]+",?', "{", doc)
+    got <- tryCatch(json_read_str(dropped), error = function(e) NULL)
+
+    if (identical(got, corpus[[nm]])) {
+      redundant <- c(redundant, nm)
+    }
+  }
+
+  expect_identical(redundant, character())
+  expect_gt(length(bare), 0L)
+})
+
 test_that("only the order of attribute keys moves on the way back", {
 
   moved <- character()

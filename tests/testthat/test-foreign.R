@@ -104,9 +104,43 @@ test_that("a broken document says where it broke", {
   expect_error(json_read_str("[1,]"), "invalid JSON")
 })
 
+test_that("a payload that states its own type needs no tag", {
+
+  expect_identical(json_read_str('{"~v":[1,2]}'), 1:2)
+  expect_identical(json_read_str('{"~v":1.0}'), 1)
+  expect_identical(json_read_str('{"~v":{"a":1}}'), list(a = 1L))
+
+  expect_identical(
+    json_read_str('{"~a":{"class":"Date"},"~v":20454.0}'), as.Date("2026-01-01")
+  )
+
+  expect_identical(
+    json_read_str('{"~a":{"names":["a","b"]},"~v":[1.0,2.0]}'), c(a = 1, b = 2)
+  )
+
+  s4 <- json_read_str('{"~s4":true,"~v":[1.5,2.5]}')
+
+  expect_true(isS4(s4))
+  expect_identical(asS4(s4, FALSE), c(1.5, 2.5))
+})
+
+test_that("a tag the payload already carries is honoured and then dropped", {
+
+  doc <- '{"~t":"double","~a":{"class":"Date"},"~v":20454.0}'
+
+  expect_identical(json_read_str(doc), as.Date("2026-01-01"))
+  expect_identical(
+    json_write_str(json_read_str(doc)), '{"~a":{"class":"Date"},"~v":20454.0}'
+  )
+
+  expect_identical(json_read_str('{"~t":"double","~v":[1,2]}'), c(1, 2))
+  expect_identical(json_read_str('{"~t":"list","~v":{"a":1}}'), list(a = 1L))
+})
+
 test_that("a tagged form that makes no sense is refused", {
   expect_error(json_read_str('{"~t":"frobnicate","~v":[1]}'), "not a type")
   expect_error(json_read_str('{"~t":"double"}'), "needs a value")
+  expect_error(json_read_str('{"~a":{"class":"Date"}}'), "needs a value")
   expect_error(
     json_read_str('{"~t":"double","~a":[1],"~v":[1.0]}'), "attributes"
   )

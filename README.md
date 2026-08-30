@@ -46,7 +46,7 @@ Two rules decide the shape. A JSON array of scalars is an atomic vector and a JS
 | `list(name = "config", retries = 3L)` | `{"name":"config","retries":3}` |
 | `list(list(id = "a"), list(id = "b"))` | `[{"id":"a"},{"id":"b"}]` |
 | `list(1, 2)` | `[[1.0],[2.0]]` |
-| `c(a = 1, b = 2)` | `{"~t":"double","~a":{"names":["a","b"]},"~v":[1.0,2.0]}` |
+| `c(a = 1, b = 2)` | `{"~a":{"names":["a","b"]},"~v":[1.0,2.0]}` |
 
 Brackets survive in exactly one position, and there they are load-bearing: around an array element they are the only thing separating `list(1, 2)` from `c(1, 2)`. Everywhere else — the document root, an object value, an attribute value, the payload of a tagged object — a length-one vector is bare, so a record reads the way any other tool would write it.
 
@@ -61,20 +61,22 @@ Typed `NA`, `Inf`, `-Inf` and `NaN` become prefix-tagged strings, and any ordina
 | `"~foo"` | `"~~foo"` |
 | `"Inf"` | `"Inf"` |
 
-Anything carrying attributes escalates to a tagged object naming the type and carrying the attributes recursively. One rule covers `Date`, `POSIXct`, factors, matrices, data frames and classed lists, because in R every one of them is a base type plus attributes. Empty typed vectors escalate for the same reason: `[]` has no element in which to carry a type.
+Anything carrying attributes escalates to a tagged object carrying the attributes recursively. One rule covers `Date`, `POSIXct`, factors, matrices, data frames and classed lists, because in R every one of them is a base type plus attributes. Empty typed vectors escalate for the same reason: `[]` has no element in which to carry a type.
 
 ```r
 json_write_str(as.Date("2026-01-01"))
-#> {"~t":"double","~a":{"class":"Date"},"~v":20454.0}
+#> {"~a":{"class":"Date"},"~v":20454.0}
 
 json_write_str(character())
 #> {"~t":"character","~v":[]}
 
 json_write_str(data.frame(x = 1:2))
-#> {"~t":"list","~a":{"class":"data.frame","row.names":["~zNA_integer_",-2]},"~v":{"x":[1,2]}}
+#> {"~a":{"class":"data.frame","row.names":["~zNA_integer_",-2]},"~v":{"x":[1,2]}}
 ```
 
 Names ride in the payload rather than in the attribute object, which is why a data frame shows its columns keyed by name. The `row.names` above is R's own compact spelling of `1:2`, kept as stored so that a million-row frame does not pay a million row labels.
+
+The type rides in the payload too, wherever the payload can state it — the decimal points in `[1.0,2.0]` are already what make that a double vector — so a `~t` key appears only where reading the payload on its own would escalate it in turn: an empty vector, a complex or raw value, an object with no data part. Its presence is therefore a property of the value's type rather than of the document, and emptying a vector brings it back, since `[]` says nothing about what it held.
 
 ## Object systems
 
@@ -135,7 +137,7 @@ Measured on one machine, over a 522 KB R value of nested lists of character, dou
 
 | | document | write | read | round-trips exactly |
 | --- | --- | --- | --- | --- |
-| `json_write_str()` / `json_read_str()` | 92 KB | 1.9 ms | 1.7 ms | yes |
+| `json_write_str()` / `json_read_str()` | 89 KB | 1.9 ms | 1.7 ms | yes |
 | `toJSON()` / `fromJSON()` | 61 KB | 184 ms | 4.5 ms | no |
 | `serializeJSON()` / `unserializeJSON()` | 186 KB | 721 ms | 260 ms | no |
 
