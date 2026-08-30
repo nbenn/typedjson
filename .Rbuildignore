@@ -5,3 +5,7 @@
 ^\.Rproj\.user$
 ^bench$
 ^\.lintr$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.covrignore$
