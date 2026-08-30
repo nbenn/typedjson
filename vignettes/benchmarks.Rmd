@@ -1,0 +1,222 @@
+---
+title: "Size and speed against jsonlite"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Size and speed against jsonlite}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = requireNamespace("jsonlite", quietly = TRUE)
+)
+```
+
+The pitch for this package is that a document can be faithful and terse at once. That is a claim about three quantities — what comes back, how large the document is, and how long it takes — and only the three together say anything, because any two of them are easy to win by giving up the third. This page measures all three against both pairs that jsonlite offers, on one machine, with the code that produced the numbers in view.
+
+## The payload
+
+Something board-shaped: a couple of hundred records, each a nested list of character, double, integer and logical vectors, some of them named, with a `POSIXct` at the top.
+
+```{r}
+library(typedjson)
+
+payload <- local({
+
+  set.seed(1)
+
+  block <- function(i) {
+    list(
+      id = paste0("block_", i),
+      constructor = "new_filter_block",
+      payload = list(
+        columns = sample(letters, 8L),
+        weights = stats::runif(8L),
+        counts = sample.int(1000L, 8L),
+        keep_na = c(TRUE, FALSE, NA),
+        note = paste0("row ", i, " of the board")
+      ),
+      position = c(x = stats::runif(1L) * 1000, y = stats::runif(1L) * 1000)
+    )
+  }
+
+  list(
+    blocks = lapply(seq_len(200L), block),
+    options = list(
+      name = "bench",
+      created = as.POSIXct("2026-01-01", tz = "UTC")
+    )
+  )
+})
+
+format(utils::object.size(payload), units = "KB")
+```
+
+The `position` field is deliberate. A named atomic vector is the one value this format charges extra for, and two hundred of them put the worst case in the measurement rather than out of it.
+
+Five codecs go into the table. Both jsonlite pairs appear twice, once at their defaults and once at `digits = 17`, which is what an IEEE 754 double needs in the worst case to survive being written as decimal.
+
+```{r}
+codecs <- list(
+  "typedjson" = list(
+    write = json_write_str,
+    read = json_read_str
+  ),
+  "toJSON()" = list(
+    write = jsonlite::toJSON,
+    read = function(doc) jsonlite::fromJSON(doc, simplifyVector = FALSE)
+  ),
+  "toJSON(digits = 17)" = list(
+    write = function(x) jsonlite::toJSON(x, digits = 17),
+    read = function(doc) jsonlite::fromJSON(doc, simplifyVector = FALSE)
+  ),
+  "serializeJSON()" = list(
+    write = jsonlite::serializeJSON,
+    read = jsonlite::unserializeJSON
+  ),
+  "serializeJSON(digits = 17)" = list(
+    write = function(x) jsonlite::serializeJSON(x, digits = 17),
+    read = jsonlite::unserializeJSON
+  )
+)
+
+docs <- lapply(codecs, function(codec) codec$write(payload))
+```
+
+## What comes back
+
+Fidelity is the question that decides whether the other two mean anything, so it goes first. A smaller or faster document that returns a different value is not a cheaper way of doing the same job; it is a different job.
+
+```{r}
+exact <- vapply(
+  names(codecs),
+  function(nme) identical(codecs[[nme]]$read(docs[[nme]]), payload),
+  logical(1L)
+)
+
+exact
+```
+
+Two of the five return the value that went in. What the other three lose is worth seeing on something small enough to read.
+
+```{r}
+x <- list(n = 3L, weight = pi, flags = c(a = TRUE, b = NA), empty = character())
+
+str(jsonlite::fromJSON(jsonlite::toJSON(x), simplifyVector = FALSE))
+```
+
+Three separate losses there, and none of them is about precision: a scalar came back wrapped in a list, the names on `flags` are gone along with the typed `NA`, and `empty` lost the type that made it a character vector rather than a list. No `digits` setting reaches any of them, which is why the `toJSON(digits = 17)` row is still `FALSE` above — raising the precision fixes the numbers and leaves the structure exactly as lossy.
+
+The `serializeJSON()` pair loses one thing instead, and it is precision.
+
+```{r}
+lossy <- jsonlite::unserializeJSON(jsonlite::serializeJSON(x))
+
+print(c(pi, lossy$weight), digits = 17)
+```
+
+That is the documented `digits = 8` default, and it is the whole of the gap: at `digits = 17` the pair round-trips this payload exactly. So the honest field is two codecs wide, and everything below is read against that.
+
+## Size
+
+```{r}
+sizes <- vapply(docs, nchar, integer(1L))
+
+knitr::kable(
+  data.frame(
+    bytes = sizes,
+    relative = round(sizes / sizes[["typedjson"]], 2),
+    exact = exact
+  )
+)
+```
+
+Taken flat, `toJSON()` wins the size column outright, and the row underneath it says what the win costs: the default `digits = 4` rounds every double to four decimal places on the way out. Matching the precision that a round trip would need moves that document most of the way to the typedjson one, and it still does not round-trip.
+
+Against the one other codec here that does, the comparison is not close — the faithful jsonlite pair spends better than twice the bytes. Both of the reasons are visible in a single value.
+
+```{r}
+cat(json_write_str(pi), "\n")
+cat(jsonlite::serializeJSON(pi, digits = 17), "\n")
+```
+
+The engine formats a double to its shortest representation that still reads back exactly, so full precision costs only the digits it actually needs, and there is no per-value envelope naming a type that the lexeme already gave away.
+
+What typedjson does pay for is the named vector, since names are an attribute and an attribute escalates the value into the tagged form.
+
+```{r}
+cat(json_write_str(c(x = 1.5, y = 2.5)), "\n")
+```
+
+Two hundred of those account for the whole of the excess over `toJSON(digits = 17)`. Strip the names off `position` and the ordering reverses, against a document that was not carrying them in the first place.
+
+```{r}
+unnamed <- payload
+unnamed$blocks <- lapply(payload$blocks, function(block) {
+  block$position <- unname(block$position)
+  block
+})
+
+c(
+  typedjson = nchar(json_write_str(unnamed)),
+  `toJSON(digits = 17)` = nchar(jsonlite::toJSON(unnamed, digits = 17))
+)
+```
+
+That is the trade in one line, and it is the right way round: the bytes buy back something the other document dropped.
+
+## Speed
+
+Timing is adaptive rather than a fixed repeat count, because the codecs here are three orders of magnitude apart and no single count suits both ends. Each expression is calibrated once, repeated enough times to fill a budget, and reported as the fastest of a few passes.
+
+```{r}
+time <- function(f, x, budget = 0.2, passes = 3L) {
+
+  gc()
+
+  once <- system.time(f(x))[["elapsed"]]
+  reps <- max(1L, ceiling(budget / max(once, 1e-4)))
+
+  pass <- function() {
+    system.time(for (i in seq_len(reps)) f(x))[["elapsed"]] / reps
+  }
+
+  min(replicate(passes, pass()))
+}
+
+writes <- vapply(
+  codecs,
+  function(codec) time(codec$write, payload),
+  numeric(1L)
+)
+reads <- vapply(
+  names(codecs),
+  function(nme) time(codecs[[nme]]$read, docs[[nme]]),
+  numeric(1L)
+)
+
+knitr::kable(
+  data.frame(
+    write_ms = signif(writes * 1000, 3),
+    read_ms = signif(reads * 1000, 3),
+    exact = exact
+  )
+)
+```
+
+Writing is where the distance is, and the reason is architectural rather than incidental: both jsonlite pairs walk the value in R before anything reaches C, and `serializeJSON()` in particular is a recursive R-level `pack()` over every node. The typedjson writer walks the `SEXP` in C++ and emits as it goes, so there is no intermediate representation to build and no R evaluation per node.
+
+The read column is not quite like for like, and in the direction that flatters the comparison's other side. The `fromJSON()` calls run with `simplifyVector = FALSE`, so they build plain nested lists and skip the type reconstruction the other two are doing — and they still return a different value from the one that went in.
+
+## Reading these numbers
+
+One payload on one machine, so the absolute milliseconds are worth nothing away from here and the ratios are worth something only for values of roughly this shape. A payload of long unnamed numeric vectors would move the size column toward typedjson, and one of mostly short strings would flatten every ratio in the table.
+
+The size figures are reproducible, though, since the payload is seeded. Timings are the fastest of three passes rather than an average, which is the estimator to use when comparing implementations but reads low against what any one call actually costs.
+
+```{r}
+utils::packageVersion("jsonlite")
+```

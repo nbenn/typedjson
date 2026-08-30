@@ -3,5 +3,4 @@
 ^\.github$
 ^.*\.Rproj$
 ^\.Rproj\.user$
-^bench$
 ^\.lintr$
