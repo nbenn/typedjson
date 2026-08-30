@@ -130,6 +130,15 @@ test_that("an unrecognised tag is refused rather than read as data", {
   expect_error(json_read_str('{"~s4":true}'), "not a tag")
   expect_error(json_read_str('{"~zNope":3}'), "not a tag")
 
+  expect_error(json_read_str('{"~zInf":1}'), "cannot name a key")
+  expect_error(json_read_str('{"~zNA":1}'), "cannot name a key")
+  expect_error(json_read_str('{"~zNaN":1}'), "cannot name a key")
+  expect_error(json_read_str('{"~zNA_real_":1}'), "cannot name a key")
+  expect_error(
+    json_read_str('{"~t":"integer","~a":{"~zInf":1},"~v":1}'),
+    "cannot name a key"
+  )
+
   expect_error(json_read_str('{"~t":"integer","~id":3,"~v":1}'), "not a tag")
   expect_error(
     json_read_str('{"~t":"integer","~a":{"~q":1},"~v":1}'), "not a tag"
@@ -157,6 +166,7 @@ test_that("a key that is not a format tag is data", {
     json_read_str('{"~zNA_character_":3}'),
     stats::setNames(list(3L), NA_character_)
   )
+  expect_identical(json_read_str('{"":3}'), stats::setNames(list(3L), ""))
 
   named_na <- stats::setNames(list(1L, 2L), c("a", NA))
   expect_identical(json_write_str(named_na), '{"a":1,"~zNA_character_":2}')

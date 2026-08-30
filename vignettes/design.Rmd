@@ -103,6 +103,12 @@ On read, only the known tags are interpreted. An unrecognised `~`-prefixed strin
 
 The prefix is reserved at key position too, and there the reservation is total rather than tag-by-tag: a key beginning with a single `~` is a format tag, and one this reader does not know is refused rather than rebuilt as data. No document this package writes is affected, since a name of your own carries the doubled prefix.
 
+A name is a string, and JSON keys are strings, so the only name JSON cannot carry is `NA_character_` and `~zNA_character_` is the one string tag a key can hold. The rest of the vocabulary tags a value no name can take, and refusing those at key position is what keeps the escape rule honest there: `{"~zInf":1}` and `{"~~zInf":1}` would otherwise both rebuild the name `"~zInf"`.
+
+```{r, echo = FALSE}
+show_documents(setNames(list(1L), NA), setNames(list(1L), "~zInf"))
+```
+
 ```{r, error = TRUE}
 json_read_str('{"~ref": 3}')
 ```

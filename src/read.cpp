@@ -76,7 +76,7 @@ SEXPTYPE sexptype_of(const char *name) {
 
 bool is_tag(const char *s, size_t len) {
   return len > 0 && s[0] == kEscape && (len < 2 || s[1] != kEscape) &&
-         ztag_of(s, len) == Z_NONE;
+         ztag_of(s, len) != Z_NA_STR;
 }
 
 void check_tags(yyjson_val *v,
@@ -97,8 +97,11 @@ void check_tags(yyjson_val *v,
     }
 
     if (!found) {
-      cpp11::stop("`%s` is not a tag this reader knows",
-                  std::string(s, len).c_str());
+      std::string tag(s, len);
+      if (ztag_of(s, len) != Z_NONE) {
+        cpp11::stop("`%s` tags a value and cannot name a key", tag.c_str());
+      }
+      cpp11::stop("`%s` is not a tag this reader knows", tag.c_str());
     }
   }
 }
