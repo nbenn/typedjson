@@ -21,10 +21,13 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
 LinkingTo: cpp11
 Suggests:
+    knitr,
     R6,
+    rmarkdown,
     S7,
     testthat (>= 3.0.0),
     withr
+VignetteBuilder: knitr
 Config/testthat/edition: 3
 URL: https://github.com/nbenn/typedjson
 BugReports: https://github.com/nbenn/typedjson/issues
