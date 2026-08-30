@@ -2,7 +2,8 @@ test_that("the corpus covers every shape it claims to", {
 
   nms <- names(corpus)
 
-  for (type in c("logical", "integer", "double", "character")) {
+  for (type in c("logical", "integer", "double", "character", "complex",
+                 "raw")) {
     for (len in 0:4) {
       expect_true(
         any(startsWith(nms, sprintf("shape/%s/%d/", type, len))),
@@ -24,7 +25,7 @@ test_that("the corpus covers every shape it claims to", {
     )
   }
 
-  expect_gt(length(corpus), 350L)
+  expect_gt(length(corpus), 400L)
   expect_identical(anyDuplicated(nms), 0L)
 })
 

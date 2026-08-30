@@ -219,7 +219,11 @@ corpus_shapes <- function() {
     logical = c(TRUE, FALSE, NA, TRUE),
     integer = c(1L, -2L, NA_integer_, 2147483647L),
     double = c(1, -2.5, NA_real_, Inf),
-    character = c("a", "~", NA_character_, "")
+    character = c("a", "~", NA_character_, ""),
+    complex = c(
+      1 + 2i, -2.5 - 0i, NA_complex_, complex(real = Inf, imaginary = NaN)
+    ),
+    raw = as.raw(c(1, 127, 255, 0))
   )
 
   name_kinds <- list(
@@ -260,6 +264,9 @@ corpus_lists <- function() {
     empty = integer(),
     string = "a",
     tilde = "~zInf",
+    complex = 1 + 2i,
+    complex_wild = complex(real = NA, imaginary = Inf),
+    raw = as.raw(c(0, 255)),
     null = NULL,
     list = list(1L),
     named_vector = c(a = 1L),
