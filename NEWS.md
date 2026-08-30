@@ -1,5 +1,13 @@
 # typedjson 0.1.0.9000
 
+## Fixes
+
+* An `R6` field holding a closure is refused with its path rather than dropped without a word. The `env_state()` helper told state from behaviour with `is.function()`, which cannot tell a method from a field that happens to hold a callback; the method set now comes from the generator, walked up the `inherit` chain. A class that legitimately owns a callback supplies a `json_state()` method, as `vignette("handles")` describes.
+
+* Writing an `R6` object now resolves its generator rather than only recording where to look for one, so a class that cannot be found again is refused instead of producing a document no reader can revive.
+
+* A revived `R6` object no longer keeps the no-op `initialize` the reviver installs to stop the real one from running, so a class that declares no `initialize` comes back shaped like an instance `$new()` would build.
+
 ## Format
 
 Breaking changes to the document shape, settled before any documents exist in the wild.

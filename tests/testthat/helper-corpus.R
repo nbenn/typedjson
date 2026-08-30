@@ -197,6 +197,79 @@ round_trip_failures <- function(values) {
   failed
 }
 
+corpus_generator <- function(name) {
+  get(name, envir = globalenv())
+}
+
+corpus_r6 <- function() {
+  list(
+    "r6/plain" = corpus_generator("CorpusR6Plain")$new(),
+    "r6/base" = corpus_generator("CorpusR6Base")$new(2),
+    "r6/inherited" = corpus_generator("CorpusR6")$new(3, "t1")
+  )
+}
+
+corpus_refused <- function() {
+  list(
+    "handle/environment" = list(
+      value = new.env(), type = "environment", path = "x"
+    ),
+    "handle/environment-in-list" = list(
+      value = list(a = 1, e = new.env()), type = "environment", path = "x$e"
+    ),
+    "handle/environment-nested" = list(
+      value = list(list(new.env())), type = "environment",
+      path = "x[[1]][[1]]"
+    ),
+    "handle/closure" = list(
+      value = list(f = mean), type = "closure", path = "x$f"
+    ),
+    "handle/language" = list(
+      value = quote(x + 1), type = "language", path = "x"
+    ),
+    "handle/symbol" = list(
+      value = as.symbol("x"), type = "symbol", path = "x"
+    ),
+    "r6/public-closure" = list(
+      value = corpus_generator("CorpusR6PublicHook")$new(),
+      type = "closure", path = "x$public$f"
+    ),
+    "r6/private-closure" = list(
+      value = corpus_generator("CorpusR6PrivateHook")$new(),
+      type = "closure", path = "x$private$fn"
+    )
+  )
+}
+
+refusal_failures <- function(cases) {
+
+  failed <- character()
+
+  for (nm in names(cases)) {
+
+    case <- cases[[nm]]
+
+    got <- tryCatch(
+      {
+        json_write_str(case[["value"]])
+        NA_character_
+      },
+      error = conditionMessage
+    )
+
+    want <- paste0(
+      "cannot write a value of type '", case[["type"]], "' at `",
+      case[["path"]], "`"
+    )
+
+    if (!identical(got, want)) {
+      failed <- c(failed, nm)
+    }
+  }
+
+  failed
+}
+
 local_state_method <- function(class, state, revive = NULL,
                                env = parent.frame()) {
 
