@@ -124,7 +124,7 @@ close(revived$con)
 The offset is a number in a text file, which means it can be edited. Winding this reader back to the start of the file is a matter of changing one number, and there is nothing else that has to be kept in step with it.
 
 ```{r}
-rewound <- json_read_str(sub('"offset":\\[[0-9.]+\\]', '"offset":[0.0]', doc))
+rewound <- json_read_str(sub('"offset":[0-9.]+', '"offset":0.0', doc))
 read_next(rewound)
 ```
 
