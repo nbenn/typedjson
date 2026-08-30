@@ -30,5 +30,5 @@ Suggests:
     withr
 VignetteBuilder: knitr
 Config/testthat/edition: 3
-URL: https://nbenn.github.io/typedjson/, https://github.com/nbenn/typedjson
+URL: https://nbenn.github.io/typedjson/
 BugReports: https://github.com/nbenn/typedjson/issues
