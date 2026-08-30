@@ -21,6 +21,7 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
 LinkingTo: cpp11
 Suggests:
+    jsonlite,
     knitr,
     R6,
     rmarkdown,

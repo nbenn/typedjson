@@ -129,7 +129,7 @@ Worked through end to end in `vignette("handles", package = "typedjson")`: a chu
 
 ## Speed and size
 
-Measured by `bench/benchmark.R` on one machine, over a 522 KB R value of nested lists of character, double, integer and logical vectors:
+Measured on one machine, over a 522 KB R value of nested lists of character, double, integer and logical vectors:
 
 | | document | write | read | round-trips exactly |
 | --- | --- | --- | --- | --- |
@@ -139,9 +139,13 @@ Measured by `bench/benchmark.R` on one machine, over a 522 KB R value of nested 
 
 Writing is roughly 97 times faster than `toJSON()` and 380 times faster than `serializeJSON()`, because both of those walk the value in R before anything reaches C. The read column is not like for like: `fromJSON()` was called with `simplifyVector = FALSE`, so it builds plain lists and does less work than the other two, and it still returns a different value from the one that went in.
 
+Two entries in the size column need a footnote. The `toJSON()` document is the smallest here only because its default `digits = 4` rounds every double on the way out — at the `digits = 17` a double needs to survive the trip it is 85 KB — and no `digits` setting makes that pair round-trip, since its losses are structural rather than numeric. The `serializeJSON()` pair does round-trip at `digits = 17`, and spends 203 KB to do it.
+
 Size depends on what the payload is made of, and this one is not typical. It is synthetic, and deliberately rich in named atomic vectors, which are the one value that pays for the format's shape. On a board actually produced by `blockr.core::blockr_ser()` — no named atomic vectors, 55 scalars that used to be wrapped — the document is 2174 bytes rather than 2284, or 4.8% smaller.
 
 The engine is [yyjson](https://github.com/ibireme/yyjson) 0.12.0, vendored, with the glue written against cpp11. Two properties of that library carry the format: it formats doubles to their shortest round-trip representation, so the integer-versus-double lexeme costs nothing, and it reports `UINT` / `SINT` / `REAL` subtypes on parse, so reading costs nothing either.
+
+Worked through with the code that produced every number, and the round trips behind the last column, in `vignette("benchmarks", package = "typedjson")`.
 
 ## Design notes
 
