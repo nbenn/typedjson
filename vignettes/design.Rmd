@@ -535,7 +535,7 @@ doc
 json_read_str(doc)$f(4)
 ```
 
-The default methods implement everything above, and dispatch works for all three class-vector-carrying object systems. On the way back, dispatch happens on the recorded class name via an empty object of that class, which is why the method signature starts with the class rather than the object being rebuilt.
+The default methods implement everything above, and dispatch works for all three class-vector-carrying object systems. A method is looked for on every class the value dispatches on, so an S4 object and a reference class instance are matched against their inheritance chain rather than the concrete class alone. On the way back, dispatch happens on the recorded class vector via an empty object carrying it, which is why the method signature starts with the class rather than the object being rebuilt, and which is what reaches a superclass method from the read side too.
 
 Whatever a method returns is written under the ordinary rules, so a method cannot smuggle a handle out by wrapping it in a list. A longer worked example, on a class that owns an open connection, is in `vignette("handles", package = "typedjson")`.
 

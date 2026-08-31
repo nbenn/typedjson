@@ -575,6 +575,68 @@ test_that("a class supplies its own state through the extension protocol", {
   expect_identical(class(back), "corpus_handle")
 })
 
+test_that("a method on an S4 superclass is reached as dispatch reaches it", {
+
+  local_state_method(
+    "CorpusS4Base",
+    function(x) list(a = methods::slot(x, "a")),
+    function(class, state) methods::new("CorpusS4Base", a = state[["a"]])
+  )
+
+  obj <- methods::new("CorpusS4Derived", a = 1.5, b = "x")
+  doc <- json_write_str(obj)
+
+  expect_identical(
+    doc,
+    '{"~x":{"class":["CorpusS4Derived","CorpusS4Base"],"state":{"a":1.5}}}'
+  )
+  expect_identical(json_read_str(doc), methods::new("CorpusS4Base", a = 1.5))
+})
+
+test_that("a reference class instance is reached through its chain", {
+
+  local_state_method(
+    "envRefClass",
+    function(x) list(a = x$a),
+    function(class, state) CorpusRefClass$new(a = state[["a"]])
+  )
+
+  doc <- json_write_str(CorpusRefClass$new(a = 3))
+
+  expect_match(
+    doc, '"class":["CorpusRefClass","envRefClass",', fixed = TRUE
+  )
+  expect_identical(json_read_str(doc)$a, 3)
+})
+
+test_that("a basic type an S4 class extends is a rung the gate walks", {
+
+  local_state_method(
+    "numeric", function(x) list(unit = methods::slot(x, "unit"))
+  )
+
+  doc <- json_write_str(methods::new("CorpusS4Numeric", 1.5, unit = "m"))
+
+  expect_identical(
+    doc,
+    paste0(
+      '{"~x":{"class":["CorpusS4Numeric","numeric","vector"],',
+      '"state":{"unit":"m"}}}'
+    )
+  )
+})
+
+test_that("an implicit base type rung is not one the gate walks", {
+
+  local_state_method("numeric", function(x) list(reached = TRUE))
+  local_state_method("integer", function(x) list(reached = TRUE))
+
+  obj <- structure(1L, class = "corpus_untouched")
+
+  expect_identical(json_read_str(json_write_str(obj)), obj)
+  expect_identical(json_write_str(1L), "1")
+})
+
 test_that("a class without a method takes the ordinary path", {
 
   obj <- structure(list(a = 1), class = "corpus_unregistered")

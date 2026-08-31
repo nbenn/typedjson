@@ -33,10 +33,12 @@ of Python's pickle.
 \details{
 A \code{json_state()} method returns a plain list of what to persist, and is
 free to leave out anything that can be recomputed. The document records
-that list next to the class vector of the object. On the way back,
-\code{json_revive()} dispatches on the recorded class through an empty object
-carrying it, so a method signature always starts with the class token
-rather than the object being rebuilt.
+that list next to the classes the object dispatches on, which for an S4
+object or a reference class instance is its inheritance chain rather than
+the concrete class alone. On the way back, \code{json_revive()} dispatches on
+the recorded classes through an empty object carrying them, so a method
+signature always starts with the class token rather than the object being
+rebuilt, and a method registered on a superclass is reached both ways.
 
 Methods for the class generators of both \code{R6} and S7 ship with the
 package and follow the same protocol. An \code{R6} instance has no method,
