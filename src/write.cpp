@@ -3,7 +3,6 @@
 #include <string>
 #include <utility>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "typedjson.h"
@@ -65,13 +64,20 @@ class Writer {
         kind_(cpp11::function(hooks["kind"])),
         state_(cpp11::function(hooks["state"])),
         env_(cpp11::function(hooks["env"])),
-        fun_(cpp11::function(hooks["fun"])) {}
+        fun_(cpp11::function(hooks["fun"])),
+        ids_(0) {}
 
   yyjson_mut_val *emit(SEXP x, bool boxed = false);
 
-  const std::vector<std::string> &shared() const { return shared_; }
-
  private:
+  struct Ref {
+    yyjson_mut_val *val;
+    std::string at;
+    int id;
+    bool open;
+    bool atomic;
+  };
+
   yyjson_mut_val *emit_state(SEXP x);
   yyjson_mut_val *emit_env(SEXP x, const std::vector<Attrib> &attrs);
   yyjson_mut_val *emit_env_named(SEXP named);
@@ -80,6 +86,8 @@ class Writer {
   yyjson_mut_val *emit_plain(SEXP x, SEXP nms, bool boxed);
   yyjson_mut_val *emit_tagged(SEXP x, const std::vector<Attrib> &attrs,
                               SEXP nms);
+  void fill_tagged(yyjson_mut_val *obj, SEXP x,
+                   const std::vector<Attrib> &attrs, SEXP nms);
   yyjson_mut_val *emit_attribs(const std::vector<Attrib> &attrs, SEXP nms);
   yyjson_mut_val *emit_payload(SEXP x, SEXP nms);
   yyjson_mut_val *emit_scalar(SEXP x, R_xlen_t i);
@@ -98,8 +106,10 @@ class Writer {
   SEXP usable_names(SEXP x, const std::vector<Attrib> &attrs);
   bool escalate(SEXP x, const std::vector<Attrib> &attrs, SEXP nms);
 
-  void enter_reference(SEXP x, const std::string &at);
-  void leave_reference();
+  yyjson_mut_val *back_reference(SEXP x);
+  void enter_reference(SEXP x, yyjson_mut_val *val, const std::string &at,
+                       bool atomic);
+  void leave_reference(SEXP x);
 
   std::string path() const;
   [[noreturn]] void fail(const std::string &msg) const;
@@ -111,9 +121,8 @@ class Writer {
   cpp11::function fun_;
   std::unordered_map<std::string, bool> memo_;
   std::vector<Crumb> crumbs_;
-  std::vector<std::pair<SEXP, std::string> > refs_;
-  std::unordered_set<SEXP> seen_;
-  std::vector<std::string> shared_;
+  std::unordered_map<SEXP, Ref> refs_;
+  int ids_;
 
   friend struct Step;
 };
@@ -266,6 +275,11 @@ yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
   if (x == R_NilValue) return yyjson_mut_null(doc_);
   if (TYPEOF(x) == SYMSXP) return symbol_val(x);
 
+  if (TYPEOF(x) == ENVSXP) {
+    yyjson_mut_val *back = back_reference(x);
+    if (back != nullptr) return back;
+  }
+
   std::vector<Attrib> attrs;
   attributes_of(x, &attrs);
   if (carries_srcref(x)) drop_srcref(&attrs);
@@ -319,41 +333,69 @@ yyjson_mut_val *Writer::emit_state(SEXP x) {
 
   const char *key = CHAR(STRING_ELT(VECTOR_ELT(state, 0), 0));
 
-  bool reference = (TYPEOF(x) == ENVSXP) && !records_by_name(key);
-  if (reference) enter_reference(x, at);
-
   yyjson_mut_val *out = yyjson_mut_obj(doc_);
+  bool reference = (TYPEOF(x) == ENVSXP) && !records_by_name(key);
+
+  if (reference) enter_reference(x, out, at, true);
+
   yyjson_mut_obj_add(out, yyjson_mut_strncpy(doc_, key, std::strlen(key)),
                      emit(VECTOR_ELT(state, 1), false));
 
-  if (reference) leave_reference();
+  if (reference) leave_reference(x);
   return out;
 }
 
-void Writer::enter_reference(SEXP x, const std::string &at) {
+// The first write of a reference carries no marker, so the id is minted where
+// the second write needs one and inserted into the object the first one left
+// behind: a document with nothing shared reads the same as it always did.
+yyjson_mut_val *Writer::back_reference(SEXP x) {
 
-  for (size_t i = 0; i < refs_.size(); ++i) {
-    if (refs_[i].first == x) {
-      std::string msg = "cannot write a reference cycle: the object at `" +
-                        refs_[i].second + "` contains itself at `" + at + "`";
-      cpp11::stop("%s", msg.c_str());
-    }
+  std::unordered_map<SEXP, Ref>::iterator hit = refs_.find(x);
+
+  if (hit == refs_.end()) return nullptr;
+
+  Ref &ref = hit->second;
+
+  if (ref.open && ref.atomic) {
+    std::string msg = "cannot write a reference cycle: the object at `" +
+                      ref.at + "` contains itself at `" + path() + "`";
+    cpp11::stop("%s", msg.c_str());
   }
 
-  if (!seen_.insert(x).second) shared_.push_back(at);
-  refs_.push_back(std::make_pair(x, at));
+  if (ref.id == 0) {
+    ref.id = ++ids_;
+    yyjson_mut_obj_insert(ref.val, yyjson_mut_str(doc_, kTagId),
+                          yyjson_mut_uint(doc_, (uint64_t)ref.id), 0);
+  }
+
+  yyjson_mut_val *out = yyjson_mut_obj(doc_);
+  yyjson_mut_obj_add(out, yyjson_mut_str(doc_, kTagRef),
+                     yyjson_mut_uint(doc_, (uint64_t)ref.id));
+
+  return out;
 }
 
-void Writer::leave_reference() { refs_.pop_back(); }
+// A state the extension protocol builds in one call cannot be handed to its
+// own constructor half-built, so a back edge onto one is still refused where
+// a back edge onto an environment the reader fills in place is not.
+void Writer::enter_reference(SEXP x, yyjson_mut_val *val,
+                             const std::string &at, bool atomic) {
+  Ref ref = {val, at, 0, true, atomic};
+  refs_[x] = ref;
+}
+
+void Writer::leave_reference(SEXP x) { refs_[x].open = false; }
 
 yyjson_mut_val *Writer::emit_env(SEXP x, const std::vector<Attrib> &attrs) {
 
   cpp11::sexp named = env_(x);
   if (named != R_NilValue) return emit_env_named(named);
 
-  enter_reference(x, path());
-  yyjson_mut_val *out = emit_tagged(x, attrs, R_NilValue);
-  leave_reference();
+  yyjson_mut_val *out = yyjson_mut_obj(doc_);
+
+  enter_reference(x, out, path(), false);
+  fill_tagged(out, x, attrs, R_NilValue);
+  leave_reference(x);
 
   return out;
 }
@@ -601,6 +643,13 @@ yyjson_mut_val *Writer::emit_attribs(const std::vector<Attrib> &attrs,
 yyjson_mut_val *Writer::emit_tagged(SEXP x, const std::vector<Attrib> &attrs,
                                     SEXP nms) {
   yyjson_mut_val *obj = yyjson_mut_obj(doc_);
+  fill_tagged(obj, x, attrs, nms);
+
+  return obj;
+}
+
+void Writer::fill_tagged(yyjson_mut_val *obj, SEXP x,
+                         const std::vector<Attrib> &attrs, SEXP nms) {
   bool s4 = Rf_isS4(x);
 
   if (needs_type(x)) {
@@ -623,19 +672,6 @@ yyjson_mut_val *Writer::emit_tagged(SEXP x, const std::vector<Attrib> &attrs,
     yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kTagValue),
                        emit_payload(x, nms));
   }
-  return obj;
-}
-
-std::string shared_message(const std::vector<std::string> &paths) {
-  std::string msg =
-      "reference objects appear more than once and will be restored as "
-      "separate objects:";
-  size_t shown = paths.size() < 5 ? paths.size() : 5;
-  for (size_t i = 0; i < shown; ++i) msg += "\n  `" + paths[i] + "`";
-  if (paths.size() > shown) {
-    msg += "\n  ... and " + std::to_string(paths.size() - shown) + " more";
-  }
-  return msg;
 }
 
 void finalize_mut_doc(SEXP xp) {
@@ -659,7 +695,6 @@ void finalize_mut_doc(SEXP xp) {
   SEXP owner = PROTECT(guard(doc, finalize_mut_doc));
 
   std::string json;
-  std::vector<std::string> shared;
   {
     Writer writer(doc, hooks);
     yyjson_mut_doc_set_root(doc, writer.emit(x));
@@ -672,16 +707,11 @@ void finalize_mut_doc(SEXP xp) {
     if (text.ptr == nullptr) cpp11::stop("failed to write JSON: %s", err.msg);
 
     json.assign(text.ptr, len);
-    shared = writer.shared();
   }
 
   R_ClearExternalPtr(owner);
   yyjson_mut_doc_free(doc);
   UNPROTECT(1);
 
-  if (!shared.empty()) {
-    std::string msg = shared_message(shared);
-    cpp11::warning("%s", msg.c_str());
-  }
   return cpp11::as_sexp(json);
 }

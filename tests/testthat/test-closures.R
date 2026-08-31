@@ -118,12 +118,14 @@ test_that("a byte-compiled closure is written from its source tree", {
   expect_identical(back(1), 2)
 })
 
-test_that("a closure that captures itself is a cycle rather than a value", {
+test_that("a closure that captures itself comes back capturing itself", {
 
   self <- corpus_closure("function() { f <- function() f; f }")()
 
-  expect_error(json_write_str(self), "cannot write a reference cycle")
-  expect_error(json_write_str(self), "contains itself", fixed = TRUE)
+  back <- json_read_str(json_write_str(self))
+
+  expect_identical(back, get("f", envir = environment(back)))
+  expect_identical(environment(back), environment(back()))
 })
 
 test_that("an argument in a captured frame is a promise, forced or not", {
@@ -178,7 +180,7 @@ test_that("a recorded closure the reader cannot use is an error", {
     json_read_str(parts('"formals":[1,2]', '"body":"~:x"', env)),
     "have to be an object"
   )
-  expect_error(json_read_str(parts('"body":"~:x"', '"~ref":1')), "not a tag")
+  expect_error(json_read_str(parts('"body":"~:x"', '"~q":1')), "not a tag")
 
   bare <- json_read_str(parts('"formals":{"x":"~:"}', '"body":"~:x"', env))
 

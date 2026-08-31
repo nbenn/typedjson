@@ -156,10 +156,10 @@ test_that("a tagged form that makes no sense is refused", {
 
 test_that("an unrecognised tag is refused rather than read as data", {
 
-  expect_error(json_read_str('{"~ref":3}'), "not a tag")
+  expect_error(json_read_str('{"~q":3}'), "not a tag")
   expect_error(json_read_str('{"~":3}'), "not a tag")
-  expect_error(json_read_str('{"a":1,"~ref":3}'), "not a tag")
-  expect_error(json_read_str('{"a":{"~ref":3}}'), "not a tag")
+  expect_error(json_read_str('{"a":1,"~q":3}'), "not a tag")
+  expect_error(json_read_str('{"a":{"~q":3}}'), "not a tag")
   expect_error(json_read_str('{"~s4":true}'), "not a tag")
   expect_error(json_read_str('{"~zNope":3}'), "not a tag")
 
@@ -172,7 +172,7 @@ test_that("an unrecognised tag is refused rather than read as data", {
     "cannot name a key"
   )
 
-  expect_error(json_read_str('{"~t":"integer","~id":3,"~v":1}'), "not a tag")
+  expect_error(json_read_str('{"~t":"integer","~q":3,"~v":1}'), "not a tag")
   expect_error(
     json_read_str('{"~t":"integer","~a":{"~q":1},"~v":1}'), "not a tag"
   )
@@ -182,7 +182,7 @@ test_that("an unrecognised tag is refused rather than read as data", {
   )
   expect_error(json_read_str('{"~r6":{},"~s7":{}}'), "not a tag")
   expect_error(
-    json_read_str('{"~x":{"class":"nope","state":1},"~id":3}'), "not a tag"
+    json_read_str('{"~x":{"class":"nope","state":1},"~q":3}'), "not a tag"
   )
 })
 

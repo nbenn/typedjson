@@ -67,6 +67,19 @@
 #' replaced by the global environment with a warning, the way base R
 #' already does.
 #'
+#' Reference identity is recorded across a document. A reference the walk
+#' reaches more than once is numbered with a `~id` where it is first
+#' written, and each later position carries a `~ref` naming that number
+#' rather than a second copy, so positions holding one environment on the
+#' way in hold one environment on the way back. Nothing is numbered where
+#' nothing repeats, which leaves a document carrying no sharing as it
+#' was. A cycle rides the same numbering, since an environment is built
+#' and numbered before what it binds is read: an environment whose parent
+#' frame binds it back comes back bound that way. What stays refused,
+#' naming both ends of it, is a cycle closing through an object the
+#' extension protocol builds in one call, an `R6` instance among them,
+#' since a constructor cannot be handed an object that already exists.
+#'
 #' A language object is a value rather than a handle, so it round-trips
 #' exactly and nothing about it is deparsed. A call, an expression and a
 #' pairlist are written as their elements under a `~t` naming the type,

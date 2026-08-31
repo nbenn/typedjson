@@ -240,6 +240,42 @@ corpus_env_contents <- function() {
   )
 }
 
+corpus_shared <- function() {
+
+  values <- corpus_env(n = 1L, s = "a")
+  nested <- corpus_env(inner = values, parent = globalenv())
+
+  self <- corpus_env()
+  self$self <- self
+
+  child <- new.env(parent = corpus_env(parent = globalenv()))
+  assign("child", child, envir = parent.env(child))
+
+  ring <- corpus_env()
+  ring$next_ <- corpus_env(parent = ring)
+
+  list(
+    "shared/two-positions" = list(a = values, b = values),
+    "shared/many-positions" = list(
+      a = values, b = values, c = values, d = values, e = values
+    ),
+    "shared/nested" = list(a = values, b = nested),
+    "shared/attribute" = structure(list(a = values), meta = values),
+    "shared/binding" = corpus_env(x = values, y = values),
+    "shared/parent" = corpus_env(inner = values, parent = values),
+    "shared/deep" = list(a = list(list(b = values)), c = nested),
+    "cycle/self" = self,
+    "cycle/parent" = child,
+    "cycle/ring" = ring,
+    "cycle/closure" = corpus_closure(
+      "function() { f <- function() f; f }"
+    )(),
+    "shared/closure-pair" = corpus_closure(
+      "function() {i <- 0; list(get = function() i, set = function(v) i <<- v)}"
+    )()
+  )
+}
+
 corpus_env_active <- function() {
 
   env <- corpus_env(n = 1L)

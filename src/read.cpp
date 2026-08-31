@@ -3,6 +3,7 @@
 #include <cstring>
 #include <initializer_list>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "typedjson.h"
@@ -146,6 +147,7 @@ class Reader {
   explicit Reader(cpp11::list hooks)
       : revive_(cpp11::function(hooks["revive"])),
         env_(cpp11::function(hooks["env"])),
+        shell_(cpp11::function(hooks["shell"])),
         fun_(cpp11::function(hooks["fun"])) {}
 
   SEXP build(yyjson_val *v);
@@ -157,7 +159,10 @@ class Reader {
   SEXP build_obj(yyjson_val *v);
   SEXP build_tagged(yyjson_val *v);
   SEXP build_hooked(yyjson_val *v, const char *tag);
-  SEXP build_env(yyjson_val *v);
+  SEXP build_attribs(yyjson_val *v);
+  void set_attribs(SEXP x, SEXP attrs);
+  SEXP build_env(yyjson_val *v, SEXP shell);
+  SEXP build_ref(yyjson_val *v);
   SEXP build_fun(yyjson_val *v, const char *type);
   SEXP build_complex(yyjson_val *v);
   SEXP build_raw(yyjson_val *v);
@@ -174,11 +179,59 @@ class Reader {
 
   void note_lossy(const std::string &lexeme);
 
+  int64_t marked(yyjson_val *v, const char *tag);
+  void bind(int64_t id, SEXP value);
+  void rebind(int64_t id, SEXP value);
+  SEXP resolve(int64_t id);
+
   cpp11::function revive_;
   cpp11::function env_;
+  cpp11::function shell_;
   cpp11::function fun_;
   std::vector<std::string> lossy_;
+  std::vector<std::pair<int64_t, cpp11::sexp> > refs_;
 };
+
+int64_t Reader::marked(yyjson_val *v, const char *tag) {
+
+  yyjson_val *at = yyjson_obj_get(v, tag);
+
+  if (at == nullptr) return 0;
+
+  if (yyjson_is_uint(at)) {
+    uint64_t id = yyjson_get_uint(at);
+    if (id >= 1 && id <= (uint64_t)INT_MAX) return (int64_t)id;
+  }
+
+  cpp11::stop("`%s` needs to be a positive whole number", tag);
+}
+
+void Reader::bind(int64_t id, SEXP value) {
+
+  for (size_t i = 0; i < refs_.size(); ++i) {
+    if (refs_[i].first == id) {
+      cpp11::stop("`%s` %d numbers more than one value", kTagId, (int)id);
+    }
+  }
+
+  refs_.push_back(std::make_pair(id, cpp11::sexp(value)));
+}
+
+void Reader::rebind(int64_t id, SEXP value) {
+  for (size_t i = 0; i < refs_.size(); ++i) {
+    if (refs_[i].first == id) refs_[i].second = cpp11::sexp(value);
+  }
+}
+
+SEXP Reader::resolve(int64_t id) {
+
+  for (size_t i = 0; i < refs_.size(); ++i) {
+    if (refs_[i].first == id) return refs_[i].second;
+  }
+
+  cpp11::stop("`%s` %d names no value the document numbers", kTagRef,
+              (int)id);
+}
 
 void Reader::note_lossy(const std::string &lexeme) {
   if (lossy_.size() < 5) lossy_.push_back(lexeme);
@@ -317,6 +370,7 @@ SEXP Reader::build_arr(yyjson_val *v) {
 }
 
 SEXP Reader::build_obj(yyjson_val *v) {
+  if (yyjson_obj_get(v, kTagRef) != nullptr) return build_ref(v);
   if (is_tagged(v)) return build_tagged(v);
   if (yyjson_obj_get(v, kTagR6) != nullptr) return build_hooked(v, kTagR6);
   if (yyjson_obj_get(v, kTagR6Class) != nullptr) {
@@ -473,7 +527,7 @@ SEXP Reader::coerce(SEXP x, SEXPTYPE type) {
 }
 
 SEXP Reader::build_tagged(yyjson_val *v) {
-  check_tags(v, {kTagType, kTagAttr, kTagValue, kTagS4});
+  check_tags(v, {kTagType, kTagAttr, kTagValue, kTagS4, kTagId});
 
   yyjson_val *type_val = yyjson_obj_get(v, kTagType);
   yyjson_val *payload = yyjson_obj_get(v, kTagValue);
@@ -492,6 +546,19 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   bool wants_s4 = ((s4 != nullptr) && yyjson_get_bool(s4)) ||
                   (type_name != nullptr && std::strcmp(type_name, "S4") == 0);
 
+  // An environment is numbered before anything it holds is read, since what
+  // it holds is where a reference back to it comes from, and its attributes
+  // are read before its contents because that is the order they were written
+  // in and a reference points backwards.
+  int64_t id = marked(v, kTagId);
+  bool shelled = (type == ENVSXP && id != 0);
+  cpp11::sexp shell(shelled ? (SEXP)shell_() : R_NilValue);
+
+  if (shelled) bind(id, shell);
+
+  SEXP attrs = PROTECT(
+      attribs == nullptr ? R_NilValue : build_attribs(attribs));
+
   SEXP out;
   if (type == OBJSXP) {
     out = Rf_allocS4Object();
@@ -499,6 +566,7 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   } else if (type == NILSXP) {
     out = R_NilValue;
   } else if (payload == nullptr) {
+    UNPROTECT(1);
     cpp11::stop("a tagged object needs a value under `%s`", kTagValue);
   } else if (type == CPLXSXP) {
     out = build_complex(payload);
@@ -507,7 +575,7 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   } else if (type == LANGSXP || type == LISTSXP) {
     out = build_nodes(payload, type);
   } else if (type == ENVSXP) {
-    out = build_env(payload);
+    out = build_env(payload, shell);
   } else if (type == CLOSXP || type == BUILTINSXP || type == SPECIALSXP) {
     out = build_fun(payload, type_name);
   } else {
@@ -517,55 +585,90 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   }
   PROTECT(out);
 
-  if (out == R_NilValue && attribs != nullptr) {
-    UNPROTECT(1);
+  if (out == R_NilValue && attrs != R_NilValue) {
+    UNPROTECT(2);
     cpp11::stop("a NULL value cannot carry attributes");
   }
 
   // R hands out the one object its primitive table holds, so an attribute
   // set on it here would be set on every other reference to it.
-  if (attribs != nullptr &&
+  if (attrs != R_NilValue &&
       (TYPEOF(out) == BUILTINSXP || TYPEOF(out) == SPECIALSXP)) {
-    UNPROTECT(1);
+    UNPROTECT(2);
     cpp11::stop("a primitive cannot carry attributes");
   }
 
-  if (attribs != nullptr) {
-    if (!yyjson_is_obj(attribs)) {
-      UNPROTECT(1);
-      cpp11::stop("`%s` needs to hold an object of attributes", kTagAttr);
-    }
-    check_tags(attribs);
+  set_attribs(out, attrs);
 
-    for (int rank = 0; rank <= 4; ++rank) {
-      size_t idx, max;
-      yyjson_val *key, *val;
-      yyjson_obj_foreach(attribs, idx, max, key, val) {
-        SEXP name = PROTECT(as_chr(key));
-        if (name == NA_STRING) {
-          UNPROTECT(2);
-          cpp11::stop("an attribute name cannot be missing");
-        }
-        SEXP sym = Rf_installChar(name);
-        UNPROTECT(1);
-        if (attrib_rank(sym) != rank) continue;
-
-        SEXP value = PROTECT(build(val));
-        Rf_setAttrib(out, sym, value);
-        UNPROTECT(1);
-      }
+  if (id != 0) {
+    if (!shelled) {
+      bind(id, out);
+    } else if (out != (SEXP)shell) {
+      rebind(id, out);
     }
   }
 
+  UNPROTECT(2);
+  return out;
+}
+
+SEXP Reader::build_attribs(yyjson_val *v) {
+
+  if (!yyjson_is_obj(v)) {
+    cpp11::stop("`%s` needs to hold an object of attributes", kTagAttr);
+  }
+  check_tags(v);
+
+  size_t n = yyjson_obj_size(v);
+  size_t idx, max;
+  yyjson_val *key, *val;
+
+  SEXP out = PROTECT(Rf_allocVector(VECSXP, (R_xlen_t)n));
+  SEXP nms = PROTECT(Rf_allocVector(STRSXP, (R_xlen_t)n));
+
+  yyjson_obj_foreach(v, idx, max, key, val) {
+    SEXP name = PROTECT(as_chr(key));
+    if (name == NA_STRING) {
+      UNPROTECT(3);
+      cpp11::stop("an attribute name cannot be missing");
+    }
+    SET_STRING_ELT(nms, (R_xlen_t)idx, name);
+    UNPROTECT(1);
+    SET_VECTOR_ELT(out, (R_xlen_t)idx, build(val));
+  }
+
+  Rf_setAttrib(out, R_NamesSymbol, nms);
+  UNPROTECT(2);
+
+  return out;
+}
+
+void Reader::set_attribs(SEXP x, SEXP attrs) {
+
+  if (attrs == R_NilValue) return;
+
+  SEXP nms = Rf_getAttrib(attrs, R_NamesSymbol);
+
+  for (int rank = 0; rank <= 4; ++rank) {
+    for (R_xlen_t i = 0; i < XLENGTH(attrs); ++i) {
+      SEXP sym = Rf_installChar(STRING_ELT(nms, i));
+      if (attrib_rank(sym) == rank) {
+        Rf_setAttrib(x, sym, VECTOR_ELT(attrs, i));
+      }
+    }
+  }
+}
+
+SEXP Reader::build_env(yyjson_val *v, SEXP shell) {
+  SEXP state = PROTECT(build(v));
+  cpp11::sexp out = env_(state, shell);
   UNPROTECT(1);
   return out;
 }
 
-SEXP Reader::build_env(yyjson_val *v) {
-  SEXP state = PROTECT(build(v));
-  cpp11::sexp out = env_(state);
-  UNPROTECT(1);
-  return out;
+SEXP Reader::build_ref(yyjson_val *v) {
+  check_tags(v, {kTagRef});
+  return resolve(marked(v, kTagRef));
 }
 
 SEXP Reader::build_fun(yyjson_val *v, const char *type) {
@@ -576,11 +679,16 @@ SEXP Reader::build_fun(yyjson_val *v, const char *type) {
 }
 
 SEXP Reader::build_hooked(yyjson_val *v, const char *tag) {
-  check_tags(v, {tag});
+  check_tags(v, {tag, kTagId});
+
+  int64_t id = marked(v, kTagId);
 
   SEXP state = PROTECT(build(yyjson_obj_get(v, tag)));
   cpp11::sexp out = revive_(cpp11::as_sexp(std::string(tag)), state);
   UNPROTECT(1);
+
+  if (id != 0) bind(id, out);
+
   return out;
 }
 
