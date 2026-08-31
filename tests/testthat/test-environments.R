@@ -13,11 +13,24 @@ test_that("an environment on a named rung comes back as the same object", {
   )
   expect_identical(
     json_write_str(asNamespace("stats")),
-    sprintf(
-      '{"~t":"environment","~v":{"name":"stats","version":"%s"}}',
-      getNamespaceVersion("stats")
-    )
+    '{"~t":"environment","~v":{"name":"namespace:stats"}}'
   )
+  expect_false(
+    identical(json_write_str(baseenv()), json_write_str(asNamespace("base")))
+  )
+})
+
+test_that("a recorded environment does not date the document", {
+
+  doc <- '{"~t":"environment","~v":{"name":"namespace:stats"}}'
+
+  expect_identical(json_write_str(json_read_str(doc)), doc)
+
+  for (env in list(asNamespace("stats"), asNamespace("base"), baseenv())) {
+    expect_no_match(
+      json_write_str(env), as.character(getRversion()), fixed = TRUE
+    )
+  }
 })
 
 test_that("a rung is a rung only where its name resolves back to it", {
@@ -254,7 +267,7 @@ test_that("an environment recorded by name is replaced loudly when absent", {
 
   expect_warning(
     back <- json_read_str(
-      '{"~t":"environment","~v":{"name":"corpusnosuchpkg","version":"1.0"}}'
+      '{"~t":"environment","~v":{"name":"namespace:corpusnosuchpkg"}}'
     ),
     "replaced by the global environment"
   )
@@ -272,8 +285,8 @@ test_that("a recorded environment the reader cannot use is an error", {
     json_read_str('{"~t":"environment","~v":{"name":""}}'), "needs a name"
   )
   expect_error(
-    json_read_str('{"~t":"environment","~v":{"name":"stats","version":[1,2]}}'),
-    "one version string"
+    json_read_str('{"~t":"environment","~v":{"name":["a","b"]}}'),
+    "needs a name"
   )
   expect_error(
     json_read_str('{"~t":"environment","~v":{}}'), "needs a `parent`"

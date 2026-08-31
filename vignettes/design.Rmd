@@ -261,7 +261,7 @@ json_write_str(list(a = 1, e = mean))
 
 ### Environments
 
-An environment is written on a ladder, and only the bottom rung writes contents. The rungs are the ones base R's `serialize()` already recognises — the global, base and empty environments, a namespace by name and version, and a package environment by name — plus the imports environment of a namespace, which constructive names and base R does not.
+An environment is written on a ladder, and only the bottom rung writes contents. The rungs are the ones base R's `serialize()` already recognises — the global, base and empty environments, a namespace, and a package environment — plus the imports environment of a namespace, which constructive names and base R does not. Each is written as the name that finds it again, in the spelling R itself prints: `namespace:stats` beside `package:stats` and `imports:stats`.
 
 ```{r, echo = FALSE}
 show_documents(globalenv(), baseenv(), as.environment("package:stats"))

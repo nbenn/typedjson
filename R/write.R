@@ -49,8 +49,8 @@
 #' declared with the `"bytes"` encoding.
 #'
 #' An environment is recorded by name wherever a name finds it again: the
-#' global, base and empty environments, a namespace by name and version, a
-#' package environment, and the imports environment of a namespace. Those
+#' global, base and empty environments, a namespace, a package environment
+#' and the imports environment of a namespace. Those
 #' come back as the object they were written from. Anything else is
 #' recorded by its contents, with the parent following the same rule and
 #' the locked bit and locked bindings recorded alongside, and comes back

@@ -6,17 +6,15 @@ writer_env <- function(x) {
     return(NULL)
   }
 
-  version <- if (isNamespace(x)) unname(getNamespaceVersion(x))
+  if (isNamespace(x)) {
+    name <- paste0("namespace:", name)
+  }
 
-  if (!identical(x, named_env(name, version))) {
+  if (!identical(x, named_env(name))) {
     return(NULL)
   }
 
-  if (is.null(version)) {
-    return(list(name = name))
-  }
-
-  list(name = name, version = version)
+  list(name = name)
 }
 
 reader_env <- function(state) {
@@ -29,14 +27,10 @@ reader_env <- function(state) {
     return(env_contents(state))
   }
 
-  env_reference(state[["name"]], state[["version"]])
+  env_reference(state[["name"]])
 }
 
-named_env <- function(name, version = NULL, load = FALSE) {
-
-  if (!is.null(version)) {
-    return(namespace_env(name, load))
-  }
+named_env <- function(name, load = FALSE) {
 
   if (identical(name, "R_GlobalEnv")) {
     return(globalenv())
@@ -57,6 +51,10 @@ named_env <- function(name, version = NULL, load = FALSE) {
     }
 
     return(as.environment(name))
+  }
+
+  if (startsWith(name, "namespace:")) {
+    return(namespace_env(sub("^namespace:", "", name), load))
   }
 
   if (startsWith(name, "imports:")) {
@@ -110,17 +108,13 @@ env_by_name <- function(name) {
   found
 }
 
-env_reference <- function(name, version) {
+env_reference <- function(name) {
 
   if (!is_one_string(name) || !nzchar(name)) {
     stop("a recorded environment needs a name", call. = FALSE)
   }
 
-  if (!is.null(version) && !is_one_string(version)) {
-    stop("a recorded namespace needs one version string", call. = FALSE)
-  }
-
-  found <- named_env(name, version, load = TRUE)
+  found <- named_env(name, load = TRUE)
 
   if (is.null(found)) {
 
