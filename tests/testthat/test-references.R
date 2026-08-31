@@ -45,6 +45,13 @@ test_that("a reference written twice is reported, not refused", {
   expect_silent(json_write_str(list(x = obj, y = CorpusR6$new(1, "t"))))
 })
 
+test_that("a generator recorded by name is not a shared reference", {
+
+  doc <- expect_silent(json_write_str(list(a = CorpusR6, b = CorpusR6)))
+
+  expect_identical(json_read_str(doc), list(a = CorpusR6, b = CorpusR6))
+})
+
 test_that("a handle rather than data is refused, with the path", {
   expect_identical(refusal_failures(corpus_refused()), character())
 })

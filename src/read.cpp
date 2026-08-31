@@ -303,6 +303,9 @@ SEXP Reader::build_arr(yyjson_val *v) {
 SEXP Reader::build_obj(yyjson_val *v) {
   if (is_tagged(v)) return build_tagged(v);
   if (yyjson_obj_get(v, kTagR6) != nullptr) return build_hooked(v, kTagR6);
+  if (yyjson_obj_get(v, kTagR6Class) != nullptr) {
+    return build_hooked(v, kTagR6Class);
+  }
   if (yyjson_obj_get(v, kTagS7) != nullptr) return build_hooked(v, kTagS7);
   if (yyjson_obj_get(v, kTagExt) != nullptr) return build_hooked(v, kTagExt);
 

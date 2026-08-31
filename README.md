@@ -98,7 +98,7 @@ The generator is the authority on the instance's shape as well as on its lock, s
 
 ## What stays out
 
-Values that are handles rather than data are refused rather than written as something else: environments other than the ones an R6 generator can rebuild, closures, external pointers and language objects. An error names the path it stopped at.
+Values that are handles rather than data are refused rather than written as something else: environments other than an R6 generator and the instances it can rebuild, closures, external pointers and language objects. An error names the path it stopped at.
 
 ```r
 json_write_str(list(a = 1, e = new.env()))

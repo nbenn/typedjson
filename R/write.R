@@ -36,9 +36,9 @@
 #' from `c(1, 2)`.
 #'
 #' Values that are handles rather than data stay out: environments (other
-#' than the ones an `R6` generator can rebuild), closures, external
-#' pointers and language objects are refused rather than silently written
-#' as something else. A class that owns such a handle can still be
+#' than an `R6` generator and the instances it can rebuild), closures,
+#' external pointers and language objects are refused rather than silently
+#' written as something else. A class that owns such a handle can still be
 #' persisted by writing a [json_state()] method for it.
 #'
 #' @param x Value to write.

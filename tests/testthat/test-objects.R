@@ -53,6 +53,45 @@ test_that("an S7 class generator is recorded by name rather than serialised", {
   expect_identical(json_read_str(doc), CorpusS7)
 })
 
+test_that("an R6 class generator is recorded by name rather than serialised", {
+
+  doc <- json_write_str(CorpusR6)
+
+  expect_identical(
+    doc,
+    paste0(
+      '{"~r6class":{"class":["CorpusR6","CorpusR6Base","R6"],',
+      '"package":"R_GlobalEnv"}}'
+    )
+  )
+  expect_identical(json_read_str(doc), CorpusR6)
+  expect_no_match(doc, "function", fixed = TRUE)
+})
+
+test_that("a recorded generator is checked against the class it names", {
+
+  revive <- function(class, package = '"R_GlobalEnv"') {
+    json_read_str(
+      paste0('{"~r6class":{"class":', class, ',"package":', package, "}}")
+    )
+  }
+
+  expect_identical(revive('["CorpusR6Plain","R6"]'), CorpusR6Plain)
+  expect_error(
+    revive('["CorpusR6","R6"]'),
+    "declares class `CorpusR6/CorpusR6Base/R6` where `CorpusR6/R6`",
+    fixed = TRUE
+  )
+  expect_error(revive('"CorpusR6Missing"'), "no R6 generator", fixed = TRUE)
+  expect_error(revive("null"), "needs a class vector", fixed = TRUE)
+  expect_error(
+    revive('"CorpusR6Plain"', "null"), "needs a `package` key", fixed = TRUE
+  )
+  expect_error(
+    revive('"CorpusR6Plain"', "5"), "has to be one string", fixed = TRUE
+  )
+})
+
 test_that("an R6 object comes back with fields, methods and bindings", {
 
   obj <- CorpusR6$new(3, "t1")
