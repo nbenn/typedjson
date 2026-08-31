@@ -207,6 +207,18 @@ the state opts in with that method, and \code{\link[=r6_state]{r6_state()}} is t
 recording them. An \code{R6} class generator needs no method either way: it
 is recorded by the class it names, and comes back the object it was
 written from.
+
+A reference class instance is refused on the second half of that reason
+alone. Fields are declared there, so what the representation is already
+has an answer, but the object is still a reference whose \code{initialize}
+may establish an invariant and whose fields hold whatever a private
+binding would, so a method of your own is what settles it here as well,
+on the concrete class or on any class between that and \code{envRefClass},
+which is where the refusal sits. The generator that makes one is refused
+rather than recorded, since a walk into it reaches the internals of the
+\code{methods} package rather than the class. An environment you have classed
+yourself claims none of this, and is written by the environment rule
+above, contents and all.
 }
 \examples{
 json_write_str(list(n = 1L, x = 2.5, missing = NA_character_))

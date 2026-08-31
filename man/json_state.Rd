@@ -43,7 +43,12 @@ rebuilt, and a method registered on a superclass is reached both ways.
 Methods for the class generators of both \code{R6} and S7 ship with the
 package and follow the same protocol. An \code{R6} instance has no method,
 and writing one is refused rather than guessed at; see \code{\link[=r6_state]{r6_state()}} for
-why, and for the pair a class author opts in with.
+why, and for the pair a class author opts in with. A reference class
+instance is refused on the same grounds. A method on the concrete
+class settles it, as does one on any class between that and
+\code{envRefClass}, which is where the refusal itself sits. The generator
+that makes one is refused outright, since a walk into it reaches the
+internals of the \code{methods} package rather than the class.
 }
 \examples{
 handle <- structure(list(path = "/tmp/log", con = "a live connection"),

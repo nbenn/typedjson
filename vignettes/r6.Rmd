@@ -18,7 +18,7 @@ knitr::opts_chunk$set(
 
 Most classes need nothing from this page. An S3, S4 or S7 object is a base type plus attributes, so `json_write()` records it without help: the class system says what the object *is*, and the writer takes it at its word. An S4 object is its slots, an S7 object is its properties, and `new("Pt", x = 1, y = 2)` is a complete description of one.
 
-An `R6` object is the exception, because no such statement exists. What an `R6` class guarantees is what its methods say, and its private fields are private precisely because they are not part of that. A field may be stored or derived, a private binding may be a credential that must never leave the session, and `initialize` may establish an invariant that no assignment reproduces. Nothing in the class distinguishes those cases, and the writer cannot tell them apart by looking.
+An `R6` object is where that account runs out, because no such statement exists. What an `R6` class guarantees is what its methods say, and its private fields are private precisely because they are not part of that. A field may be stored or derived, a private binding may be a credential that must never leave the session, and `initialize` may establish an invariant that no assignment reproduces. Nothing in the class distinguishes those cases, and the writer cannot tell them apart by looking.
 
 So it does not try. Writing an instance is refused, naming the class and the method that would settle the question.
 
@@ -181,3 +181,30 @@ That lookup runs on the way out as well as on the way in, so a generator built i
 ```{r, error = TRUE}
 json_write_str((function() R6::R6Class("Local", public = list(v = 1)))())
 ```
+
+## Reference classes, and where the refusal stops
+
+A reference class instance is refused on the same grounds and settled the same way. Half the question above already has an answer there, since a reference class declares its fields and `Class$fields()` says what the representation is. The other half is unchanged: the object is a reference, `initialize` may establish an invariant that no assignment reproduces, and a field is as good a place to keep a credential as a private binding is.
+
+```{r, error = TRUE}
+Cache <- setRefClass("Cache",
+  fields = list(root = "character", key = "character")
+)
+
+json_write_str(Cache$new(root = tempdir(), key = "s3cret"))
+```
+
+A method registered on the concrete class settles it, and so does one on any class between that and `envRefClass`, since the chain is what the writer looks along and what the document records. The refusal itself sits on the `envRefClass` rung, so that rung is taken, exactly as `R6` is. The generator is refused rather than recorded by the class it names, which is where this differs from the two above: walking into one reaches the internals of the `methods` package rather than anything the class declares.
+
+The refusal follows the label rather than the shape, and only a class system saying its instances are more than their bindings is such a label. An environment you have classed yourself says nothing of the kind, so the environment rule applies to it and its contents are written — the credential included.
+
+```{r}
+vault <- new.env()
+vault$root <- tempdir()
+vault$key <- "s3cret"
+class(vault) <- c("MyVault", "environment")
+
+json_write_str(vault)
+```
+
+That is the environment rule holding rather than a hole in it. An environment is its contents, which is what base R's `serialize()` records as well and what `vignette("design")` argues for, and a class attribute of your own making does not amount to a statement otherwise. Saying otherwise is what a `json_state()` method is for, and it is available for a value of this shape exactly as it is for the two above.
