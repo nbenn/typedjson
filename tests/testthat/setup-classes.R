@@ -161,6 +161,36 @@ assign(
   envir = global
 )
 
+assign(
+  "CorpusS7Child",
+  S7::new_class(
+    "CorpusS7Child", parent = get("CorpusS7", envir = global),
+    properties = list(z = S7::class_integer), package = NULL
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusS7Numeric",
+  S7::new_class(
+    "CorpusS7Numeric", parent = S7::class_double,
+    properties = list(unit = S7::class_character), package = NULL
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusS7Amb1",
+  S7::new_class("CorpusS7Amb", package = NULL),
+  envir = global
+)
+
+assign(
+  "CorpusS7Amb2",
+  S7::new_class("CorpusS7Amb", package = NULL),
+  envir = global
+)
+
 corpus <- c(corpus, list("r6/generator" = get("CorpusR6", envir = global)))
 
 # An instance has no method of its own, so every corpus class that is meant
@@ -184,7 +214,8 @@ withr::defer(
         "CorpusR6", "CorpusR6Base", "CorpusR6Plain", "CorpusR6PublicHook",
         "CorpusR6PrivateHook", "CorpusR6Holder", "CorpusR6Bound",
         "CorpusR6BoundBare", "CorpusR6Mute", "CorpusR6Anon", "CorpusR6Amb1",
-        "CorpusR6Amb2", "CorpusS7"
+        "CorpusR6Amb2", "CorpusS7", "CorpusS7Child", "CorpusS7Numeric",
+        "CorpusS7Amb1", "CorpusS7Amb2"
       ),
       envir = global
     )

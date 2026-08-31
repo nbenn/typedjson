@@ -290,6 +290,10 @@ S4 falls out too, since slots are attributes, with two riders — the S4 bit is 
 
 S7 needs exactly one special case. Properties are stored as attributes and come through the ordinary rule, but the `S7_class` attribute holds the class generator, which contains constructor closures. So the class name and package are recorded and looked up on read, rather than the class object being serialized. With that in place an S7 object round-trips directly, which removes the need for a hand-written record layer above it.
 
+That lookup runs on the way out as well, as it does for R6 below: a class no name finds again in the package it records — one defined inside a function, or one naming a package it was not defined in — is refused where it is written rather than producing a document that fails on the read. S7 leaves the package `NULL` for a class defined outside one, which is the global environment as far as finding it again goes, so a local class and a global one are told apart by the lookup rather than by what they record.
+
+The class vector needs a check of its own here that R6 does not, because S7 records it separately. An R6 document carries one class vector inside the record the generator is found through, so the two cannot disagree; an S7 object carries its class vector as one attribute and its generator reference as another, and a hand edit can move one without the other. The reader therefore rebuilds the vector the generator declares — each S7 rung under the name it is registered by, ending at `S7_object`, with a base or S3 parent contributing its own class before that end — and refuses where the document says something else. Left unchecked, dispatch would follow the class vector while the property definitions came from the generator.
+
 An R6 generator is a name, and is recorded the way an S7 one is: by the class it declares rather than by its contents.
 
 ```json

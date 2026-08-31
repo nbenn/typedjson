@@ -142,13 +142,22 @@ int attrib_rank(SEXP sym) {
   return 3;
 }
 
+// The attribute an S7 object keeps its generator under. The reader looks for
+// it once the attributes are on rather than while they are being built, since
+// the check it gates compares that generator against the class vector.
+SEXP s7_class_symbol() {
+  static SEXP sym = Rf_install("S7_class");
+  return sym;
+}
+
 class Reader {
  public:
   explicit Reader(cpp11::list hooks)
       : revive_(cpp11::function(hooks["revive"])),
         env_(cpp11::function(hooks["env"])),
         shell_(cpp11::function(hooks["shell"])),
-        fun_(cpp11::function(hooks["fun"])) {}
+        fun_(cpp11::function(hooks["fun"])),
+        s7_(cpp11::function(hooks["s7"])) {}
 
   SEXP build(yyjson_val *v);
 
@@ -188,6 +197,7 @@ class Reader {
   cpp11::function env_;
   cpp11::function shell_;
   cpp11::function fun_;
+  cpp11::function s7_;
   std::vector<std::string> lossy_;
   std::vector<std::pair<int64_t, cpp11::sexp> > refs_;
 };
@@ -598,6 +608,11 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   }
 
   set_attribs(out, attrs);
+
+  if (attrs != R_NilValue &&
+      Rf_getAttrib(out, s7_class_symbol()) != R_NilValue) {
+    s7_(out);
+  }
 
   if (id != 0) {
     if (!shelled) {

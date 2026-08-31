@@ -38,9 +38,22 @@ json_state.R6ClassGenerator <- function(x) {
 
 #' @export
 json_state.S7_class <- function(x) {
-  tagged_state(
-    tag_s7, list(class = attr(x, "name"), package = attr(x, "package"))
-  )
+
+  name <- attr(x, "name")
+  package <- attr(x, "package")
+
+  if (!is_one_string(name)) {
+    refuse("cannot write an S7 generator that names no class")
+  }
+
+  if (!identical(s7_generator(name, package), x)) {
+    refuse(
+      "the class `", name, "` names a different generator in ",
+      s7_package(package)
+    )
+  }
+
+  tagged_state(tag_s7, list(class = name, package = package))
 }
 
 #' Record an `R6` instance as the bindings it holds
@@ -402,25 +415,97 @@ fill_env <- function(env, values) {
 }
 
 s7_revive <- function(state) {
+  s7_generator(state[["class"]], state[["package"]])
+}
 
-  package <- state[["package"]]
+# An S7 object carries its class vector as one attribute and its generator as
+# another, so the two are recorded side by side and a document can disagree
+# with itself. Asking the generator what it declares is the check the `R6`
+# lookup already makes against `get_inherit()`, and the assembled object is
+# the only place it can run, since neither attribute can see the other.
+reader_s7 <- function(x) {
 
-  if (is.null(package)) {
-    package <- "R_GlobalEnv"
+  gen <- attr(x, "S7_class")
+
+  if (!inherits(x, "S7_object") || !inherits(gen, "S7_class")) {
+    return(invisible(NULL))
   }
 
-  gen <- find_generator(
-    env_by_name(package), state[["class"]], is_s7_generator
-  )
+  declared <- s7_classes(gen)
+  recorded <- class(x)
 
-  if (is.null(gen)) {
+  if (!is.null(declared) && !identical(declared, recorded)) {
     stop(
-      "no S7 class generator for class `", state[["class"]], "` in ", package,
-      call. = FALSE
+      "the S7 generator in ", s7_package(attr(gen, "package")),
+      " declares class `", class_text(declared), "` where `",
+      class_text(recorded), "` was recorded", call. = FALSE
     )
   }
 
+  invisible(NULL)
+}
+
+s7_generator <- function(class, package) {
+
+  package <- s7_package(package)
+
+  generator_cache$fetch(
+    cache_key("s7", package, class),
+    function() find_s7_generator(class, package)
+  )
+}
+
+find_s7_generator <- function(class, package) {
+
+  gen <- find_generator(env_by_name(package), class, is_s7_generator)
+
+  if (is.null(gen)) {
+    refuse("no S7 class generator for class `", class, "` in ", package)
+  }
+
   gen
+}
+
+# The class vector S7 gives an instance, rebuilt from the generator: each S7
+# rung contributes the name it is registered under, the chain ends at
+# `S7_object`, and a base or S3 parent contributes its own class just before
+# that end. A parent of any other kind is left to S7 to name, and NULL says
+# the vector could not be derived rather than that it is empty.
+s7_classes <- function(gen) {
+
+  out <- character()
+
+  while (inherits(gen, "S7_class")) {
+
+    if (identical(attr(gen, "name"), "S7_object")) {
+      return(c(out, "S7_object"))
+    }
+
+    out <- c(out, s7_class_name(gen))
+    gen <- attr(gen, "parent")
+  }
+
+  if (!inherits(gen, "S7_base_class") && !inherits(gen, "S7_S3_class")) {
+    return(NULL)
+  }
+
+  c(out, gen[["class"]], "S7_object")
+}
+
+s7_class_name <- function(gen) {
+  paste0(c(attr(gen, "package"), attr(gen, "name")), collapse = "::")
+}
+
+# S7 records the package a class belongs to rather than the environment it was
+# defined in, and leaves that NULL for a class defined outside one, which is
+# the global environment as far as finding it again goes.
+s7_package <- function(package) {
+
+  if (is.null(package)) {
+    return("R_GlobalEnv")
+  }
+
+  package
 }
 
 find_generator <- function(env, class, test) {

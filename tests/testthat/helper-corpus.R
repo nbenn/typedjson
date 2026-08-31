@@ -358,6 +358,28 @@ corpus_shadowed_r6_generator <- function() {
   )
 }
 
+corpus_local_s7_generator <- function() {
+  (function() {
+    S7::new_class(
+      "CorpusS7Local", properties = list(v = S7::class_double), package = NULL
+    )
+  })()
+}
+
+corpus_local_s7 <- function() {
+  corpus_local_s7_generator()(v = 1)
+}
+
+corpus_shadowed_s7_generator <- function() {
+  S7::new_class(
+    "CorpusS7", properties = list(x = S7::class_numeric), package = NULL
+  )
+}
+
+corpus_foreign_s7_generator <- function() {
+  S7::new_class("CorpusS7Foreign", package = "stats")
+}
+
 corpus_holder_r6 <- function() {
 
   obj <- corpus_generator("CorpusR6Holder")$new()
@@ -376,6 +398,11 @@ corpus_refused <- function() {
   ambiguous <- paste0(
     "the class `CorpusR6Amb` names more than one generator in R_GlobalEnv: ",
     "`CorpusR6Amb1`, `CorpusR6Amb2`"
+  )
+
+  ambiguous_s7 <- paste0(
+    "the class `CorpusS7Amb` names more than one generator in R_GlobalEnv: ",
+    "`CorpusS7Amb1`, `CorpusS7Amb2`"
   )
 
   list(
@@ -431,8 +458,46 @@ corpus_refused <- function() {
         "R_GlobalEnv"
       ),
       path = "x$gen"
+    ),
+    "s7/generator-local" = list(
+      value = corpus_local_s7_generator(),
+      message = missing_s7("CorpusS7Local", "R_GlobalEnv"), path = "x"
+    ),
+    "s7/local-generator" = list(
+      value = corpus_local_s7(),
+      message = missing_s7("CorpusS7Local", "R_GlobalEnv"),
+      path = "x$S7_class"
+    ),
+    "s7/nested-local-generator" = list(
+      value = list(a = 1, b = list(obj = corpus_local_s7())),
+      message = missing_s7("CorpusS7Local", "R_GlobalEnv"),
+      path = "x$b$obj$S7_class"
+    ),
+    "s7/generator-foreign-package" = list(
+      value = corpus_foreign_s7_generator(),
+      message = missing_s7("CorpusS7Foreign", "stats"), path = "x"
+    ),
+    "s7/generator-shadowed" = list(
+      value = list(gen = corpus_shadowed_s7_generator()),
+      message = paste0(
+        "the class `CorpusS7` names a different generator in ",
+        "R_GlobalEnv"
+      ),
+      path = "x$gen"
+    ),
+    "s7/generator-unnamed" = list(
+      value = structure(list(), class = c("S7_class", "S7_object")),
+      message = "cannot write an S7 generator that names no class", path = "x"
+    ),
+    "s7/generator-ambiguous" = list(
+      value = corpus_generator("CorpusS7Amb2"), message = ambiguous_s7,
+      path = "x"
     )
   )
+}
+
+missing_s7 <- function(class, package) {
+  paste0("no S7 class generator for class `", class, "` in ", package)
 }
 
 needs_method <- function(class) {
@@ -524,6 +589,14 @@ r6_document <- function(class, package = '"R_GlobalEnv"', public = "null",
     paste0(
       '{"package":', package, ',"public":', public, ',"private":', private, "}"
     )
+  )
+}
+
+s7_document <- function(class, generator = class, package = "null",
+                        props = '"x":1.0,"y":"a"') {
+  paste0(
+    '{"~t":"object","~a":{"class":', class, ',"S7_class":{"~s7":{"class":',
+    generator, ',"package":', package, "}},", props, "}}"
   )
 }
 

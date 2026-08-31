@@ -53,6 +53,113 @@ test_that("an S7 class generator is recorded by name rather than serialised", {
   expect_identical(json_read_str(doc), CorpusS7)
 })
 
+test_that("an S7 generator is checked where written as well as where read", {
+
+  local <- corpus_local_s7_generator()
+
+  expect_error(
+    json_write_str(local),
+    "no S7 class generator for class `CorpusS7Local` in R_GlobalEnv",
+    fixed = TRUE
+  )
+  expect_error(json_write_str(local(v = 1)), "at `x$S7_class`", fixed = TRUE)
+  expect_error(
+    json_read_str('{"~s7":{"class":"CorpusS7Local","package":null}}'),
+    "no S7 class generator", fixed = TRUE
+  )
+})
+
+test_that("an S7 class claiming a package it is not defined in is refused", {
+  expect_error(
+    json_write_str(corpus_foreign_s7_generator()),
+    "no S7 class generator for class `CorpusS7Foreign` in stats", fixed = TRUE
+  )
+})
+
+test_that("an S7 class naming two generators is refused at both ends", {
+
+  expect_error(
+    json_write_str(CorpusS7Amb2), "names more than one generator", fixed = TRUE
+  )
+  expect_error(
+    json_read_str('{"~s7":{"class":"CorpusS7Amb","package":null}}'),
+    "`CorpusS7Amb1`, `CorpusS7Amb2`", fixed = TRUE
+  )
+})
+
+test_that("an S7 class vector follows the generator through its parents", {
+
+  child <- CorpusS7Child(x = 1, y = "a", z = 2L)
+  numeric <- CorpusS7Numeric(1.5, unit = "m")
+
+  expect_identical(json_read_str(json_write_str(child)), child)
+  expect_identical(json_read_str(json_write_str(numeric)), numeric)
+  expect_match(
+    json_write_str(child), '"class":["CorpusS7Child","CorpusS7","S7_object"]',
+    fixed = TRUE
+  )
+  expect_match(
+    json_write_str(numeric),
+    '"class":["CorpusS7Numeric","double","S7_object"]', fixed = TRUE
+  )
+})
+
+test_that("a recorded S7 class vector the generator contradicts is an error", {
+
+  revive <- function(class, generator = '"CorpusS7"') {
+    json_read_str(s7_document(class, generator))
+  }
+
+  expect_identical(
+    class(revive('["CorpusS7","S7_object"]')), c("CorpusS7", "S7_object")
+  )
+  expect_error(
+    revive('["CorpusS7Other","S7_object"]'),
+    "declares class `CorpusS7/S7_object` where `CorpusS7Other/S7_object`",
+    fixed = TRUE
+  )
+  expect_error(
+    revive('["CorpusS7Child","S7_object"]', '"CorpusS7Child"'),
+    "declares class `CorpusS7Child/CorpusS7/S7_object`", fixed = TRUE
+  )
+  expect_error(
+    revive('["CorpusS7","CorpusS7Child","S7_object"]'), "was recorded",
+    fixed = TRUE
+  )
+})
+
+test_that("an `S7_class` attribute on a value that is not one is left alone", {
+
+  plain <- structure(1, S7_class = CorpusS7)
+
+  expect_identical(json_read_str(json_write_str(plain)), plain)
+  expect_false(S7::S7_inherits(json_read_str(json_write_str(plain))))
+})
+
+test_that("an S7 class is resolved once per call rather than once per object", {
+
+  resolve <- find_s7_generator
+  calls <- 0L
+
+  local_mocked_bindings(
+    find_s7_generator = function(class, package) {
+      calls <<- calls + 1L
+      resolve(class, package)
+    }
+  )
+
+  doc <- json_write_str(
+    replicate(20L, CorpusS7(x = 1, y = "a"), simplify = FALSE)
+  )
+
+  expect_identical(calls, 1L)
+
+  calls <- 0L
+  json_read_str(doc)
+
+  expect_identical(calls, 1L)
+})
+
 test_that("an R6 class generator is recorded by name rather than serialised", {
 
   doc <- json_write_str(CorpusR6)
