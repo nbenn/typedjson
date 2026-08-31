@@ -148,7 +148,8 @@ class Reader {
       : revive_(cpp11::function(hooks["revive"])),
         env_(cpp11::function(hooks["env"])),
         shell_(cpp11::function(hooks["shell"])),
-        fun_(cpp11::function(hooks["fun"])) {}
+        fun_(cpp11::function(hooks["fun"])),
+        validate_(cpp11::function(hooks["validate"])) {}
 
   SEXP build(yyjson_val *v);
 
@@ -161,6 +162,7 @@ class Reader {
   SEXP build_hooked(yyjson_val *v, const char *tag);
   SEXP build_attribs(yyjson_val *v);
   void set_attribs(SEXP x, SEXP attrs);
+  void gate(SEXP x, SEXP attrs);
   SEXP build_env(yyjson_val *v, SEXP shell);
   SEXP build_ref(yyjson_val *v);
   SEXP build_fun(yyjson_val *v, const char *type);
@@ -188,6 +190,7 @@ class Reader {
   cpp11::function env_;
   cpp11::function shell_;
   cpp11::function fun_;
+  cpp11::function validate_;
   std::vector<std::string> lossy_;
   std::vector<std::pair<int64_t, cpp11::sexp> > refs_;
 };
@@ -598,6 +601,7 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   }
 
   set_attribs(out, attrs);
+  gate(out, attrs);
 
   if (id != 0) {
     if (!shelled) {
@@ -655,6 +659,20 @@ void Reader::set_attribs(SEXP x, SEXP attrs) {
         Rf_setAttrib(x, sym, VECTOR_ELT(attrs, i));
       }
     }
+  }
+}
+
+// Slots and properties are attributes, so an S4 or S7 object is rebuilt by
+// the rule above rather than by whatever the class constructs one with. That
+// reaches past the class's own gate, which is therefore run here, where the
+// document is still what the value came from.
+void Reader::gate(SEXP x, SEXP attrs) {
+
+  static SEXP s7_class = Rf_install("S7_class");
+
+  if (Rf_isS4(x) ||
+      (attrs != R_NilValue && Rf_getAttrib(x, s7_class) != R_NilValue)) {
+    validate_(x);
   }
 }
 

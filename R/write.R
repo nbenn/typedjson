@@ -162,6 +162,19 @@
 #' forced. A class that owns such a handle can still be persisted by
 #' writing a [json_state()] method for it.
 #'
+#' Slots and properties are attributes, so an S4 or S7 object is rebuilt
+#' by the attribute rule rather than by whatever the class constructs one
+#' with. The check the class does supply is run on the way back —
+#' `methods::validObject()` for S4 and `S7::validate()` for S7 — so a
+#' document edited into a value the class rejects is refused where it is
+#' read, and an S7 property the document leaves out or spells as the wrong
+#' type is caught with it. What the check does not stand in for is the
+#' construction it reached past: an `initialize` method for S4 and a custom
+#' `constructor` for S7 do not run, so a slot or property one of them would
+#' have derived comes back as the document spells it. A class this session
+#' does not hold leaves nothing to check against, and a document naming one
+#' reads as it always has.
+#'
 #' An `R6` instance is refused as well, for a reason one level up. What an
 #' `R6` class guarantees is what its methods say rather than what its
 #' bindings happen to hold, so those bindings are not a value the package

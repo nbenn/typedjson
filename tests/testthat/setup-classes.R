@@ -10,6 +10,14 @@ methods::setClass(
   methods::representation(unit = "character"), where = global
 )
 
+methods::setClass(
+  "CorpusS4Valid", methods::representation(x = "numeric"),
+  validity = function(object) {
+    if (object@x < 0) "x must be non-negative" else TRUE
+  },
+  where = global
+)
+
 assign(
   "CorpusR6Base",
   R6::R6Class(
@@ -161,6 +169,35 @@ assign(
   envir = global
 )
 
+assign(
+  "CorpusS7Valid",
+  S7::new_class(
+    "CorpusS7Valid",
+    properties = list(x = S7::class_double),
+    validator = function(self) if (self@x < 0) "@x must be non-negative",
+    package = NULL
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusS7Made",
+  S7::new_class(
+    "CorpusS7Made",
+    properties = list(
+      celsius = S7::class_double, label = S7::class_character
+    ),
+    constructor = function(celsius) {
+      S7::new_object(
+        S7::S7_object(), celsius = celsius,
+        label = paste0(celsius, " degC")
+      )
+    },
+    package = NULL
+  ),
+  envir = global
+)
+
 corpus <- c(corpus, list("r6/generator" = get("CorpusR6", envir = global)))
 
 # An instance has no method of its own, so every corpus class that is meant
@@ -179,12 +216,13 @@ withr::defer(
   {
     methods::removeClass("CorpusS4", where = global)
     methods::removeClass("CorpusS4Numeric", where = global)
+    methods::removeClass("CorpusS4Valid", where = global)
     rm(
       list = c(
         "CorpusR6", "CorpusR6Base", "CorpusR6Plain", "CorpusR6PublicHook",
         "CorpusR6PrivateHook", "CorpusR6Holder", "CorpusR6Bound",
         "CorpusR6BoundBare", "CorpusR6Mute", "CorpusR6Anon", "CorpusR6Amb1",
-        "CorpusR6Amb2", "CorpusS7"
+        "CorpusR6Amb2", "CorpusS7", "CorpusS7Valid", "CorpusS7Made"
       ),
       envir = global
     )

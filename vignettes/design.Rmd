@@ -290,6 +290,10 @@ S4 falls out too, since slots are attributes, with two riders — the S4 bit is 
 
 S7 needs exactly one special case. Properties are stored as attributes and come through the ordinary rule, but the `S7_class` attribute holds the class generator, which contains constructor closures. So the class name and package are recorded and looked up on read, rather than the class object being serialized. With that in place an S7 object round-trips directly, which removes the need for a hand-written record layer above it.
 
+Both of those rebuild the object from the document rather than construct one, which reaches past the point where the class would have decided whether to produce it at all: an S4 object arrives without its `initialize` method having run, and an S7 object without its `constructor`. The check the class does supply is therefore run where the object is rebuilt — `methods::validObject()` on the S4 side and `S7::validate()` on the S7 side — which is what stands between a hand-edited document and a value the class itself rejects. Neither disturbs a good round trip, a document written from a valid object describing a valid one, and the S7 call earns its keep twice over, since it checks property types as well and so catches a property the document omits or spells as something else. The lookup that finds the class is allowed to find one and not to fetch one, so a document naming a package this session has not loaded reads the way it did before the check existed rather than stopping at it.
+
+What neither call replaces is the construction it reached past. A slot or property that an `initialize` method or a `constructor` would have derived comes back as the document spells it, so a class computing `label` from `celsius` revives with the two out of step wherever a document has them that way, and only a validator comparing them will say so.
+
 An R6 generator is a name, and is recorded the way an S7 one is: by the class it declares rather than by its contents.
 
 ```json

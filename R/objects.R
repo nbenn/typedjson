@@ -423,6 +423,55 @@ s7_revive <- function(state) {
   gen
 }
 
+# Slots and properties are attributes, so an S4 or S7 object is rebuilt from
+# the document rather than constructed, which reaches past every check the
+# class puts between a value and an instance of itself. The check the class
+# does supply is run here, against the class this session holds.
+reader_validate <- function(x) {
+
+  if (isS4(x)) {
+    validate_s4(x)
+  } else {
+    validate_s7(x)
+  }
+
+  invisible(NULL)
+}
+
+validate_s4 <- function(x) {
+
+  cls <- class(x)
+  pkg <- attr(cls, "package")
+
+  # Rebuilding has never needed the class definition, so looking one up here
+  # is allowed to find a definition and not to fetch one: a document naming a
+  # package this session has not loaded reads the way it always has.
+  if (is_one_string(pkg) && !pkg %in% c(".GlobalEnv", loadedNamespaces())) {
+    return(invisible(NULL))
+  }
+
+  if (is.null(methods::getClassDef(cls))) {
+    return(invisible(NULL))
+  }
+
+  methods::validObject(x)
+}
+
+validate_s7 <- function(x) {
+
+  # A foreign document is free to spell the attribute as anything it likes,
+  # and only a generator declares the properties to check an object against.
+  if (!is_s7_object(x) || !requireNamespace("S7", quietly = TRUE)) {
+    return(invisible(NULL))
+  }
+
+  S7::validate(x)
+}
+
+is_s7_object <- function(x) {
+  inherits(attr(x, "S7_class"), "S7_class") && inherits(x, "S7_object")
+}
+
 find_generator <- function(env, class, test) {
 
   if (!is_one_string(class)) {

@@ -34,7 +34,7 @@ json_read_bytes <- function(bytes) {
       bytes,
       list(
         revive = reader_revive, env = reader_env, shell = reader_shell,
-        fun = reader_fun
+        fun = reader_fun, validate = reader_validate
       )
     )
   )
