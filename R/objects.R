@@ -4,6 +4,14 @@ json_state.R6 <- function(x) {
   enclos <- x[[".__enclos_env__"]]
 
   classes <- class(x)
+
+  if (identical(enclos, x)) {
+    refuse(
+      "cannot write an instance of the non-portable R6 class `",
+      class_text(classes), "`"
+    )
+  }
+
   package <- environmentName(parent.env(enclos))
 
   methods <- r6_methods(r6_generator(classes, package))
@@ -74,6 +82,8 @@ r6_revive <- function(state) {
     stop("the R6 package is needed to revive an R6 object", call. = FALSE)
   }
 
+  check_r6_state(state)
+
   classes <- state[["class"]]
 
   gen <- r6_generator(classes, state[["package"]])
@@ -93,6 +103,33 @@ r6_revive <- function(state) {
   }
 
   obj
+}
+
+check_r6_state <- function(state) {
+
+  if (!is_named_list(state)) {
+    stop("a `~r6` payload has to be an object", call. = FALSE)
+  }
+
+  if (is.null(state[["package"]])) {
+    stop("a `~r6` payload needs a `package` key", call. = FALSE)
+  }
+
+  if (!is_one_string(state[["package"]])) {
+    stop(
+      "the `package` key of a `~r6` payload has to be one string",
+      call. = FALSE
+    )
+  }
+
+  for (key in c("public", "private")) {
+    if (!is.null(state[[key]]) && !is_named_list(state[[key]])) {
+      stop(
+        "the `", key, "` key of a `~r6` payload has to be an object",
+        call. = FALSE
+      )
+    }
+  }
 }
 
 r6_generator <- function(class, package) {
@@ -204,7 +241,7 @@ s7_revive <- function(state) {
 
 find_generator <- function(env, class, test) {
 
-  if (!is.character(class) || length(class) != 1L || is.na(class)) {
+  if (!is_one_string(class)) {
     stop("a recorded generator needs a class name", call. = FALSE)
   }
 
@@ -295,6 +332,21 @@ generator_cache <- local({
     }
   )
 })
+
+is_named_list <- function(x) {
+
+  if (!is.list(x)) {
+    return(FALSE)
+  }
+
+  nms <- names(x)
+
+  !is.null(nms) && all(!is.na(nms) & nzchar(nms))
+}
+
+is_one_string <- function(x) {
+  is.character(x) && length(x) == 1L && !is.na(x)
+}
 
 is_r6_generator <- function(x, class) {
   inherits(x, "R6ClassGenerator") && identical(x$classname, class)

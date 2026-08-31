@@ -282,6 +282,42 @@ test_that("reviving an R6 object does not run initialize", {
   expect_identical(json_read_str(doc)$n, 7)
 })
 
+test_that("a malformed R6 payload names the key that is wrong", {
+
+  doc <- function(payload) paste0('{"~r6":', payload, "}")
+  named <- '"class":["CorpusR6Plain","R6"],"package":"R_GlobalEnv"'
+
+  expect_error(json_read_str(doc("5")), "payload has to be an object")
+  expect_error(json_read_str(doc("null")), "payload has to be an object")
+  expect_error(json_read_str(doc("[1,2]")), "payload has to be an object")
+  expect_error(json_read_str(doc("{}")), "needs a `package` key", fixed = TRUE)
+
+  expect_error(
+    json_read_str(doc('{"class":["CorpusR6Plain","R6"]}')),
+    "needs a `package` key", fixed = TRUE
+  )
+  expect_error(
+    json_read_str(doc('{"class":["CorpusR6Plain","R6"],"package":["a","b"]}')),
+    "the `package` key of a `~r6` payload has to be one string", fixed = TRUE
+  )
+  expect_error(
+    json_read_str(doc(paste0("{", named, ',"public":[1,2,3]}'))),
+    "the `public` key of a `~r6` payload has to be an object", fixed = TRUE
+  )
+  expect_error(
+    json_read_str(doc(paste0("{", named, ',"public":{"":1}}'))),
+    "the `public` key of a `~r6` payload has to be an object", fixed = TRUE
+  )
+  expect_error(
+    json_read_str(doc(paste0("{", named, ',"private":[1,2,3]}'))),
+    "the `private` key of a `~r6` payload has to be an object", fixed = TRUE
+  )
+
+  back <- json_read_str(doc(paste0("{", named, ',"public":{"n":7.0}}')))
+
+  expect_identical(back$n, 7)
+})
+
 test_that("a locked R6 object is locked again after revival", {
 
   locked <- R6::R6Class(
