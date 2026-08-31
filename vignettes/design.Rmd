@@ -59,6 +59,13 @@ identical(json_write_str(json_read_str(doc)), doc)
 
 The second falls out of the first once foreign documents are read under the same grammar rather than a separate lossy mode. It holds for every document this package writes; a foreign one settles after a single round trip, since a mixed-type array such as `[1, "a"]` has to come back as a list.
 
+One value cannot meet the first contract and is not asked to. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test.
+
+- **Exact.** The relation above, which every other value in scope meets, and which an environment recorded by name meets too.
+- **Equivalent.** Same bindings by name and by value, same locked and active status, and a parent that is itself equivalent.
+
+The second contract is untouched either way: a document written from a rebuilt environment writes the same bytes again.
+
 ## Format
 
 ### Principles
@@ -204,7 +211,7 @@ A call is mostly symbols, so their spelling decides whether the format stays rea
 
 So a symbol takes the prefix tag, which is the device the format already uses for typed `NA` and the non-finite doubles, and is safe here for the same reason: any ordinary string beginning with `~` is escaped by doubling, so a single-`~` string can never originate from user data. The empty symbol — what `x[, 1]` holds where a row index would go, and what a formals entry with no default holds — is the tag with nothing after it. Depth is not a limit in practice either: a 10000-deep call round-trips, where the deparsed form overflows the parser's context stack in `str2lang()` at 2000.
 
-Attributes ride the ordinary rule, which is what still refuses a formula, since `y ~ x` carries the environment it was created in. A `{` block parsed with `keep.source = TRUE` is refused for the same reason one step further down, where its `srcref` reaches a `srcfile` environment.
+Attributes ride the ordinary rule, which is what carries the `.Environment` of a formula, so `y ~ x` round-trips exactly once an environment does. A `{` block parsed with `keep.source = TRUE` reaches one step further down, where every `srcref` points at the same `srcfile` environment: the block writes, but that one environment comes back as separate copies, which is the shared-reference warning below rather than an exact round trip.
 
 ```{r, error = TRUE}
 json_write_str(y ~ x)
@@ -244,23 +251,54 @@ The generator itself is an environment too, and is recorded the way an S7 one is
 
 Both halves have to be recoverable for the document to be readable, so a generator that names no class, or that was built inside a function, is refused where it is written. The same lookup runs on the way out as for an instance, which means it also catches a class vector no generator in that environment declares.
 
-Bare environments, closures and external pointers stay out. The principled line is that an environment is rescuable exactly when something else can supply its shape; for an instance that is the generator, for a generator its own name, and for a bare environment nothing can. What the writer refuses, it refuses loudly, naming the path it stopped at.
+Closures and external pointers stay out. What the writer refuses, it refuses loudly, naming the path it stopped at.
 
 A non-portable R6 class is on the far side of that line too, one level up. With `portable = FALSE` the object environment is also the environment its methods close over, so it binds `self` and `private` beside the fields and the generator stops accounting for everything that is not state. An instance of one is refused where it is written, naming the class, since making the class portable or giving it a `json_state()` method is what changes the answer.
 
 ```{r, error = TRUE}
-json_write_str(list(a = 1, e = new.env()))
+json_write_str(list(a = 1, e = mean))
 ```
+
+### Environments
+
+An environment is written on a ladder, and only the bottom rung writes contents. The rungs are the ones base R's `serialize()` already recognises — the global, base and empty environments, a namespace by name and version, and a package environment by name — plus the imports environment of a namespace, which constructive names and base R does not.
+
+```{r, echo = FALSE}
+show_documents(globalenv(), baseenv(), as.environment("package:stats"))
+```
+
+A rung is a rung only where the name resolves back to the same object, which is the rule the `R6` generator lookup already runs on the way out. That closes the one hole base R leaves open here: `attr(e, "name") <- "package:stats"` on an environment of your own makes `R_IsPackageEnv()` say yes, and this writer still records the environment by its contents and the name as the ordinary attribute it is.
+
+Everything else is written by what it binds, with the parent written by the same rule, so the walk terminates at a named rung rather than running to `emptyenv()` through everything in between. That is what keeps a document small: an environment under `.GlobalEnv` records the marker rather than your workspace.
+
+```{r}
+counter <- new.env(parent = asNamespace("stats"))
+counter$n <- 1L
+
+json_write_str(counter)
+```
+
+The locked bit and locked bindings ride alongside, since nothing else can supply them once the environment is rebuilt — where an `R6` instance takes its lock from the generator, a bare environment has no generator to ask.
+
+```{r}
+lockEnvironment(counter, bindings = TRUE)
+
+json_write_str(counter)
+```
+
+Two bindings are refused rather than recorded, and for the same reason: reading either one runs code. A promise would have to be forced, and an environment captured inside a function holds its arguments unforced, so forcing one on the writer's own initiative can error or do arbitrary work at write time. An active binding would have to be called, and recording what it returned would hand back a plain binding wearing its value. Base R writes both unevaluated; this format has no way to write a closure yet, so it says so instead.
+
+A name that is not available on the way back is replaced by the global environment with a warning, which is what base R already does through `findPackageEnv()` and `..getNamespace()`. Substituting silently was never on the table.
 
 ### References
 
-Cycles and observable sharing are possible only through reference types. A value list cannot contain itself, because `l$self <- l` stores a copy, and copy-on-write means value types cannot tell whether they are shared. So this question exists only because R6 is in scope.
+Cycles and observable sharing are possible only through reference types. A value list cannot contain itself, because `l$self <- l` stores a copy, and copy-on-write means value types cannot tell whether they are shared. So this question arrives with environments and with R6, and with nothing else.
 
 Two tiers ship, one is deferred:
 
 - **Cycle detection.** An ancestor stack of the reference objects currently being visited; a cycle is a back-edge onto it. Costs O(depth) with no hash table, and turns what would be a C stack overflow into an error naming the path. Non-negotiable — in C, unguarded recursion on a cycle segfaults rather than erroring, and crashing the session is the worst outcome a persistence library can have.
 - **Shared-reference warning.** A seen-set, so the writer can say that an object appears more than once and will be restored as separate objects. Costs a hash set and changes no bytes in the document.
-- **Deferred: back-references and identity preservation.** Base R's own `serialize()` does maintain a reference table for environments, so this is the one axis on which we sit behind `saveRDS`. It is deferred rather than dropped because a document containing no sharing is byte-identical either way, so it can land later without invalidating anything already written — and because real cycles cluster in objects nobody serializes. The chromote package has two (`Chromote` holds `sessions`, each `ChromoteSession` holds `parent`; `Chromote` holds `event_manager`, which holds `session`), and both wrap a live browser process.
+- **Deferred: back-references and identity preservation.** Base R's own `serialize()` does maintain a reference table for environments, so this is the one axis on which we sit behind `saveRDS`. It is also what a cycle costs today: an environment whose parent frame binds it back, which is what `function() {e <- new.env(); e}` returns, is a genuine cycle and is reported rather than written. It is deferred rather than dropped because a document containing no sharing is byte-identical either way, so it can land later without invalidating anything already written — and because real cycles cluster in objects nobody serializes. The chromote package has two (`Chromote` holds `sessions`, each `ChromoteSession` holds `parent`; `Chromote` holds `event_manager`, which holds `session`), and both wrap a live browser process.
 
 ## Reading foreign JSON
 
@@ -377,7 +415,7 @@ The cpp11 package unlocks nothing from any of these libraries; the customization
 
 One property over a corpus, and this is what decides whether the package is trustworthy.
 
-The corpus is every atomic type crossed with {empty, scalar, vector}, {no attributes, names, class} and {no NA, some NA, all NA}, plus the non-finites, the numeric extremes, the tag lookalikes, nesting, the language types, each object system, and a random-value fuzzer. Every entry is checked in each position it can occupy, since a value written bare at the document root and the same value written as an array element take different paths. Real payloads on top: a board produced by `blockr.core::blockr_ser()`, a recorded set of LLM conversation turns, and a link input of `"Inf"` as a named regression.
+The corpus is every atomic type crossed with {empty, scalar, vector}, {no attributes, names, class} and {no NA, some NA, all NA}, plus the non-finites, the numeric extremes, the tag lookalikes, nesting, the language types, each object system, one entry per environment rung, and a random-value fuzzer. Where a value meets only the weaker contract the relation itself is the expectation, so equivalence is checked by one walk rather than spelled out at each call site. Every entry is checked in each position it can occupy, since a value written bare at the document root and the same value written as an array element take different paths. Real payloads on top: a board produced by `blockr.core::blockr_ser()`, a recorded set of LLM conversation turns, and a link input of `"Inf"` as a named regression.
 
 ## Prior art
 

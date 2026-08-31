@@ -14,18 +14,22 @@
 #'
 #' The first holds for every supported value: every atomic type, missing
 #' values of each type, the non-finite doubles, attributes of any shape,
-#' language objects, and objects built with S3, S4, S7 or `R6`. The
-#' second holds for every document this package can write. Foreign
-#' documents are read under the same grammar and normalise on the first
-#' round trip, since a mixed-type array such as `[1, "a"]` has to come
-#' back as a list. Two things are refused instead of normalised, both
-#' inside the namespace the `~` prefix reserves. A key beginning with a
-#' single `~` is a format tag, and one this reader does not know is an
-#' error rather than a name. A string beginning with `~` and a reserved
-#' discriminator, which is `z` for what JSON has no lexeme for and `:`
-#' for a symbol, is a tag as well, and an unknown one is an error rather
-#' than text; every other tilde-leading string stays a string, so
-#' `~/data` is a path.
+#' language objects, and objects built with S3, S4, S7 or `R6`. An
+#' environment recorded by its contents is the one exception, and it is
+#' the exception base R's own `serialize()` makes as well: what comes back
+#' binds the same names to the same values, locked the same way, under a
+#' parent that is itself equivalent, but it is a new environment rather
+#' than the one that went in. The second holds for every document this
+#' package can write. Foreign documents are read under the same grammar
+#' and normalise on the first round trip, since a mixed-type array such as
+#' `[1, "a"]` has to come back as a list. Two things are refused instead
+#' of normalised, both inside the namespace the `~` prefix reserves. A key
+#' beginning with a single `~` is a format tag, and one this reader does
+#' not know is an error rather than a name. A string beginning with `~`
+#' and a reserved discriminator, which is `z` for what JSON has no lexeme
+#' for and `:` for a symbol, is a tag as well, and an unknown one is an
+#' error rather than text; every other tilde-leading string stays a
+#' string, so `~/data` is a path.
 #'
 #' Two rules decide the shape of a document. A JSON array of scalars is an
 #' atomic vector and a JSON object is a named list, so the two containers
@@ -44,19 +48,32 @@
 #' back on and are refused, naming the path they sit at, as is a string
 #' declared with the `"bytes"` encoding.
 #'
-#' Values that are handles rather than data stay out: environments (other
-#' than an `R6` generator and the instances it can rebuild), closures and
-#' external pointers are refused rather than silently written as something
-#' else. A class that owns such a handle can still be persisted by writing
-#' a [json_state()] method for it.
+#' An environment is recorded by name wherever a name finds it again: the
+#' global, base and empty environments, a namespace by name and version, a
+#' package environment, and the imports environment of a namespace. Those
+#' come back as the object they were written from. Anything else is
+#' recorded by its contents, with the parent following the same rule and
+#' the locked bit and locked bindings recorded alongside, and comes back
+#' equivalent. A recorded name that is not available on the way back is
+#' replaced by the global environment with a warning, the way base R
+#' already does.
 #'
 #' A language object is a value rather than a handle, so it round-trips
 #' exactly and nothing about it is deparsed. A call, an expression and a
 #' pairlist are written as their elements under a `~t` naming the type,
 #' keeping the argument names R stores as tags, and a symbol is written
 #' as the string `~:name`. Attributes ride the ordinary rule, which is
-#' what still refuses a formula: it carries the environment it was
-#' created in.
+#' what carries the `.Environment` of a formula, so `y ~ x` round-trips
+#' once an environment does.
+#'
+#' Values that are handles rather than data stay out: closures and
+#' external pointers are refused rather than silently written as
+#' something else, and an environment binding holding one is refused with
+#' them. So is a binding holding a promise, since forcing it on the
+#' writer's own initiative could run arbitrary code, and an active
+#' binding, since reading it would do the same and record the result as
+#' though it were a plain value. A class that owns such a handle can still
+#' be persisted by writing a [json_state()] method for it.
 #'
 #' @param x Value to write.
 #' @param path Path to write to or read from.
@@ -97,7 +114,10 @@ json_write_str <- function(x, pretty = FALSE) {
   stopifnot(is.logical(pretty), length(pretty) == 1L, !is.na(pretty))
 
   generator_cache$scope(
-    typedjson_write_(x, pretty, list(kind = writer_kind, state = writer_state))
+    typedjson_write_(
+      x, pretty,
+      list(kind = writer_kind, state = writer_state, env = writer_env)
+    )
   )
 }
 
