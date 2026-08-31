@@ -1,4 +1,3 @@
-tag_r6 <- "~r6"
 tag_r6_class <- "~r6class"
 tag_s7 <- "~s7"
 tag_ext <- "~x"
@@ -20,8 +19,10 @@ tag_ext <- "~x"
 #' carrying it, so a method signature always starts with the class token
 #' rather than the object being rebuilt.
 #'
-#' Methods for `R6` objects and for the class generators of both `R6` and
-#' S7 ship with the package and follow the same protocol.
+#' Methods for the class generators of both `R6` and S7 ship with the
+#' package and follow the same protocol. An `R6` instance has no method,
+#' and writing one is refused rather than guessed at; see [r6_state()] for
+#' why, and for the pair a class author opts in with.
 #'
 #' @param x Object whose state is to be recorded.
 #' @param class Empty object carrying the recorded class vector, which

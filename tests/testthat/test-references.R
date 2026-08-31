@@ -12,6 +12,8 @@ test_that("a cycle the reader cannot close names both ends of it", {
   assign("CorpusR6Node", node, envir = globalenv())
   withr::defer(rm("CorpusR6Node", envir = globalenv()))
 
+  local_r6_optin("CorpusR6Node")
+
   a <- node$new("a")
   b <- node$new("b")
   a$peer <- b

@@ -46,7 +46,7 @@ json_write_str(json_read_str(doc)) == doc
 
 The first holds for every supported value: every atomic type, missing
 values of each type, the non-finite doubles, attributes of any shape,
-language objects, closures, and objects built with S3, S4, S7 or \code{R6}.
+language objects, closures, and objects built with S3, S4 or S7.
 Two values need it stated differently. An environment recorded by its
 contents comes back a new environment, which is the exception base R's
 own \code{serialize()} makes as well: what comes back binds the same names
@@ -109,8 +109,9 @@ was. A cycle rides the same numbering, since an environment is built
 and numbered before what it binds is read: an environment whose parent
 frame binds it back comes back bound that way. What stays refused,
 naming both ends of it, is a cycle closing through an object the
-extension protocol builds in one call, an \code{R6} instance among them,
-since a constructor cannot be handed an object that already exists.
+extension protocol builds in one call, an opted-in \code{R6} instance among
+them, since a constructor cannot be handed an object that already
+exists.
 
 A language object is a value rather than a handle, so it round-trips
 exactly and nothing about it is deparsed. A call, an expression and a
@@ -142,6 +143,16 @@ reaches a closure through the frame it closes over, where an argument
 the function was called with stays a promise whether or not it has been
 forced. A class that owns such a handle can still be persisted by
 writing a \code{\link[=json_state]{json_state()}} method for it.
+
+An \code{R6} instance is refused as well, for a reason one level up. What an
+\code{R6} class guarantees is what its methods say rather than what its
+bindings happen to hold, so those bindings are not a value the package
+can record on the class's behalf, and the refusal names the class and
+the method it wants. A class author who has decided the bindings are
+the state opts in with that method, and \code{\link[=r6_state]{r6_state()}} is the pair
+recording them. An \code{R6} class generator needs no method either way: it
+is recorded by the class it names, and comes back the object it was
+written from.
 }
 \examples{
 json_write_str(list(n = 1L, x = 2.5, missing = NA_character_))

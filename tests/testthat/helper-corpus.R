@@ -323,7 +323,7 @@ corpus_generator <- function(name) {
   get(name, envir = globalenv())
 }
 
-corpus_r6 <- function() {
+corpus_r6_optin <- function() {
   list(
     "r6/plain" = corpus_generator("CorpusR6Plain")$new(),
     "r6/base" = corpus_generator("CorpusR6Base")$new(2),
@@ -338,6 +338,10 @@ corpus_prepended_r6 <- function() {
   class(obj) <- c("corpus_tagged", class(obj))
 
   obj
+}
+
+corpus_no_method_r6 <- function() {
+  corpus_generator("CorpusR6Mute")$new()
 }
 
 corpus_local_r6_generator <- function() {
@@ -382,15 +386,24 @@ corpus_refused <- function() {
     "env/promise" = list(
       value = corpus_env_promise(), type = "promise", path = "x$bindings$lazy"
     ),
+    "r6/no-method" = list(
+      value = corpus_no_method_r6(), message = needs_method("CorpusR6Mute"),
+      path = "x"
+    ),
+    "r6/anonymous-class" = list(
+      value = corpus_generator("CorpusR6Anon")$new(),
+      message = "cannot write an instance of an anonymous R6 class", path = "x"
+    ),
+    "r6/nested-no-method" = list(
+      value = list(a = 1, b = list(obj = corpus_no_method_r6())),
+      message = needs_method("CorpusR6Mute"), path = "x$b$obj"
+    ),
     "r6/local-generator" = list(
       value = corpus_local_r6(), message = unnameable, path = "x"
     ),
     "r6/nested-local-generator" = list(
-      value = corpus_holder_r6(), message = unnameable, path = "x$public$inner"
-    ),
-    "r6/anonymous-generator" = list(
-      value = corpus_generator("CorpusR6Anon")$new(),
-      message = "no R6 generator for class `R6` in R_GlobalEnv", path = "x"
+      value = corpus_holder_r6(), message = unnameable,
+      path = "x$state$public$inner"
     ),
     "r6/ambiguous-generator" = list(
       value = corpus_generator("CorpusR6Amb2")$new(),
@@ -419,6 +432,12 @@ corpus_refused <- function() {
       ),
       path = "x$gen"
     )
+  )
+}
+
+needs_method <- function(class) {
+  paste0(
+    "an `R6` instance needs a `json_state()` method for class `", class, "`"
   )
 }
 
@@ -463,16 +482,58 @@ local_state_method <- function(class, state, revive = NULL,
                                env = parent.frame()) {
 
   names <- paste0("json_state.", class)
-  assign(names, state, envir = globalenv())
+  values <- list(state)
 
   if (!is.null(revive)) {
     names <- c(names, paste0("json_revive.", class))
-    assign(names[2L], revive, envir = globalenv())
+    values <- c(values, list(revive))
   }
 
-  withr::defer(rm(list = names, envir = globalenv()), envir = env)
+  for (i in seq_along(names)) {
+    local_global_binding(names[[i]], values[[i]], env)
+  }
 
   invisible(names)
+}
+
+# A method a test registers may shadow one the setup file already put in
+# place, so what is deferred is putting the old binding back rather than
+# removing the name.
+local_global_binding <- function(name, value, env) {
+
+  if (exists(name, envir = globalenv(), inherits = FALSE)) {
+    old <- get(name, envir = globalenv(), inherits = FALSE)
+    withr::defer(assign(name, old, envir = globalenv()), envir = env)
+  } else {
+    withr::defer(rm(list = name, envir = globalenv()), envir = env)
+  }
+
+  assign(name, value, envir = globalenv())
+
+  invisible(NULL)
+}
+
+r6_extension <- function(class, state) {
+  paste0('{"~x":{"class":', class, ',"state":', state, "}}")
+}
+
+r6_document <- function(class, package = '"R_GlobalEnv"', public = "null",
+                        private = "null") {
+  r6_extension(
+    class,
+    paste0(
+      '{"package":', package, ',"public":', public, ',"private":', private, "}"
+    )
+  )
+}
+
+local_r6_optin <- function(class, env = parent.frame()) {
+  local_state_method(
+    class,
+    function(x) r6_state(x),
+    function(class, state) r6_restore(class, state),
+    env = env
+  )
 }
 
 local_r6_class <- function(class, ..., env = parent.frame()) {
@@ -708,6 +769,8 @@ r6_shape_class <- function(spec, id, env = parent.frame()) {
 
     parent <- name
   }
+
+  local_r6_optin(name, env = env)
 
   gen
 }

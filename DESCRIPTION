@@ -13,7 +13,7 @@ Description: Writing an R value as JSON that a human can read, and reading
     emits ordinary JSON for ordinary values and annotates only what JSON
     cannot express, namely the distinction between integer and double,
     typed missing values, non-finite numbers, attributes, and objects from
-    the S3, S4, S7 and 'R6' systems. Foreign documents are read under the
+    the S3, S4 and S7 systems. Foreign documents are read under the
     same grammar, so files stay diffable, greppable and editable by hand.
 License: MIT + file LICENSE
 Copyright: The bundled 'yyjson' code in src/ is Copyright (c) 2020

@@ -223,38 +223,51 @@ S4 falls out too, since slots are attributes, with two riders — the S4 bit is 
 
 S7 needs exactly one special case. Properties are stored as attributes and come through the ordinary rule, but the `S7_class` attribute holds the class generator, which contains constructor closures. So the class name and package are recorded and looked up on read, rather than the class object being serialized. With that in place an S7 object round-trips directly, which removes the need for a hand-written record layer above it.
 
-R6 is rescuable because an R6 object is a generator plus state. Methods, the `self` / `private` / `super` plumbing and the enclosing environment all come from the generator; only the field values differ per instance.
-
-```json
-{"~r6": {"class": ["Derived", "Base", "R6"], "package": "somepkg",
-         "public":  {"n": 6, "tag": "t1"},
-         "private": {"extra": "e", "seed": 42}}}
-```
-
-Revival, verified end to end on a two-level class with private fields at both levels, an inherited method and an active binding:
-
-1. Find the generator. The expression `environmentName(parent.env(x$.__enclos_env__))` gives where the class was defined; scan that namespace for an `is.R6Class()` object whose `$classname` matches. Scanning is necessary rather than fussy, because the generator variable need not be named after the class — and for the same reason it can turn up two, which is an error rather than a coin toss. The recorded `class` is the instance's whole class vector, so the generator that answers has to declare the same chain, `c(gen$classname, ..., "R6")` walked through `get_inherit()`. A class prepended on the instance survives as the part of the vector no generator accounts for.
-2. Allocate without running `initialize`. Rebuild a twin generator from the original's `public_fields`, `public_methods`, `private_*`, `active`, `inherit` and `parent_env`, with a no-op `initialize` shadowing the real one — and the inherited one, which is what bites on subclasses — and `lock_objects = FALSE`.
-3. Populate and re-lock. Assign public fields into the object and private fields into `.__enclos_env__$private`, then call `lockEnvironment()` where the generator's `lock_objects` asks for it.
-
-The lock therefore comes from the generator rather than from the instance the document was written from. A lock a user placed on one object, or on a single binding inside it, is not recorded and does not come back: the `~r6` payload carries field values and says nothing about how they are bound.
-
-The generator settles the shape too. Where it locks its instances, recorded state it no longer declares has nowhere to go, so that state is dropped with a warning naming it rather than bound into an object no constructor could produce. The mirror case needs nothing, since a field the generator has gained since the document was written arrives at its default. Where instances take new bindings the recorded state is restored whole, because a field assigned to one by hand is state like any other.
-
-The generator itself is an environment too, and is recorded the way an S7 one is: by the class it names rather than by its contents, which is the `~r6` record without the state.
+An R6 generator is a name, and is recorded the way an S7 one is: by the class it declares rather than by its contents.
 
 ```json
 {"~r6class": {"class": ["Derived", "Base", "R6"], "package": "somepkg"}}
 ```
 
-Both halves have to be recoverable for the document to be readable, so a generator that names no class, or that was built inside a function, is refused where it is written. The same lookup runs on the way out as for an instance, which means it also catches a class vector no generator in that environment declares.
+The class has to be recoverable for the document to be readable, so a generator that names no class, or that was built inside a function, is refused where it is written. Finding it again means scanning the environment the class was defined in for an `is.R6Class()` object whose `$classname` matches, then checking that the chain it declares through `get_inherit()` is the one recorded. Scanning is necessary rather than fussy, because the generator variable need not be named after the class — and for the same reason it can turn up two, which is an error rather than a coin toss. That lookup runs on the way out as well as on the way in, so a class vector no generator in that environment declares is caught where it is written rather than where it is read.
+
+An R6 instance is a different question, and the answer is that this package does not have one to give. Every other type in scope has a value its own type system supplies: a vector is its data, an S3 object is a base type plus attributes, and an S4 object is its slots exactly as an S7 object is its properties, which is why `new("Pt", x = 1, y = 2)` is a complete description of one. An R6 object is defined instead by what its methods guarantee, and its private fields are private precisely because they are not part of that. Recording an instance as the bindings it happens to hold is therefore an assertion about the class that only the class can make, so writing one is refused, naming the class and the method that would settle it.
+
+```{r, error = TRUE}
+Counter <- R6::R6Class("Counter", public = list(n = 0))
+
+json_write_str(list(a = 1, b = Counter$new()))
+```
+
+Worth separating from what this resembles. Recording a constructor and the arguments it was called with is sound, because that mapping is the class's own public interface; reaching past `initialize` to reinstate private bindings is the opposite of the encapsulation the class exists to provide. So the mechanism is offered rather than assumed, as the `r6_state()` and `r6_restore()` pair a class author opts in with, and what it writes is an ordinary extension record rather than a tag of its own.
+
+```json
+{"~x": {"class": ["Derived", "Base", "R6"],
+        "state": {"package": "somepkg",
+                  "public":  {"n": 6, "tag": "t1"},
+                  "private": {"extra": "e", "seed": 42}}}}
+```
+
+Restoring one, verified end to end on a two-level class with private fields at both levels, an inherited method and an active binding:
+
+1. Find the generator, by the lookup above. The recorded `class` is the instance's whole class vector, so the generator that answers has to declare the same chain. A class prepended on the instance survives as the part of the vector no generator accounts for.
+2. Allocate without running `initialize`. Rebuild a twin generator from the original's `public_fields`, `public_methods`, `private_*`, `active`, `inherit` and `parent_env`, with a no-op `initialize` shadowing the real one — and the inherited one, which is what bites on subclasses — and `lock_objects = FALSE`.
+3. Populate and re-lock. Assign public fields into the object and private fields into `.__enclos_env__$private`, then call `lockEnvironment()` where the generator's `lock_objects` asks for it.
+
+The lock therefore comes from the generator rather than from the instance the document was written from. A lock a user placed on one object, or on a single binding inside it, is not recorded and does not come back: the payload carries field values and says nothing about how they are bound.
+
+The generator settles the shape too. Where it locks its instances, recorded state it no longer declares has nowhere to go, so that state is dropped with a warning naming it rather than bound into an object no constructor could produce. The mirror case needs nothing, since a field the generator has gained since the document was written arrives at its default. Where instances take new bindings the recorded state is restored whole, because a field assigned to one by hand is state like any other.
+
+Which is the argument for making this the author's call rather than the default, made from the inside: three paragraphs of behaviour that only the class knows the right answer to, and `vignette("r6")` walks through deciding it.
 
 An external pointer stays out. What the writer refuses, it refuses loudly, naming the path it stopped at.
 
-A non-portable R6 class is on the far side of that line too, one level up. With `portable = FALSE` the object environment is also the environment its methods close over, so it binds `self` and `private` beside the fields and the generator stops accounting for everything that is not state. An instance of one is refused where it is written, naming the class, since making the class portable or giving it a `json_state()` method is what changes the answer.
+A non-portable R6 class is on the far side of that line even for an author who has opted in. With `portable = FALSE` the object environment is also the environment its methods close over, so it binds `self` and `private` beside the fields and the generator stops accounting for everything that is not state. An instance of one is refused where it is written, naming the class, since making the class portable is what changes the answer.
 
 ```{r, error = TRUE}
 Bound <- R6::R6Class("Bound", portable = FALSE, public = list(n = 1))
+
+json_state.Bound <- function(x) r6_state(x)
 
 json_write_str(list(a = 1, b = Bound$new()))
 ```
@@ -366,7 +379,7 @@ Three pieces, and the third is what the first two are for:
 
 - **A reference table.** Every reference the walk has reached, keyed by its `SEXP`. Reaching one a second time numbers the first write with `~id` and writes `{"~ref": n}` in its place. The number is minted where the repeat happens rather than where the first write did, so a document holding no sharing carries no marker and reads byte for byte as it would have without any of this. Base R's own `serialize()` keeps such a table for environments, which is the axis this used to sit behind `saveRDS` on.
 - **Numbering before descending.** The reader creates an environment and numbers it before reading what it binds, which is where a reference back to it comes from. That is what turns a cycle from an error into a document: `function() {e <- new.env(); e}` returns an environment whose parent frame binds it back, and it now writes and comes back bound the same way. Attributes are read before contents for the same reason, since that is the order they were written in and a reference only ever points backwards.
-- **What is still refused.** A cycle closing through an object the extension protocol builds in one call — an `R6` instance, or any class with a `json_state()` method — since a constructor cannot be handed an object that already exists. The error names both ends of it. Sharing such an object is fine; only the cycle is not, which leaves the chromote shape out (`Chromote` holds `sessions`, each `ChromoteSession` holds `parent`), and both of those wrap a live browser process anyway.
+- **What is still refused.** A cycle closing through an object the extension protocol builds in one call — any class with a `json_state()` method, an opted-in `R6` one among them — since a constructor cannot be handed an object that already exists. The error names both ends of it. Sharing such an object is fine; only the cycle is not, which leaves the chromote shape out (`Chromote` holds `sessions`, each `ChromoteSession` holds `parent`), and both of those wrap a live browser process anyway.
 
 The cycle in that second bullet is not a corner case: it is what any function returning an environment it created produces.
 

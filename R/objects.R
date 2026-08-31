@@ -1,29 +1,18 @@
 #' @export
 json_state.R6 <- function(x) {
 
-  enclos <- x[[".__enclos_env__"]]
-
   classes <- class(x)
 
-  if (identical(enclos, x)) {
-    refuse(
-      "cannot write an instance of the non-portable R6 class `",
-      class_text(classes), "`"
-    )
+  # A method is registered on a class name, and an anonymous class has
+  # none to register one on, so pointing at the opt-in would be pointing
+  # at something the caller cannot write.
+  if (identical(classes, "R6")) {
+    refuse("cannot write an instance of an anonymous R6 class")
   }
 
-  package <- environmentName(parent.env(enclos))
-
-  methods <- r6_methods(r6_generator(classes, package))
-
-  tagged_state(
-    tag_r6,
-    list(
-      class = classes,
-      package = package,
-      public = env_state(x, methods[["public"]]),
-      private = env_state(enclos[["private"]], methods[["private"]])
-    )
+  refuse(
+    "an `R6` instance needs a `json_state()` method for class `",
+    classes[[1L]], "`"
   )
 }
 
@@ -52,6 +41,151 @@ json_state.S7_class <- function(x) {
   tagged_state(
     tag_s7, list(class = attr(x, "name"), package = attr(x, "package"))
   )
+}
+
+#' Record an `R6` instance as the bindings it holds
+#'
+#' An `R6` instance has no [json_state()] method of its own, because what
+#' an `R6` class guarantees is what its methods say rather than what its
+#' bindings happen to hold: a private field is private precisely because
+#' it is not part of that contract. Writing one is therefore refused,
+#' naming the class and the method it wants.
+#'
+#' A class author is the party who knows whether a field is stored or
+#' derived, whether `initialize` establishes an invariant, and whether a
+#' reference should be recorded as a key rather than a value. One who has
+#' made that judgement and wants the instance recorded as its bindings
+#' anyway opts in with one method each way:
+#'
+#' ```r
+#' json_state.MyClass <- function(x) r6_state(x)
+#' json_revive.MyClass <- function(class, state) r6_restore(class, state)
+#' ```
+#'
+#' The pair records the class's package alongside the public and private
+#' bindings an instance holds, leaving out anything the generator chain
+#' declares as a method and anything bound actively. On the way back the
+#' generator is found again by name, an instance is allocated from a twin
+#' of it whose `initialize` does nothing, and the recorded bindings are
+#' written into that.
+#'
+#' @section What the pair does not guarantee:
+#'
+#' The mechanism reaches past the interface the class offers, which is
+#' what makes it the author's call rather than the default. Four
+#' consequences are worth stating outright.
+#'
+#' Bindings are reinstated past `initialize`. The instance that comes back
+#' is filled from the document rather than constructed, so an invariant
+#' `initialize` establishes is not re-established and a resource it
+#' acquires is not acquired. A `finalize` method still registers on the
+#' object, and so runs against a handle it never held.
+#'
+#' The round trip is exact only while the class's shape is unchanged.
+#' Where the generator locks its instances, recorded state the class no
+#' longer declares has nowhere to go and is dropped with a warning naming
+#' it; a field the class has gained since arrives at its default. The lock
+#' itself comes from the generator, so one placed on a single object or
+#' binding by hand is not recorded and does not come back.
+#'
+#' A revived instance is a new environment, so the trip holds up to the
+#' equivalence `vignette("design")` states for an environment recorded by
+#' its contents rather than under `identical()`.
+#'
+#' Both halves need the generator to be findable by name in the
+#' environment the class was defined in, which is checked on the way out
+#' as well as on the way in. A class defined inside a function, one whose
+#' name finds two generators, and a non-portable class are all refused
+#' where they are written.
+#'
+#' @param x The `R6` instance whose bindings are to be recorded.
+#' @param class Empty object carrying the recorded class vector, which
+#'   [json_revive()] dispatches on.
+#' @param state Whatever `r6_state()` returned.
+#'
+#' @return The `r6_state()` function returns a list carrying `package`,
+#'   `public` and `private`, and `r6_restore()` the rebuilt instance.
+#'
+#' @examples
+#' Counter <- R6::R6Class("Counter",
+#'   public = list(
+#'     n = 0,
+#'     initialize = function(n = 0) self$n <- n,
+#'     bump = function() {
+#'       self$n <- self$n + 1
+#'       invisible(self)
+#'     }
+#'   )
+#' )
+#'
+#' json_state.Counter <- function(x) r6_state(x)
+#' json_revive.Counter <- function(class, state) r6_restore(class, state)
+#'
+#' counter <- Counter$new()$bump()$bump()
+#'
+#' json_read_str(json_write_str(counter))$n
+#'
+#' @export
+r6_state <- function(x) {
+
+  if (!inherits(x, "R6")) {
+    stop("`r6_state()` records an `R6` instance", call. = FALSE)
+  }
+
+  enclos <- x[[".__enclos_env__"]]
+
+  classes <- class(x)
+
+  if (identical(enclos, x)) {
+    refuse(
+      "cannot write an instance of the non-portable R6 class `",
+      class_text(classes), "`"
+    )
+  }
+
+  package <- environmentName(parent.env(enclos))
+
+  methods <- r6_methods(r6_generator(classes, package))
+
+  list(
+    package = package,
+    public = env_state(x, methods[["public"]]),
+    private = env_state(enclos[["private"]], methods[["private"]])
+  )
+}
+
+#' @rdname r6_state
+#' @export
+r6_restore <- function(class, state) {
+
+  if (!requireNamespace("R6", quietly = TRUE)) {
+    stop("the R6 package is needed to revive an R6 object", call. = FALSE)
+  }
+
+  check_r6_state(state, "an `r6_restore()` state")
+
+  classes <- class(class)
+
+  blueprint <- r6_blueprint(classes, state[["package"]])
+  obj <- r6_allocate(blueprint)
+  private <- obj[[".__enclos_env__"]][["private"]]
+  locked <- blueprint[["locked"]]
+
+  state <- drop_unbindable(state, classes, obj, private, locked)
+
+  fill_env(obj, state[["public"]])
+  fill_env(private, state[["private"]])
+
+  class(obj) <- classes
+
+  if (locked) {
+    if (is.environment(private)) {
+      lockEnvironment(private)
+    }
+    lockEnvironment(obj)
+  }
+
+  obj
 }
 
 env_state <- function(env, methods) {
@@ -98,65 +232,31 @@ declared_names <- function(chain, slot) {
 
 r6_class_revive <- function(state) {
 
-  check_r6_state(state, tag_r6_class)
+  check_r6_state(state, paste0("a `", tag_r6_class, "` payload"))
 
   r6_generator(state[["class"]], state[["package"]])
 }
 
-r6_revive <- function(state) {
-
-  if (!requireNamespace("R6", quietly = TRUE)) {
-    stop("the R6 package is needed to revive an R6 object", call. = FALSE)
-  }
-
-  check_r6_state(state, tag_r6)
-
-  classes <- state[["class"]]
-
-  blueprint <- r6_blueprint(classes, state[["package"]])
-  obj <- r6_allocate(blueprint)
-  private <- obj[[".__enclos_env__"]][["private"]]
-  locked <- blueprint[["locked"]]
-
-  state <- drop_unbindable(state, obj, private, locked)
-
-  fill_env(obj, state[["public"]])
-  fill_env(private, state[["private"]])
-
-  class(obj) <- classes
-
-  if (locked) {
-    if (is.environment(private)) {
-      lockEnvironment(private)
-    }
-    lockEnvironment(obj)
-  }
-
-  obj
-}
-
-check_r6_state <- function(state, tag) {
+check_r6_state <- function(state, what) {
 
   if (!is_named_list(state)) {
-    stop("a `", tag, "` payload has to be an object", call. = FALSE)
+    stop(what, " has to be an object", call. = FALSE)
   }
 
   if (is.null(state[["package"]])) {
-    stop("a `", tag, "` payload needs a `package` key", call. = FALSE)
+    stop(what, " needs a `package` key", call. = FALSE)
   }
 
   if (!is_one_string(state[["package"]])) {
     stop(
-      "the `package` key of a `", tag, "` payload has to be one string",
-      call. = FALSE
+      "the `package` key of ", what, " has to be one string", call. = FALSE
     )
   }
 
   for (key in c("public", "private")) {
     if (!is.null(state[[key]]) && !is_named_list(state[[key]])) {
       stop(
-        "the `", key, "` key of a `", tag, "` payload has to be an object",
-        call. = FALSE
+        "the `", key, "` key of ", what, " has to be an object", call. = FALSE
       )
     }
   }
@@ -216,7 +316,7 @@ find_r6_generator <- function(class, package) {
   )
 }
 
-drop_unbindable <- function(state, public, private, locked) {
+drop_unbindable <- function(state, classes, public, private, locked) {
 
   keep_public <- bindable_names(state[["public"]], public, locked)
   keep_private <- bindable_names(state[["private"]], private, locked)
@@ -228,7 +328,7 @@ drop_unbindable <- function(state, public, private, locked) {
 
   if (length(gone) > 0L) {
     warning(
-      "the `", class_text(state[["class"]]), "` class no longer declares ",
+      "the `", class_text(classes), "` class no longer declares ",
       "state the document records, so it is dropped rather than written ",
       "into the instance:", paste0("\n  `", gone, "`", collapse = ""),
       call. = FALSE
