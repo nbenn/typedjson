@@ -554,3 +554,10 @@ test_that("a state without a revive method says so", {
 
   expect_error(json_read_str(doc), "json_revive")
 })
+test_that("every R6 class shape settles or names its refusal", {
+
+  grid <- r6_shape_grid()
+
+  expect_length(grid, 815L)
+  expect_identical(r6_shape_failures(grid), character())
+})
