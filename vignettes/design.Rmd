@@ -12,7 +12,7 @@ library(typedjson)
 
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
-show_documents <- function(...) {
+show_documents <- function(..., typed = TRUE) {
 
   exprs <- as.list(substitute(list(...)))[-1L]
   values <- lapply(exprs, eval, envir = parent.frame())
@@ -20,7 +20,10 @@ show_documents <- function(...) {
   knitr::kable(
     data.frame(
       `R value` = sprintf("`%s`", vapply(exprs, deparse1, character(1L))),
-      Document = sprintf("`%s`", vapply(values, json_write_str, character(1L))),
+      Document = sprintf(
+        "`%s`",
+        vapply(values, json_write_str, character(1L), typed = typed)
+      ),
       check.names = FALSE
     ),
     row.names = FALSE
@@ -95,6 +98,30 @@ show_documents(TRUE, 1L, list(1, 2))
 ```
 
 A document is UTF-8, and so is every string that goes into one. A string R has declared as UTF-8 or latin1 is converted from what it declares; one it has not declared is taken as the bytes it holds, rather than translated through the locale, so the same value writes the same document on every machine. Undeclared bytes that are not valid UTF-8 have no reading to fall back on and are refused where they sit, naming the path.
+
+### Plain output
+
+The annotations are worth their bytes only where the document describes the value. Where it has to satisfy a schema someone else wrote, they are noise, and `typed = FALSE` leaves them out: attributes and the S4 bit are dropped, and what remains is the two container rules and the number lexemes.
+
+One distinction survives, and it is the one a naive implementation gets wrong. Shape requirements run both ways inside a single document — JSON Schema wants a scalar at `additionalProperties` and an array at `required` at length one as much as at length three — so unboxing everything breaks the one and unboxing nothing breaks the other. No encoder can choose by inspecting the value, because at length one a scalar and a one-element array are the same R object. The distinction already lives in the R value, where `I("x")` differs from `c("a", "b")` by more than length, so plain mode renders it rather than importing a policy for it: a length-one vector is a scalar unless it is `AsIs`, in which case it keeps its brackets.
+
+```{r, echo = FALSE}
+show_documents(list(required = I("x"), additionalProperties = FALSE),
+               typed = FALSE)
+```
+
+That is the whole of the configuration, and the rest follows from leaving annotations out. Boxing an array element goes with them, since what it was carrying is the difference between `list(1, 2)` and `c(1, 2)`, which is a fact about the value rather than about the schema. A name is a key only where it already was one, which is a list rather than a named vector, since names on a vector ride the attribute rule and attributes are dropped. Escaping goes too, because the consumer asked for the name it asked for — which is the one place a plain document stops being one this reader takes back, and it stops for the reason any foreign document spelling an unknown tag does.
+
+Nothing is written that the value is not. A missing value becomes `null`, which is what JSON spells absence with, and everything the annotations were the only way to write is refused where it sits, naming the path.
+
+```{r, error = TRUE}
+json_write_str(list(a = 1, at = quote(f(x))), typed = FALSE)
+json_write_str(list(ratio = Inf), typed = FALSE)
+```
+
+Refusing rather than writing `null` is the same position taken everywhere else here, and the one divergence from `TypedJSON.jl` that costs the most to get wrong: it converts functions, IO handles and pointers to `null` "to avoid raising errors", which is silent corruption wearing a convenience.
+
+The reader is untouched. A plain document is a foreign document and reads under the grammar already there, so this adds no tag and no second mode on that side.
 
 ### Values JSON cannot carry
 
@@ -436,6 +463,8 @@ json_write(x, path)        json_read(path)
 json_write_str(x)          json_read_str(txt)
 json_state(x)              json_revive(class, state)     # extension protocol
 ```
+
+Both writers take `pretty`, which indents, and `typed`, which at `FALSE` drops the annotations for a consumer that brings its own schema.
 
 ## Extension protocol
 

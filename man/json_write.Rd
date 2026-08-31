@@ -11,9 +11,9 @@ json_read(path)
 
 json_read_str(txt)
 
-json_write(x, path, pretty = TRUE)
+json_write(x, path, pretty = TRUE, typed = TRUE)
 
-json_write_str(x, pretty = FALSE)
+json_write_str(x, pretty = FALSE, typed = TRUE)
 }
 \arguments{
 \item{path}{Path to write to or read from.}
@@ -25,6 +25,10 @@ json_write_str(x, pretty = FALSE)
 \item{pretty}{Whether to indent the output. Files default to indented,
 because a persistence format is read in diffs; strings default to
 compact.}
+
+\item{typed}{Whether to record what JSON cannot express. The default
+writes the annotated form this package reads back unchanged; \code{FALSE}
+writes plain JSON for a consumer that brings its own schema.}
 }
 \value{
 The \code{json_write()} function returns \code{path} invisibly and
@@ -74,6 +78,34 @@ document root, as an object value, as an attribute and as the payload
 of a tagged object; only as an array element does it keep its brackets,
 because there the brackets are the sole thing separating \code{list(1, 2)}
 from \code{c(1, 2)}.
+
+Some JSON is written for a consumer that already defines the shape it
+expects. There R's types are noise, since the document has to satisfy an
+external schema rather than describe the value it came from, and the
+\code{typed} flag says so. Plain mode is this format with the annotations left
+out: the two container rules and the number lexemes stay, attributes and
+the S4 bit are dropped, and a length-one vector renders as a scalar
+unless it is \code{AsIs}, in which case it keeps its brackets. That last rule
+is not a setting, because shape requirements run both ways inside one
+document — a schema wants a scalar at \code{additionalProperties} and an array
+at \code{required} whatever its length — and no encoder can tell the two apart
+by looking, since at length one a scalar and a one-element array are the
+same R object. The distinction already lives in the value, where \code{I("x")}
+differs from \code{"x"}, so plain mode renders it rather than importing a
+policy for it.
+
+Nothing is written in plain mode that the value is not. A missing value
+becomes \code{null}, which is what JSON spells absence with, and everything the
+annotations were the only way to write is refused where it sits, naming
+the path: complex and raw values, the non-finite doubles, symbols, calls,
+closures and environments. What plain mode does not do is escape, since
+the consumer asked for the name and the string it asked for, so a value
+carrying a leading \code{~} of its own reaches the document bare and is read
+back the way any foreign document carrying one is: a key spelling a tag
+this reader does not know is refused, and a string spelling one it does
+know comes back as that tag. Reading a plain document returns what the
+document says rather than the value that wrote it, which is what the
+default mode is for.
 
 Text is carried as UTF-8. A string R has declared as UTF-8 or latin1
 is converted from what it declares, and one it has not declared is
@@ -165,5 +197,8 @@ json_write_str(stats::median)
 
 x <- c(a = 1, b = Inf)
 identical(json_read_str(json_write_str(x)), x)
+
+json_write_str(list(required = I("x"), additionalProperties = FALSE),
+               typed = FALSE)
 
 }
