@@ -218,8 +218,18 @@ corpus_prepended_r6 <- function() {
   obj
 }
 
+corpus_local_r6_generator <- function() {
+  (function() R6::R6Class("CorpusR6Local", public = list(v = 1)))()
+}
+
 corpus_local_r6 <- function() {
-  (function() R6::R6Class("CorpusR6Local", public = list(v = 1)))()$new()
+  corpus_local_r6_generator()$new()
+}
+
+corpus_shadowed_r6_generator <- function() {
+  R6::R6Class(
+    "CorpusR6Plain", public = list(n = 1), parent_env = globalenv()
+  )
 }
 
 corpus_holder_r6 <- function() {
@@ -288,6 +298,21 @@ corpus_refused <- function() {
     "r6/non-portable-bare" = list(
       value = corpus_generator("CorpusR6BoundBare")$new(),
       message = non_portable("CorpusR6BoundBare"), path = "x"
+    ),
+    "r6/generator-anonymous" = list(
+      value = corpus_generator("CorpusR6Anon"),
+      message = "cannot write an R6 generator that names no class", path = "x"
+    ),
+    "r6/generator-local" = list(
+      value = corpus_local_r6_generator(), message = unnameable, path = "x"
+    ),
+    "r6/generator-shadowed" = list(
+      value = list(gen = corpus_shadowed_r6_generator()),
+      message = paste0(
+        "the class `CorpusR6Plain/R6` names a different generator in ",
+        "R_GlobalEnv"
+      ),
+      path = "x$gen"
     )
   )
 }
@@ -452,11 +477,16 @@ corpus_positions <- function(x) {
     deep = list(a = list(list(b = x)))
   )
 
-  if (!is.null(x)) {
-    out[["attribute"]] <- structure(1L, meta = x)
+  if (is.null(x)) {
+    return(out)
   }
 
-  if (!is.null(x) && !is.symbol(x)) {
+  out[["attribute"]] <- structure(1L, meta = x)
+
+  # A class attribute on a reference value would land on the corpus entry
+  # itself rather than on a copy, and a symbol takes no attribute at all,
+  # so that position exists only for a value that can carry one.
+  if (!is.environment(x) && !is.symbol(x)) {
     out[["tagged_payload"]] <- structure(x, class = "corpus_wrapper")
   }
 

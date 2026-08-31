@@ -37,10 +37,10 @@
 #' from `c(1, 2)`.
 #'
 #' Values that are handles rather than data stay out: environments (other
-#' than the ones an `R6` generator can rebuild), closures and external
-#' pointers are refused rather than silently written as something else. A
-#' class that owns such a handle can still be persisted by writing a
-#' [json_state()] method for it.
+#' than an `R6` generator and the instances it can rebuild), closures and
+#' external pointers are refused rather than silently written as something
+#' else. A class that owns such a handle can still be persisted by writing
+#' a [json_state()] method for it.
 #'
 #' A language object is a value rather than a handle, so it round-trips
 #' exactly and nothing about it is deparsed. A call, an expression and a

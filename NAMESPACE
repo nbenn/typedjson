@@ -2,6 +2,7 @@
 
 S3method(json_revive,default)
 S3method(json_state,R6)
+S3method(json_state,R6ClassGenerator)
 S3method(json_state,S7_class)
 S3method(json_state,default)
 export(json_read)

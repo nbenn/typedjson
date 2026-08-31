@@ -248,7 +248,9 @@ yyjson_mut_val *Writer::emit_state(SEXP x) {
     fail("a `json_state()` method returned something other than a list");
   }
 
-  bool reference = (TYPEOF(x) == ENVSXP);
+  const char *key = CHAR(STRING_ELT(VECTOR_ELT(state, 0), 0));
+
+  bool reference = (TYPEOF(x) == ENVSXP) && !records_by_name(key);
   if (reference) {
     for (size_t i = 0; i < refs_.size(); ++i) {
       if (refs_[i].first == x) {
@@ -261,8 +263,6 @@ yyjson_mut_val *Writer::emit_state(SEXP x) {
     refs_.push_back(std::make_pair(x, at));
   }
 
-  SEXP tag = VECTOR_ELT(state, 0);
-  const char *key = CHAR(STRING_ELT(tag, 0));
   yyjson_mut_val *out = yyjson_mut_obj(doc_);
   yyjson_mut_obj_add(out, yyjson_mut_strncpy(doc_, key, std::strlen(key)),
                      emit(VECTOR_ELT(state, 1), false));
