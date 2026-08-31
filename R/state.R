@@ -24,7 +24,12 @@ tag_ext <- "~x"
 #' Methods for the class generators of both `R6` and S7 ship with the
 #' package and follow the same protocol. An `R6` instance has no method,
 #' and writing one is refused rather than guessed at; see [r6_state()] for
-#' why, and for the pair a class author opts in with.
+#' why, and for the pair a class author opts in with. A reference class
+#' instance is refused on the same grounds. A method on the concrete
+#' class settles it, as does one on any class between that and
+#' `envRefClass`, which is where the refusal itself sits. The generator
+#' that makes one is refused outright, since a walk into it reaches the
+#' internals of the `methods` package rather than the class.
 #'
 #' @param x Object whose state is to be recorded.
 #' @param class Empty object carrying the recorded class vector, which
