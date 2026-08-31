@@ -152,15 +152,22 @@ test_that("a document for an R6 object writes back to itself", {
   expect_identical(drifting, character())
 })
 
-test_that("a field holding a closure is refused rather than dropped", {
+test_that("a field holding a closure is written rather than refused", {
+
+  obj <- CorpusR6Holder$new()
+  obj$inner <- mean
+
+  expect_identical(json_read_str(json_write_str(obj))$inner, mean)
+})
+
+test_that("a callback a method built captures the object it sits in", {
 
   expect_error(
     json_write_str(CorpusR6PublicHook$new()),
-    "type 'closure' at `x$public$f`", fixed = TRUE
+    "itself at `x$public$f$environment$parent$bindings$self`", fixed = TRUE
   )
   expect_error(
-    json_write_str(CorpusR6PrivateHook$new()),
-    "type 'closure' at `x$private$fn`", fixed = TRUE
+    json_write_str(CorpusR6PrivateHook$new()), "cannot write a reference cycle"
   )
 })
 

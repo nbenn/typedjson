@@ -30,7 +30,9 @@ json_read_str <- function(txt) {
 
 json_read_bytes <- function(bytes) {
   generator_cache$scope(
-    typedjson_read_(bytes, list(revive = reader_revive, env = reader_env))
+    typedjson_read_(
+      bytes, list(revive = reader_revive, env = reader_env, fun = reader_fun)
+    )
   )
 }
 

@@ -235,7 +235,8 @@ corpus_env_contents <- function() {
       corpus_env(n = 1L, parent = baseenv()),
       class = "corpus_class", meta = c(a = 1L)
     ),
-    "env/contents/dotted" = corpus_env(.hidden = 1L, visible = 2L)
+    "env/contents/dotted" = corpus_env(.hidden = 1L, visible = 2L),
+    "env/contents/closure" = corpus_env(f = mean)
   )
 }
 
@@ -344,24 +345,6 @@ corpus_refused <- function() {
     ),
     "env/promise" = list(
       value = corpus_env_promise(), type = "promise", path = "x$bindings$lazy"
-    ),
-    "env/closure" = list(
-      value = corpus_env(f = mean), type = "closure", path = "x$bindings$f"
-    ),
-    "env/closure-in-list" = list(
-      value = list(a = 1, e = corpus_env(f = mean)), type = "closure",
-      path = "x$e$bindings$f"
-    ),
-    "handle/closure" = list(
-      value = list(f = mean), type = "closure", path = "x$f"
-    ),
-    "r6/public-closure" = list(
-      value = corpus_generator("CorpusR6PublicHook")$new(),
-      type = "closure", path = "x$public$f"
-    ),
-    "r6/private-closure" = list(
-      value = corpus_generator("CorpusR6PrivateHook")$new(),
-      type = "closure", path = "x$private$fn"
     ),
     "r6/local-generator" = list(
       value = corpus_local_r6(), message = unnameable, path = "x"
@@ -590,6 +573,11 @@ r6_shape_grid <- function() {
 
 r6_shape_noop <- function() NULL
 
+# The test environment binds every helper defined in this file, so a hook
+# enclosed in it would be written as a reference cycle rather than as the
+# field the shape places.
+r6_shape_hook <- local(function() NULL, globalenv())
+
 r6_shape_binding <- function(value) {
   if (missing(value)) 1 else stop("read-only")
 }
@@ -702,7 +690,7 @@ r6_shape_instance <- function(spec, id, env = parent.frame()) {
   obj <- suppressMessages(r6_shape_class(spec, id, env)$new())
 
   if (!identical(spec[["hook"]], "none")) {
-    assign("hook", r6_shape_noop, envir = r6_shape_scope(obj, spec[["hook"]]))
+    assign("hook", r6_shape_hook, envir = r6_shape_scope(obj, spec[["hook"]]))
   }
 
   if (spec[["undeclared"]] > 0L) {
@@ -716,17 +704,11 @@ r6_shape_instance <- function(spec, id, env = parent.frame()) {
 
 r6_shape_refusal <- function(spec, classes) {
 
-  if (!spec[["portable"]]) {
-    return(paste0(non_portable(classes), " at `x`"))
-  }
-
-  if (identical(spec[["hook"]], "none")) {
+  if (spec[["portable"]]) {
     return(NA_character_)
   }
 
-  sprintf(
-    "cannot write a value of type 'closure' at `x$%s$hook`", spec[["hook"]]
-  )
+  paste0(non_portable(classes), " at `x`")
 }
 
 r6_shape_surface <- function(obj) {
@@ -895,9 +877,10 @@ corpus_positions <- function(x) {
   out[["attribute"]] <- structure(1L, meta = x)
 
   # A class attribute on a reference value would land on the corpus entry
-  # itself rather than on a copy, and a symbol takes no attribute at all,
-  # so that position exists only for a value that can carry one.
-  if (!is.environment(x) && !is.symbol(x)) {
+  # itself rather than on a copy, a symbol takes no attribute at all, and a
+  # primitive is the one object every other reference to it shares, so that
+  # position exists only for a value that can carry one.
+  if (!is.environment(x) && !is.symbol(x) && !is.primitive(x)) {
     out[["tagged_payload"]] <- structure(x, class = "corpus_wrapper")
   }
 
@@ -937,6 +920,63 @@ corpus_language <- function() {
   )
 }
 
+corpus_closure <- function(text, env = globalenv()) {
+
+  fun <- eval(str2lang(text))
+  environment(fun) <- env
+
+  fun
+}
+
+corpus_closures_local <- function() {
+  list(
+    "closure/local/counter" = corpus_closure(
+      "function() { i <- 0; function() i }"
+    )(),
+    "closure/local/nested-frame" = corpus_closure(
+      "function() { a <- 1; (function() { b <- 2; function() a + b })() }"
+    )(),
+    "closure/local/holding-closure" = corpus_closure(
+      "function() { f <- mean; function(x) f(x) }"
+    )()
+  )
+}
+
+corpus_closures <- function() {
+  list(
+    "closure/global" = corpus_closure("function(x) x + 1"),
+    "closure/base" = corpus_closure("function(x) x", baseenv()),
+    "closure/empty" = corpus_closure("function(x) x", emptyenv()),
+    "closure/namespace" = corpus_closure(
+      "function(x) x", asNamespace("stats")
+    ),
+    "closure/package" = corpus_closure(
+      "function(x) x", as.environment("package:stats")
+    ),
+    "closure/imports" = corpus_closure(
+      "function(x) x", parent.env(asNamespace("stats"))
+    ),
+    "closure/no-formals" = corpus_closure("function() NULL"),
+    "closure/constant-body" = corpus_closure("function() 1L"),
+    "closure/brace-body" = corpus_closure("function(x) { y <- x; y }"),
+    "closure/defaults" = corpus_closure("function(x, y = 2, z = x + y) z"),
+    "closure/dots" = corpus_closure("function(...) list(...)"),
+    "closure/tilde-formal" = corpus_closure("function(`~t`) `~t`"),
+    "closure/nested" = corpus_closure("function(x) function(y) x + y"),
+    "closure/attributes" = structure(
+      corpus_closure("function(x) x"), class = "corpus_class", meta = 1L
+    ),
+    "closure/compiled" = compiler::cmpfun(
+      corpus_closure("function(x) x + 1")
+    ),
+    "closure/declared" = mean,
+    "primitive/builtin" = sum,
+    "primitive/special" = `if`,
+    "primitive/extract" = `[[`,
+    "primitive/operator" = `+`
+  )
+}
+
 corpus <- c(corpus_atomic(), corpus_edges(), corpus_envs(), corpus_payloads(),
             corpus_shapes(), corpus_lists(), corpus_language(),
-            list("payload/blockr-board" = corpus_board))
+            corpus_closures(), list("payload/blockr-board" = corpus_board))
