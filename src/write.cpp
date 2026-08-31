@@ -40,9 +40,9 @@ bool is_as_is(const std::vector<Attrib> &attrs) {
 
 // Plain mode is typed mode with the annotations left out, so what the tags
 // were the only way to write has nothing left to render it. What stays is
-// the list and the four atomic types JSON has a lexeme for; the S4 bit and
-// every attribute are dropped like any other annotation, so a base type
-// wearing one still writes its data.
+// the list and the four atomic types JSON has a lexeme for; the S4 bit is
+// dropped like any other annotation, so a base type wearing one still
+// writes its data.
 bool has_plain_form(SEXP x) {
   switch (TYPEOF(x)) {
     case LGLSXP:
@@ -373,12 +373,18 @@ yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
 }
 
 // A document written for a consumer that brings its own schema has to satisfy
-// that schema rather than describe the value, so the annotations go and the
-// attributes with them. What is left is the two container rules, the number
-// lexemes and one distinction the R value already carries: `I("x")` keeps its
-// brackets where `"x"` loses them, since at length one nothing else separates
-// an array from a scalar. A value the annotations were the only way to write
-// is refused where it sits rather than written as something it is not.
+// that schema rather than describe the value, so the annotations go and with
+// them every attribute but the two the document cannot be written without.
+// JSON puts two questions to every value that the container rules leave open,
+// and these are the attributes that answer them: the `names` of a list decide
+// object against array, and the `AsIs` marker decides whether a length-one
+// vector keeps its brackets, since at length one nothing else separates an
+// array from a scalar. Nothing else is asked anything, so `dim` and `levels`
+// go the way of the annotations and so do the names of an atomic vector,
+// which is an array whatever its elements are called. Nothing walks into an
+// attribute either, which is what drops a handle only reachable through one.
+// A value the annotations were the only way to write is refused where it sits
+// rather than written as something it is not.
 yyjson_mut_val *Writer::emit_untyped(SEXP x) {
 
   if (!has_plain_form(x)) {

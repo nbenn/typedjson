@@ -101,7 +101,7 @@ A document is UTF-8, and so is every string that goes into one. A string R has d
 
 ### Plain output
 
-The annotations are worth their bytes only where the document describes the value. Where it has to satisfy a schema someone else wrote, they are noise, and `typed = FALSE` leaves them out: attributes and the S4 bit are dropped, and what remains is the two container rules and the number lexemes.
+The annotations are worth their bytes only where the document describes the value. Where it has to satisfy a schema someone else wrote, they are noise, and `typed = FALSE` leaves them out: the S4 bit is dropped and nearly every attribute with it, and what remains is the two container rules and the number lexemes.
 
 One distinction survives, and it is the one a naive implementation gets wrong. Shape requirements run both ways inside a single document — JSON Schema wants a scalar at `additionalProperties` and an array at `required` at length one as much as at length three — so unboxing everything breaks the one and unboxing nothing breaks the other. No encoder can choose by inspecting the value, because at length one a scalar and a one-element array are the same R object. The distinction already lives in the R value, where `I("x")` differs from `c("a", "b")` by more than length, so plain mode renders it rather than importing a policy for it: a length-one vector is a scalar unless it is `AsIs`, in which case it keeps its brackets.
 
@@ -110,7 +110,18 @@ show_documents(list(required = I("x"), additionalProperties = FALSE),
                typed = FALSE)
 ```
 
-That is the whole of the configuration, and the rest follows from leaving annotations out. Boxing an array element goes with them, since what it was carrying is the difference between `list(1, 2)` and `c(1, 2)`, which is a fact about the value rather than about the schema. A name is a key only where it already was one, which is a list rather than a named vector, since names on a vector ride the attribute rule and attributes are dropped. Escaping goes too, because the consumer asked for the name it asked for — which is the one place a plain document stops being one this reader takes back, and it stops for the reason any foreign document spelling an unknown tag does.
+That is the whole of the configuration, and the rest follows from leaving annotations out. Boxing an array element goes with them, since what it was carrying is the difference between `list(1, 2)` and `c(1, 2)`, which is a fact about the value rather than about the schema. Escaping goes too, because the consumer asked for the name it asked for — which is the one place a plain document stops being one this reader takes back, and it stops for the reason any foreign document spelling an unknown tag does.
+
+#### Which attributes survive
+
+Two attributes are read on this path, so "attributes are dropped" is the wrong way to say what happens to them. The rule that holds is narrower and predicts more. JSON puts two questions to every value that the container rules leave open — object or array, and at length one scalar or array — and answering them is the only thing plain mode reads an attribute for: the `names` of a list settle the first, the `AsIs` marker settles the second. Nothing else is asked anything.
+
+```{r, echo = FALSE}
+show_documents(list(a = I("x"), b = "y"), c(a = 1, b = 2), matrix(1:4, 2),
+               factor("b", levels = c("a", "b")), typed = FALSE)
+```
+
+Read that way, the rows above are one rule rather than four. A name is a key only where it was already answering the first question, which is a list rather than a named vector, since an atomic vector is an array whatever its elements are called. A `dim` answers neither, since a vector is a flat array with one or without one, so a matrix flattens instead of nesting — the nested document is what `list(c(1, 3), c(2, 4))` writes, and that is a different value under the container rules rather than the same one indented. And `levels`, `tzone`, `units` and a class naming a type carry meaning rather than shape, which is a question the schema has already answered, so a factor writes its codes and a `Date` its number.
 
 Nothing is written that the value is not. A missing value becomes `null`, which is what JSON spells absence with, and everything the annotations were the only way to write is refused where it sits, naming the path.
 
@@ -120,6 +131,35 @@ json_write_str(list(ratio = Inf), typed = FALSE)
 ```
 
 Refusing rather than writing `null` is the same position taken everywhere else here, and the one divergence from `TypedJSON.jl` that costs the most to get wrong: it converts functions, IO handles and pointers to `null` "to avoid raising errors", which is silent corruption wearing a convenience.
+
+#### What plain mode writes that the default refuses
+
+Two consequences run the other way from everything else on this page, and both follow from the rule above rather than qualifying it. Attributes are not walked, so a handle reachable only through one is dropped along with it. A connection is the case `vignette("handles")` opens on: an integer slot wearing an external pointer, refused by the default because the integer means nothing in the session that reads it back.
+
+```{r, error = TRUE}
+con <- file(file.path(tempdir(), "events.log"))
+
+json_write_str(con)
+json_write_str(con, typed = FALSE)
+```
+
+```{r, include = FALSE}
+close(con)
+```
+
+The same pointer at value position is still refused here, naming the path, so the two positions disagree. That is the intended reading rather than a gap: the argument for refusing is that a revived integer indexes whatever connection occupies the slot next, and plain mode has no revival step to make that mistake in. A document it writes is read back as a bare number.
+
+Nor is a `json_state()` method consulted, since the hook sits on the typed path, below the point where plain mode has already returned.
+
+```{r}
+json_state.account <- function(x) list(user = x$user)
+acct <- structure(list(user = "nb", token = "s3cret"), class = "account")
+
+cat(json_write_str(acct))
+cat(json_write_str(acct, typed = FALSE))
+```
+
+A method says how to persist a value, and plain mode is not persistence, so this is the same line the rest of the section draws. It is worth stating anyway, because the guarantee in `vignette("handles")` is that a method has no privileges, and this is the direction that phrase does not cover: a method written to keep a credential out of a document is not asked, and does not stand between `typed = FALSE` and the field it was hiding.
 
 The reader is untouched. A plain document is a foreign document and reads under the grammar already there, so this adds no tag and no second mode on that side.
 
