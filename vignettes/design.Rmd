@@ -267,9 +267,11 @@ An environment is written on a ladder, and only the bottom rung writes contents.
 show_documents(globalenv(), baseenv(), as.environment("package:stats"))
 ```
 
-A rung is a rung only where the name resolves back to the same object, which is the rule the `R6` generator lookup already runs on the way out. That closes the one hole base R leaves open here: `attr(e, "name") <- "package:stats"` on an environment of your own makes `R_IsPackageEnv()` say yes, and this writer still records the environment by its contents and the name as the ordinary attribute it is.
+The name itself comes from `environmentName()`, which is base R's own spelling of that ladder and answers for every rung above, so a rung base adds is a rung this format gains. What is added on top is a filter: a rung is a rung only where the name resolves *back* to the same object, which is the rule the `R6` generator lookup already runs on the way out. That closes the one hole base leaves open here, since `attr(e, "name") <- "package:stats"` on an environment of your own makes both `R_IsPackageEnv()` and `environmentName()` say yes. Resolving on the way out also never loads a package, because the name it is resolving may be one a value of your own made up.
 
 Everything else is written by what it binds, with the parent written by the same rule, so the walk terminates at a named rung rather than running to `emptyenv()` through everything in between. That is what keeps a document small: an environment under `.GlobalEnv` records the marker rather than your workspace.
+
+Bindings are ordered by their bytes rather than by `ls()`, whose collation is a locale setting — `c("B", "a")` sorts one way under `C` and the other under `en_US`, and one environment writing as two documents on two machines is the opposite of diffable.
 
 ```{r}
 counter <- new.env(parent = asNamespace("stats"))

@@ -32,6 +32,42 @@ test_that("a rung is a rung only where its name resolves back to it", {
   expect_env_equivalent(json_read_str(doc), liar)
 })
 
+test_that("a name attribute that is not a name is not a rung", {
+
+  for (value in list(42, c("a", "b"), NA_character_, TRUE, "")) {
+
+    env <- new.env(parent = emptyenv())
+    attr(env, "name") <- value
+
+    expect_match(json_write_str(env), '"~v":{"parent"', fixed = TRUE)
+    expect_env_equivalent(json_read_str(json_write_str(env)), env)
+  }
+})
+
+test_that("writing an environment loads nothing", {
+
+  env <- new.env(parent = emptyenv())
+  attr(env, "name") <- "jsonlite"
+
+  loaded <- loadedNamespaces()
+
+  expect_match(json_write_str(env), '"~v":{"parent"', fixed = TRUE)
+  expect_identical(setdiff(loadedNamespaces(), loaded), character())
+})
+
+test_that("the order of bindings does not depend on the locale", {
+
+  env <- new.env(parent = emptyenv())
+  assign("B", 1L, envir = env)
+  assign("a", 2L, envir = env)
+  assign("Z", 3L, envir = env)
+
+  expect_identical(
+    json_write_str(env), withr::with_collate("C", json_write_str(env))
+  )
+  expect_match(json_write_str(env), '{"B":1,"Z":3,"a":2}', fixed = TRUE)
+})
+
 test_that("an environment comes back equivalent rather than identical", {
 
   values <- corpus_env_contents()

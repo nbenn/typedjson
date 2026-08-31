@@ -1,16 +1,22 @@
 writer_env <- function(x) {
 
-  name <- env_name(x)
+  name <- environmentName(x)
 
-  if (is.null(name)) {
+  if (!is_one_string(name) || !nzchar(name)) {
     return(NULL)
   }
 
-  if (isNamespace(x)) {
-    return(list(name = name, version = unname(getNamespaceVersion(x))))
+  version <- if (isNamespace(x)) unname(getNamespaceVersion(x))
+
+  if (!identical(x, named_env(name, version))) {
+    return(NULL)
   }
 
-  list(name = name)
+  if (is.null(version)) {
+    return(list(name = name))
+  }
+
+  list(name = name, version = version)
 }
 
 reader_env <- function(state) {
@@ -26,45 +32,10 @@ reader_env <- function(state) {
   env_reference(state[["name"]], state[["version"]])
 }
 
-env_name <- function(env) {
-
-  if (identical(env, globalenv())) {
-    return("R_GlobalEnv")
-  }
-
-  if (identical(env, emptyenv())) {
-    return("R_EmptyEnv")
-  }
-
-  if (identical(env, baseenv())) {
-    return("base")
-  }
-
-  if (isNamespace(env)) {
-    return(unname(getNamespaceName(env)))
-  }
-
-  name <- attr(env, "name")
-
-  if (!is_one_string(name)) {
-    return(NULL)
-  }
-
-  if (!startsWith(name, "package:") && !startsWith(name, "imports:")) {
-    return(NULL)
-  }
-
-  if (!identical(env, named_env(name))) {
-    return(NULL)
-  }
-
-  name
-}
-
-named_env <- function(name, version = NULL) {
+named_env <- function(name, version = NULL, load = FALSE) {
 
   if (!is.null(version)) {
-    return(namespace_env(name))
+    return(namespace_env(name, load))
   }
 
   if (identical(name, "R_GlobalEnv")) {
@@ -90,7 +61,7 @@ named_env <- function(name, version = NULL) {
 
   if (startsWith(name, "imports:")) {
 
-    ns <- namespace_env(sub("^imports:", "", name))
+    ns <- namespace_env(sub("^imports:", "", name), load)
 
     if (is.null(ns)) {
       return(NULL)
@@ -99,12 +70,22 @@ named_env <- function(name, version = NULL) {
     return(parent.env(ns))
   }
 
-  namespace_env(name)
+  namespace_env(name, load)
 }
 
-namespace_env <- function(name) {
+# Resolving a name must not load a package while writing, since the name can
+# come from an attribute a value of your own set.
+namespace_env <- function(name, load) {
 
-  if (!nzchar(name) || !requireNamespace(name, quietly = TRUE)) {
+  if (!nzchar(name)) {
+    return(NULL)
+  }
+
+  if (name %in% loadedNamespaces()) {
+    return(asNamespace(name))
+  }
+
+  if (!load || !requireNamespace(name, quietly = TRUE)) {
     return(NULL)
   }
 
@@ -119,7 +100,7 @@ env_by_name <- function(name) {
     )
   }
 
-  found <- named_env(name)
+  found <- named_env(name, load = TRUE)
 
   if (is.null(found)) {
     stop("the ", name, " package is needed to revive this object",
@@ -139,7 +120,7 @@ env_reference <- function(name, version) {
     stop("a recorded namespace needs one version string", call. = FALSE)
   }
 
-  found <- named_env(name, version)
+  found <- named_env(name, version, load = TRUE)
 
   if (is.null(found)) {
 

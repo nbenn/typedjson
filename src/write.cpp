@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -347,9 +348,20 @@ yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
                        emit(parent_env(x), false));
   }
 
-  SEXP nms = PROTECT(R_lsInternal3(x, TRUE, TRUE));
+  SEXP nms = PROTECT(R_lsInternal3(x, TRUE, FALSE));
   R_xlen_t n = XLENGTH(nms);
   std::vector<SEXP> locked;
+
+  // R sorts `ls()` by the collation locale, which would write one environment
+  // as two different documents on two machines. Order by bytes instead.
+  std::vector<std::pair<std::string, SEXP> > order;
+  order.reserve((size_t)n);
+  for (R_xlen_t i = 0; i < n; ++i) {
+    SEXP name = STRING_ELT(nms, i);
+    order.push_back(std::make_pair(std::string(Rf_translateCharUTF8(name)),
+                                   name));
+  }
+  std::sort(order.begin(), order.end());
 
   if (n > 0) {
     Step step(this, PRINTNAME(Rf_install(kEnvBindings)), 0);
@@ -357,7 +369,7 @@ yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
 
     for (R_xlen_t i = 0; i < n; ++i) {
 
-      SEXP name = STRING_ELT(nms, i);
+      SEXP name = order[(size_t)i].second;
       SEXP sym = Rf_installChar(name);
       SEXP value = R_NilValue;
       Step at(this, name, i);
