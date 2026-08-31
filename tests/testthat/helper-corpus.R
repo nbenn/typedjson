@@ -293,11 +293,11 @@ corpus_refused <- function() {
     ),
     "r6/non-portable" = list(
       value = corpus_generator("CorpusR6Bound")$new(),
-      message = non_portable("CorpusR6Bound"), path = "x"
+      message = non_portable(c("CorpusR6Bound", "R6")), path = "x"
     ),
     "r6/non-portable-bare" = list(
       value = corpus_generator("CorpusR6BoundBare")$new(),
-      message = non_portable("CorpusR6BoundBare"), path = "x"
+      message = non_portable(c("CorpusR6BoundBare", "R6")), path = "x"
     ),
     "r6/generator-anonymous" = list(
       value = corpus_generator("CorpusR6Anon"),
@@ -319,7 +319,8 @@ corpus_refused <- function() {
 
 non_portable <- function(class) {
   paste0(
-    "cannot write an instance of the non-portable R6 class `", class, "/R6`"
+    "cannot write an instance of the non-portable R6 class `",
+    paste0(class, collapse = "/"), "`"
   )
 }
 
@@ -379,6 +380,330 @@ local_r6_class <- function(class, ..., env = parent.frame()) {
   assign(class, gen, envir = globalenv())
 
   invisible(gen)
+}
+
+r6_shape <- function(depth, fields, private, active, methods, locked,
+                     cloneable = TRUE, initialize = TRUE, finalize = TRUE,
+                     hook = "none", portable = TRUE) {
+  list(
+    depth = depth, portable = portable, locked = locked,
+    cloneable = rep_len(cloneable, depth), initialize = initialize,
+    finalize = finalize, hook = hook, fields = fields, private = private,
+    active = active, methods = methods,
+    undeclared = if (locked) 0L else 2L
+  )
+}
+
+r6_shape_bits <- function(i) {
+  as.integer(intToBits(i))[1:4]
+}
+
+r6_shape_rows <- function(grid, build) {
+  unname(lapply(split(grid, seq_len(nrow(grid))), build))
+}
+
+r6_shape_solo <- function() {
+  r6_shape_rows(
+    expand.grid(
+      members = 0:15, locked = c(TRUE, FALSE), cloneable = c(TRUE, FALSE),
+      initialize = c(TRUE, FALSE), finalize = c(TRUE, FALSE)
+    ),
+    r6_shape_solo_row
+  )
+}
+
+r6_shape_solo_row <- function(row) {
+
+  b <- r6_shape_bits(row[["members"]])
+
+  r6_shape(
+    1L, b[1L], b[2L], b[3L], b[4L], row[["locked"]], row[["cloneable"]],
+    row[["initialize"]], row[["finalize"]]
+  )
+}
+
+r6_shape_places <- list(c(0L, 0L), c(1L, 0L), c(0L, 1L), c(1L, 1L))
+
+r6_shape_chain <- function() {
+  c(
+    r6_shape_rows(
+      expand.grid(
+        fields = 1:4, private = 1:4, active = 1:4, methods = 1:4,
+        locked = c(TRUE, FALSE)
+      ),
+      r6_shape_chain_row
+    ),
+    r6_shape_rows(
+      expand.grid(ancestor = c(TRUE, FALSE), leaf = c(TRUE, FALSE)),
+      r6_shape_cloneable_row
+    )
+  )
+}
+
+r6_shape_chain_row <- function(row) {
+  r6_shape(
+    2L,
+    r6_shape_places[[row[["fields"]]]], r6_shape_places[[row[["private"]]]],
+    r6_shape_places[[row[["active"]]]], r6_shape_places[[row[["methods"]]]],
+    row[["locked"]]
+  )
+}
+
+r6_shape_cloneable_row <- function(row) {
+  r6_shape(
+    2L, c(1L, 1L), c(1L, 1L), c(1L, 1L), c(1L, 1L), TRUE,
+    cloneable = c(row[["ancestor"]], row[["leaf"]])
+  )
+}
+
+r6_shape_deep <- function() {
+  r6_shape_rows(
+    expand.grid(members = 0:15, locked = c(TRUE, FALSE)), r6_shape_deep_row
+  )
+}
+
+r6_shape_deep_row <- function(row) {
+
+  b <- r6_shape_bits(row[["members"]])
+
+  r6_shape(
+    3L, c(b[1L], 0L, 1L), c(b[2L], 0L, 1L), c(b[3L], 0L, 1L),
+    c(b[4L], 0L, 1L), row[["locked"]]
+  )
+}
+
+r6_shape_refused <- function() {
+  r6_shape_rows(
+    rbind(
+      expand.grid(
+        depth = 1:3, hook = "none", locked = TRUE, portable = FALSE,
+        stringsAsFactors = FALSE
+      ),
+      expand.grid(
+        depth = 1:2, hook = c("public", "private"), locked = c(TRUE, FALSE),
+        portable = TRUE, stringsAsFactors = FALSE
+      )
+    ),
+    r6_shape_refused_row
+  )
+}
+
+r6_shape_refused_row <- function(row) {
+
+  depth <- row[["depth"]]
+
+  r6_shape(
+    depth, rep(1L, depth), rep(1L, depth), rep(1L, depth), rep(1L, depth),
+    row[["locked"]], hook = row[["hook"]], portable = row[["portable"]]
+  )
+}
+
+r6_shape_grid <- function() {
+  c(r6_shape_solo(), r6_shape_chain(), r6_shape_deep(), r6_shape_refused())
+}
+
+r6_shape_noop <- function() NULL
+
+r6_shape_binding <- function(value) {
+  if (missing(value)) 1 else stop("read-only")
+}
+
+r6_shape_values <- list(
+  1L, "a", c(TRUE, NA), NULL, 2.5, as.raw(c(0, 255)), c(x = 1L, y = 2L)
+)
+
+r6_shape_value <- function(i) {
+  r6_shape_values[[1L + i %% length(r6_shape_values)]]
+}
+
+r6_shape_fields <- function(n, kind, level) {
+
+  if (n == 0L) {
+    return(list())
+  }
+
+  stats::setNames(
+    lapply(level + seq_len(n), r6_shape_value),
+    sprintf("%s%d_%d", kind, level, seq_len(n))
+  )
+}
+
+r6_shape_funs <- function(n, kind, level, fun) {
+
+  if (n == 0L) {
+    return(list())
+  }
+
+  stats::setNames(
+    rep(list(fun), n), sprintf("%s%d_%d", kind, level, seq_len(n))
+  )
+}
+
+r6_shape_members <- function(spec, level) {
+
+  members <- list(
+    public = c(
+      r6_shape_fields(spec[["fields"]][level], "f", level),
+      r6_shape_funs(spec[["methods"]][level], "m", level, r6_shape_noop)
+    ),
+    private = r6_shape_fields(spec[["private"]][level], "p", level),
+    active = r6_shape_funs(
+      spec[["active"]][level], "a", level, r6_shape_binding
+    )
+  )
+
+  if (level < spec[["depth"]]) {
+    return(members)
+  }
+
+  if (spec[["initialize"]]) {
+    members[["public"]][["initialize"]] <- r6_shape_noop
+  }
+
+  if (spec[["finalize"]]) {
+    members[["private"]][["finalize"]] <- r6_shape_noop
+  }
+
+  if (!identical(spec[["hook"]], "none")) {
+    members[[spec[["hook"]]]]["hook"] <- list(NULL)
+  }
+
+  members
+}
+
+r6_shape_class <- function(spec, id, env = parent.frame()) {
+
+  gen <- NULL
+  parent <- NULL
+
+  for (level in seq_len(spec[["depth"]])) {
+
+    name <- sprintf("ShapeR6_%d_%d", id, level)
+    members <- r6_shape_members(spec, level)
+
+    gen <- local_r6_class(
+      name,
+      public = members[["public"]],
+      private = members[["private"]],
+      active = members[["active"]],
+      portable = spec[["portable"]],
+      lock_objects = spec[["locked"]],
+      cloneable = spec[["cloneable"]][level],
+      env = env
+    )
+
+    if (!is.null(parent)) {
+      gen$inherit <- as.name(parent)
+    }
+
+    parent <- name
+  }
+
+  gen
+}
+
+r6_shape_scope <- function(obj, where) {
+
+  if (identical(where, "public")) {
+    return(obj)
+  }
+
+  obj[[".__enclos_env__"]][["private"]]
+}
+
+r6_shape_instance <- function(spec, id, env = parent.frame()) {
+
+  obj <- suppressMessages(r6_shape_class(spec, id, env)$new())
+
+  if (!identical(spec[["hook"]], "none")) {
+    assign("hook", r6_shape_noop, envir = r6_shape_scope(obj, spec[["hook"]]))
+  }
+
+  if (spec[["undeclared"]] > 0L) {
+    list2env(
+      r6_shape_fields(spec[["undeclared"]], "u", spec[["depth"]]), envir = obj
+    )
+  }
+
+  obj
+}
+
+r6_shape_refusal <- function(spec, classes) {
+
+  if (!spec[["portable"]]) {
+    return(paste0(non_portable(classes), " at `x`"))
+  }
+
+  if (identical(spec[["hook"]], "none")) {
+    return(NA_character_)
+  }
+
+  sprintf(
+    "cannot write a value of type 'closure' at `x$%s$hook`", spec[["hook"]]
+  )
+}
+
+r6_shape_surface <- function(obj) {
+
+  private <- obj[[".__enclos_env__"]][["private"]]
+
+  list(
+    public = sort(ls(obj, all.names = TRUE)),
+    private = if (is.environment(private)) sort(ls(private, all.names = TRUE)),
+    locked = c(
+      environmentIsLocked(obj),
+      if (is.environment(private)) environmentIsLocked(private)
+    )
+  )
+}
+
+r6_shape_settles <- function(spec, id) {
+
+  obj <- r6_shape_instance(spec, id)
+  refusal <- r6_shape_refusal(spec, class(obj))
+
+  doc <- tryCatch(
+    json_write_str(obj),
+    error = function(e) structure(conditionMessage(e), class = "r6_refused")
+  )
+
+  if (!is.na(refusal)) {
+    return(inherits(doc, "r6_refused") && identical(unclass(doc), refusal))
+  }
+
+  if (inherits(doc, "r6_refused")) {
+    return(FALSE)
+  }
+
+  tryCatch(
+    {
+      back <- suppressMessages(json_read_str(doc))
+
+      identical(json_write_str(back), doc) &&
+        identical(r6_shape_surface(obj), r6_shape_surface(back))
+    },
+    error = function(e) FALSE
+  )
+}
+
+r6_shape_label <- function(spec, id) {
+  sprintf(
+    "shape/%d depth=%d portable=%s locked=%s hook=%s",
+    id, spec[["depth"]], spec[["portable"]], spec[["locked"]], spec[["hook"]]
+  )
+}
+
+r6_shape_failures <- function(specs) {
+
+  failed <- character()
+
+  for (id in seq_along(specs)) {
+    if (!r6_shape_settles(specs[[id]], id)) {
+      failed <- c(failed, r6_shape_label(specs[[id]], id))
+    }
+  }
+
+  failed
 }
 
 corpus_shapes <- function() {
