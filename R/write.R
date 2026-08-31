@@ -43,6 +43,34 @@
 #' because there the brackets are the sole thing separating `list(1, 2)`
 #' from `c(1, 2)`.
 #'
+#' Some JSON is written for a consumer that already defines the shape it
+#' expects. There R's types are noise, since the document has to satisfy an
+#' external schema rather than describe the value it came from, and the
+#' `typed` flag says so. Plain mode is this format with the annotations left
+#' out: the two container rules and the number lexemes stay, attributes and
+#' the S4 bit are dropped, and a length-one vector renders as a scalar
+#' unless it is `AsIs`, in which case it keeps its brackets. That last rule
+#' is not a setting, because shape requirements run both ways inside one
+#' document — a schema wants a scalar at `additionalProperties` and an array
+#' at `required` whatever its length — and no encoder can tell the two apart
+#' by looking, since at length one a scalar and a one-element array are the
+#' same R object. The distinction already lives in the value, where `I("x")`
+#' differs from `"x"`, so plain mode renders it rather than importing a
+#' policy for it.
+#'
+#' Nothing is written in plain mode that the value is not. A missing value
+#' becomes `null`, which is what JSON spells absence with, and everything the
+#' annotations were the only way to write is refused where it sits, naming
+#' the path: complex and raw values, the non-finite doubles, symbols, calls,
+#' closures and environments. What plain mode does not do is escape, since
+#' the consumer asked for the name and the string it asked for, so a value
+#' carrying a leading `~` of its own reaches the document bare and is read
+#' back the way any foreign document carrying one is: a key spelling a tag
+#' this reader does not know is refused, and a string spelling one it does
+#' know comes back as that tag. Reading a plain document returns what the
+#' document says rather than the value that wrote it, which is what the
+#' default mode is for.
+#'
 #' Text is carried as UTF-8. A string R has declared as UTF-8 or latin1
 #' is converted from what it declares, and one it has not declared is
 #' taken as the bytes it holds rather than translated through the
@@ -116,6 +144,9 @@
 #' @param pretty Whether to indent the output. Files default to indented,
 #'   because a persistence format is read in diffs; strings default to
 #'   compact.
+#' @param typed Whether to record what JSON cannot express. The default
+#'   writes the annotated form this package reads back unchanged; `FALSE`
+#'   writes plain JSON for a consumer that brings its own schema.
 #'
 #' @return The `json_write()` function returns `path` invisibly and
 #'   `json_write_str()` a length-one character vector. Both readers return
@@ -133,27 +164,35 @@
 #' x <- c(a = 1, b = Inf)
 #' identical(json_read_str(json_write_str(x)), x)
 #'
+#' json_write_str(list(required = I("x"), additionalProperties = FALSE),
+#'                typed = FALSE)
+#'
 #' @export
-json_write <- function(x, path, pretty = TRUE) {
+json_write <- function(x, path, pretty = TRUE, typed = TRUE) {
 
   stopifnot(is.character(path), length(path) == 1L, !is.na(path))
 
+  doc <- json_write_str(x, pretty = pretty, typed = typed)
+
   con <- file(path, open = "wb")
   on.exit(close(con))
-  writeLines(json_write_str(x, pretty = pretty), con = con, useBytes = TRUE)
+  writeLines(doc, con = con, useBytes = TRUE)
 
   invisible(path)
 }
 
 #' @rdname json_write
 #' @export
-json_write_str <- function(x, pretty = FALSE) {
+json_write_str <- function(x, pretty = FALSE, typed = TRUE) {
 
-  stopifnot(is.logical(pretty), length(pretty) == 1L, !is.na(pretty))
+  stopifnot(
+    is.logical(pretty), length(pretty) == 1L, !is.na(pretty),
+    is.logical(typed), length(typed) == 1L, !is.na(typed)
+  )
 
   generator_cache$scope(
     typedjson_write_(
-      x, pretty,
+      x, pretty, typed,
       list(
         kind = writer_kind, state = writer_state, env = writer_env,
         fun = writer_fun

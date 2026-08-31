@@ -4,6 +4,6 @@ typedjson_read_ <- function(bytes, hooks) {
   .Call(`_typedjson_typedjson_read_`, bytes, hooks)
 }
 
-typedjson_write_ <- function(x, pretty, hooks) {
-  .Call(`_typedjson_typedjson_write_`, x, pretty, hooks)
+typedjson_write_ <- function(x, pretty, typed, hooks) {
+  .Call(`_typedjson_typedjson_write_`, x, pretty, typed, hooks)
 }
