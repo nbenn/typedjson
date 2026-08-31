@@ -39,6 +39,8 @@ close(con)
 
 Refusing is the whole point. Writing the integer would hand back a number indexing whatever connection occupies that slot next, and writing `null` would drop the handle quietly; either way the damage surfaces later and somewhere else. The error instead names the path it stopped at, so a handle buried deep in a large value is reported by where it sits.
 
+Everything on this page is about the default, which is the mode that reads a value back. Plain mode — `typed = FALSE`, for a document whose shape a schema elsewhere already fixes — writes no annotation and reads an attribute only to settle object against array and scalar against array, so it never walks into the attribute the pointer above sits in, and writes the bare slot integer this section argues against. The argument is not weaker there, it is inapplicable: what makes the integer dangerous is a reader rebuilding a connection from it, and plain mode has no revival step to do that in. The plain output section of `vignette("design")` states the rule and the two places it lands.
+
 ## A reader that owns a connection
 
 Here is a small class of the shape that runs into this: a reader that walks a file in chunks, holding the connection open between calls.
@@ -147,6 +149,8 @@ Opening lazily on the first `read_next()` call, or falling back to offset zero w
 ## Methods have no privileges
 
 Whatever a `json_state()` method returns is written under the same rules as any other value, which is what keeps the guarantee honest: a method cannot smuggle a handle out by wrapping it in a list.
+
+The guarantee bounds what a method may write, and not when one is asked, so read it in that direction only. Plain mode does not ask at all: a method written to keep a field out of a document is not consulted under `typed = FALSE`, and the field it was holding back is written with the rest of the object.
 
 ```{r, error = TRUE}
 json_state.leaky <- function(x) list(con = x$con)

@@ -59,12 +59,14 @@ test_that("boxing an array element is an annotation, so it goes too", {
   )
 })
 
-test_that("attributes and the S4 bit are dropped rather than recorded", {
+test_that("an attribute carrying no answer is dropped, as is the S4 bit", {
 
   expect_identical(
     json_write_str(as.Date("2026-01-01"), typed = FALSE), "20454.0"
   )
   expect_identical(json_write_str(factor(c("a", "b")), typed = FALSE), "[1,2]")
+  # A `dim` settles neither object-against-array nor scalar-against-array, so
+  # it carries no answer plain mode needs and a matrix flattens.
   expect_identical(json_write_str(matrix(1:4, 2), typed = FALSE), "[1,2,3,4]")
   expect_identical(
     json_write_str(structure(list(n = 1L), class = "thing"), typed = FALSE),
@@ -76,6 +78,24 @@ test_that("attributes and the S4 bit are dropped rather than recorded", {
   )
   expect_identical(
     json_write_str(temp(21, unit = "C"), typed = FALSE), "21.0"
+  )
+})
+
+test_that("a handle reachable only through an attribute goes with it", {
+
+  path <- withr::local_tempfile(fileext = ".log")
+  writeLines("event", path)
+
+  con <- file(path)
+  withr::defer(close(con))
+
+  # A connection is a slot integer wearing the pointer that makes using it
+  # safe, and the pointer sits in an attribute rather than at value position.
+  expect_identical(typeof(attr(con, "conn_id")), "externalptr")
+
+  expect_error(json_write_str(con), "externalptr", fixed = TRUE)
+  expect_identical(
+    json_write_str(con, typed = FALSE), as.character(as.integer(con))
   )
 })
 

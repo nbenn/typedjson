@@ -83,16 +83,38 @@ Some JSON is written for a consumer that already defines the shape it
 expects. There R's types are noise, since the document has to satisfy an
 external schema rather than describe the value it came from, and the
 \code{typed} flag says so. Plain mode is this format with the annotations left
-out: the two container rules and the number lexemes stay, attributes and
-the S4 bit are dropped, and a length-one vector renders as a scalar
-unless it is \code{AsIs}, in which case it keeps its brackets. That last rule
-is not a setting, because shape requirements run both ways inside one
-document — a schema wants a scalar at \code{additionalProperties} and an array
-at \code{required} whatever its length — and no encoder can tell the two apart
-by looking, since at length one a scalar and a one-element array are the
-same R object. The distinction already lives in the value, where \code{I("x")}
-differs from \code{"x"}, so plain mode renders it rather than importing a
-policy for it.
+out: the two container rules and the number lexemes stay, the S4 bit goes,
+and a length-one vector renders as a scalar unless it is \code{AsIs}, in which
+case it keeps its brackets. That last rule is not a setting, because shape
+requirements run both ways inside one document — a schema wants a scalar
+at \code{additionalProperties} and an array at \code{required} whatever its length
+— and no encoder can tell the two apart by looking, since at length one a
+scalar and a one-element array are the same R object. The distinction
+already lives in the value, where \code{I("x")} differs from \code{"x"}, so plain
+mode renders it rather than importing a policy for it.
+
+Attributes are not quite dropped wholesale, and the rule that decides
+which two survive is worth stating, because it predicts the rest. JSON
+puts two questions to every value that the container rules leave open —
+object or array, and at length one scalar or array — and plain mode reads
+the attributes that answer them: the \code{names} of a list, and the \code{AsIs}
+marker. Nothing else is asked anything. A \code{dim} answers neither, since a
+vector is a flat array with one or without one, so a matrix flattens; the
+names of an atomic vector answer neither either, since an atomic vector is
+an array whatever its elements are called; and \code{levels}, \code{tzone}, \code{units}
+and a class naming a type carry meaning rather than shape, so a factor
+writes its codes and a \code{Date} its number.
+
+Two consequences are worth naming, because in both plain mode writes what
+the default refuses. Nothing walks into an attribute, so a handle that is
+only reachable through one is dropped along with it: a connection is an
+integer wearing an external pointer, and where the default stops at that
+pointer, plain mode never reaches it and writes the bare slot index. And a
+\code{\link[=json_state]{json_state()}} method is not consulted, since a method says how to persist
+a value and plain mode is not persistence — so a method written to keep a
+field out of a document does not stand between \code{typed = FALSE} and that
+field. Both follow from the rule above rather than qualifying it, and
+\code{vignette("handles")} argues the default's side of each.
 
 Nothing is written in plain mode that the value is not. A missing value
 becomes \code{null}, which is what JSON spells absence with, and everything the
