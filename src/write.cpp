@@ -16,9 +16,19 @@ struct Crumb {
   R_xlen_t index;
 };
 
+bool is_generic_vector(SEXP x) {
+  return TYPEOF(x) == VECSXP || TYPEOF(x) == EXPRSXP;
+}
+
+bool is_node_list(SEXP x) {
+  return TYPEOF(x) == LANGSXP || TYPEOF(x) == LISTSXP;
+}
+
 bool needs_type(SEXP x) {
   int type = TYPEOF(x);
   if (type == CPLXSXP || type == RAWSXP || type == OBJSXP) return true;
+  if (is_node_list(x) || type == EXPRSXP) return true;
+
   return XLENGTH(x) == 0 && type != VECSXP;
 }
 
@@ -43,9 +53,11 @@ class Writer {
   yyjson_mut_val *emit_scalar(SEXP x, R_xlen_t i);
   yyjson_mut_val *emit_complex(SEXP x);
   yyjson_mut_val *emit_raw(SEXP x);
+  yyjson_mut_val *emit_nodes(SEXP x);
 
   yyjson_mut_val *real_val(double v);
   yyjson_mut_val *str_val(SEXP chr);
+  yyjson_mut_val *symbol_val(SEXP x);
   yyjson_mut_val *text_val(const char *s, size_t len);
   yyjson_mut_val *ztag_val(ZTag tag);
 
@@ -119,6 +131,18 @@ yyjson_mut_val *Writer::ztag_val(ZTag tag) {
   return yyjson_mut_strncpy(doc_, text, std::strlen(text));
 }
 
+yyjson_mut_val *Writer::symbol_val(SEXP x) {
+  const char *name = Rf_translateCharUTF8(PRINTNAME(x));
+  std::string tagged(1, kEscape);
+  tagged.push_back(kSymbol);
+  tagged.append(name);
+
+  yyjson_mut_val *out = yyjson_mut_strncpy(doc_, tagged.data(), tagged.size());
+  if (out == nullptr) cpp11::stop("failed to allocate a JSON string");
+
+  return out;
+}
+
 yyjson_mut_val *Writer::str_val(SEXP chr) {
   if (chr == NA_STRING) return ztag_val(Z_NA_STR);
   const char *s = Rf_translateCharUTF8(chr);
@@ -153,7 +177,7 @@ bool Writer::needs_state(SEXP klass) {
 }
 
 SEXP Writer::usable_names(SEXP x, const std::vector<Attrib> &attrs) {
-  if (TYPEOF(x) != VECSXP) return R_NilValue;
+  if (!is_generic_vector(x)) return R_NilValue;
 
   SEXP nms = attrib_value(attrs, R_NamesSymbol);
   if (nms == R_NilValue) return R_NilValue;
@@ -177,6 +201,7 @@ bool Writer::escalate(SEXP x, const std::vector<Attrib> &attrs, SEXP nms) {
 
 yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
   if (x == R_NilValue) return yyjson_mut_null(doc_);
+  if (TYPEOF(x) == SYMSXP) return symbol_val(x);
 
   std::vector<Attrib> attrs;
   attributes_of(x, &attrs);
@@ -196,6 +221,9 @@ yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
     case RAWSXP:
     case VECSXP:
     case OBJSXP:
+    case LANGSXP:
+    case LISTSXP:
+    case EXPRSXP:
       break;
     default:
       fail(std::string("cannot write a value of type '") +
@@ -265,7 +293,7 @@ yyjson_mut_val *Writer::emit_scalar(SEXP x, R_xlen_t i) {
 yyjson_mut_val *Writer::emit_plain(SEXP x, SEXP nms, bool boxed) {
   R_xlen_t n = XLENGTH(x);
 
-  if (TYPEOF(x) != VECSXP) {
+  if (!is_generic_vector(x)) {
 
     if (!boxed && n == 1) return emit_scalar(x, 0);
 
@@ -344,9 +372,36 @@ yyjson_mut_val *Writer::emit_raw(SEXP x) {
   return yyjson_mut_strncpy(doc_, hex.data(), hex.size());
 }
 
+yyjson_mut_val *Writer::emit_nodes(SEXP x) {
+  R_xlen_t n = 0;
+  bool tagged = false;
+
+  for (SEXP node = x; node != R_NilValue; node = CDR(node)) {
+    if (TAG(node) != R_NilValue) tagged = true;
+    ++n;
+  }
+
+  SEXP items = PROTECT(Rf_allocVector(VECSXP, n));
+  SEXP nms = PROTECT(tagged ? Rf_allocVector(STRSXP, n) : R_NilValue);
+
+  R_xlen_t i = 0;
+  for (SEXP node = x; node != R_NilValue; node = CDR(node), ++i) {
+    SET_VECTOR_ELT(items, i, CAR(node));
+    if (!tagged) continue;
+    SEXP tag = TAG(node);
+    SET_STRING_ELT(nms, i, tag == R_NilValue ? R_BlankString : PRINTNAME(tag));
+  }
+
+  yyjson_mut_val *out = emit_plain(items, nms, false);
+  UNPROTECT(2);
+
+  return out;
+}
+
 yyjson_mut_val *Writer::emit_payload(SEXP x, SEXP nms) {
   if (TYPEOF(x) == CPLXSXP) return emit_complex(x);
   if (TYPEOF(x) == RAWSXP) return emit_raw(x);
+  if (is_node_list(x)) return emit_nodes(x);
   return emit_plain(x, nms, false);
 }
 

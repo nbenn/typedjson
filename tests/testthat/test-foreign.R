@@ -197,9 +197,41 @@ test_that("an unrecognised tag at string position is refused as well", {
   expect_error(
     json_read_str('{"~t":"integer","~a":{"meta":"~zNope"},"~v":1}'), "not a tag"
   )
+})
 
-  expect_error(json_read_str('"~:"'), "not a tag")
-  expect_error(json_read_str('"~:mpg"'), "not a tag")
+test_that("a symbol reads wherever a string can sit", {
+
+  expect_identical(json_read_str('"~:mpg"'), as.name("mpg"))
+  expect_identical(json_read_str('["~:a","~:b"]'), list(as.name("a"), quote(b)))
+  expect_identical(json_read_str('["~:a","b"]'), list(as.name("a"), "b"))
+  expect_identical(json_read_str('{"a":"~:x"}'), list(a = quote(x)))
+  expect_identical(json_read_str('"~:~"'), as.name("~"))
+  expect_identical(json_read_str('"~:a b"'), as.name("a b"))
+
+  expect_identical(
+    json_read_str('{"~a":{"meta":"~:x"},"~v":1}'),
+    structure(1L, meta = quote(x))
+  )
+})
+
+test_that("a language form that makes no sense is refused", {
+
+  expect_error(
+    json_read_str('{"~t":"language","~v":[]}'), "the function it calls"
+  )
+  expect_error(
+    json_read_str('{"~t":"language","~v":1}'), "an array or an object"
+  )
+  expect_error(
+    json_read_str('{"~t":"pairlist","~v":"a"}'), "an array or an object"
+  )
+  expect_error(
+    json_read_str('{"~t":"language","~v":{"~zNA_character_":"~:f"}}'),
+    "argument name cannot be missing"
+  )
+
+  expect_error(json_read_str('{"~t":"symbol","~v":"x"}'), "not a type")
+  expect_error(json_read_str('{"~:x":1}'), "not a tag")
 })
 
 test_that("a tilde-leading string outside the reserved alphabet is data", {
@@ -218,7 +250,7 @@ test_that("every string tag the format defines still reads", {
   tags <- list(
     "~zNA" = NA, "~zNA_integer_" = NA_integer_, "~zNA_real_" = NA_real_,
     "~zNA_character_" = NA_character_, "~zInf" = Inf, "~z-Inf" = -Inf,
-    "~zNaN" = NaN
+    "~zNaN" = NaN, "~:mpg" = as.name("mpg"), "~:" = quote(expr = )
   )
 
   for (tag in names(tags)) {

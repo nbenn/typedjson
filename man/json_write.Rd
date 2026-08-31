@@ -46,17 +46,18 @@ json_write_str(json_read_str(doc)) == doc
 
 The first holds for every supported value: every atomic type, missing
 values of each type, the non-finite doubles, attributes of any shape,
-and objects built with S3, S4, S7 or \code{R6}. The second holds for every
-document this package can write. Foreign documents are read under the
-same grammar and normalise on the first round trip, since a mixed-type
-array such as \verb{[1, "a"]} has to come back as a list. Two things are
-refused instead of normalised, both inside the namespace the \code{~}
-prefix reserves. A key beginning with a single \code{~} is a format tag,
-and one this reader does not know is an error rather than a name. A
-string beginning with \code{~} and a reserved discriminator, which is \code{z}
-today with \code{:} held for later, is a tag as well, and an unknown one
-is an error rather than text; every other tilde-leading string stays
-a string, so \verb{~/data} is a path.
+language objects, and objects built with S3, S4, S7 or \code{R6}. The
+second holds for every document this package can write. Foreign
+documents are read under the same grammar and normalise on the first
+round trip, since a mixed-type array such as \verb{[1, "a"]} has to come
+back as a list. Two things are refused instead of normalised, both
+inside the namespace the \code{~} prefix reserves. A key beginning with a
+single \code{~} is a format tag, and one this reader does not know is an
+error rather than a name. A string beginning with \code{~} and a reserved
+discriminator, which is \code{z} for what JSON has no lexeme for and \code{:}
+for a symbol, is a tag as well, and an unknown one is an error rather
+than text; every other tilde-leading string stays a string, so
+\verb{~/data} is a path.
 
 Two rules decide the shape of a document. A JSON array of scalars is an
 atomic vector and a JSON object is a named list, so the two containers
@@ -68,15 +69,25 @@ because there the brackets are the sole thing separating \code{list(1, 2)}
 from \code{c(1, 2)}.
 
 Values that are handles rather than data stay out: environments (other
-than an \code{R6} generator and the instances it can rebuild), closures,
-external pointers and language objects are refused rather than silently
-written as something else. A class that owns such a handle can still be
-persisted by writing a \code{\link[=json_state]{json_state()}} method for it.
+than an \code{R6} generator and the instances it can rebuild), closures and
+external pointers are refused rather than silently written as something
+else. A class that owns such a handle can still be persisted by writing
+a \code{\link[=json_state]{json_state()}} method for it.
+
+A language object is a value rather than a handle, so it round-trips
+exactly and nothing about it is deparsed. A call, an expression and a
+pairlist are written as their elements under a \code{~t} naming the type,
+keeping the argument names R stores as tags, and a symbol is written
+as the string \verb{~:name}. Attributes ride the ordinary rule, which is
+what still refuses a formula: it carries the environment it was
+created in.
 }
 \examples{
 json_write_str(list(n = 1L, x = 2.5, missing = NA_character_))
 
 json_write_str(as.Date("2026-01-01"))
+
+json_write_str(quote(mpg ~ wt))
 
 x <- c(a = 1, b = Inf)
 identical(json_read_str(json_write_str(x)), x)

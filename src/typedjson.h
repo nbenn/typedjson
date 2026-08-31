@@ -20,13 +20,19 @@ namespace typedjson {
 const char kEscape = '~';
 
 // The discriminators the format has claimed at string position, where the
-// bare escape cannot be reserved because `~/data` has to stay a path. Nothing
-// spends `:` yet; reserving it later would not reach a reader shipped today.
+// bare escape cannot be reserved because `~/data` has to stay a path. The `z`
+// tags spell what JSON has no lexeme for, and `:` names a symbol.
 const char *const kReserved = "z:";
 
 inline bool is_reserved(char discriminator) {
   return discriminator != '\0' &&
          std::strchr(kReserved, discriminator) != nullptr;
+}
+
+const char kSymbol = ':';
+
+inline bool is_symbol_tag(const char *s, size_t len) {
+  return len >= 2 && s[0] == kEscape && s[1] == kSymbol;
 }
 
 const char *const kTagType = "~t";

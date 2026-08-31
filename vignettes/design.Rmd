@@ -99,14 +99,14 @@ show_documents(NA_real_, c(1, Inf), "~foo", "Inf")
 
 Borrowed from Transit, whose spec escapes any data string beginning with `~`, `^` or a backtick by prepending `~`. The escape closes the ambiguity by construction rather than by choosing a spelling nobody uses, which is what makes it a genuine fix for the class of bug where a link input of `"Inf"` restores as numeric infinity.
 
-On read, a `~` string is a tag when what follows the prefix is a discriminator the format has reserved. The reserved set is `z`, which spells every tag above, and `:`, which is held for a spelling not yet in use; a reserved string this reader does not know is refused rather than rebuilt as a plausible value. Every other tilde-leading string is a literal, so `~/data` stays a path and "a string is always a string" holds for all of foreign JSON that the format has no claim on.
+On read, a `~` string is a tag when what follows the prefix is a discriminator the format has reserved. The reserved set is `z`, which spells every tag above, and `:`, which names a symbol; a reserved string this reader does not know is refused rather than rebuilt as a plausible value. Every other tilde-leading string is a literal, so `~/data` stays a path and "a string is always a string" holds for all of foreign JSON that the format has no claim on.
 
 ```{r, error = TRUE}
 json_read_str('{"home": "~/data"}')
 json_read_str('"~zBogus"')
 ```
 
-Reserving an alphabet rather than the bare prefix is where the two positions part company, and the reason is that a tilde-leading string is ordinary in foreign JSON while a tilde-leading key is not. Reserving late does not work either way, since a discriminator only earns a refusal from readers that already carry it, which is why `:` lands in the release that names it rather than the one that spends it.
+Reserving an alphabet rather than the bare prefix is where the two positions part company, and the reason is that a tilde-leading string is ordinary in foreign JSON while a tilde-leading key is not. Reserving late does not work either way, since a discriminator only earns a refusal from readers that already carry it, which makes the alphabet the shape a later spelling has to fit inside rather than something a later release can widen.
 
 The prefix is reserved at key position too, and there the reservation is total rather than by discriminator: a key beginning with a single `~` is a format tag, and one this reader does not know is refused rather than rebuilt as data. No document this package writes is affected, since a name of your own carries the doubled prefix.
 
@@ -172,6 +172,42 @@ A raw vector is one lower-case hexadecimal string, two digits per byte, which is
 show_documents(as.raw(c(0, 15, 255)))
 ```
 
+### Language objects
+
+A call, an expression and a pairlist are values: each has value semantics, none can be shared observably, and none can contain itself. So they round-trip exactly, and this part of what would otherwise be refused costs no weakening of the first contract at all. What refusing them costs is every object carrying a recorded call, which is a caught condition and a fitted model among others.
+
+The tempting spelling is one deparsed string, because `{"~q":"mpg ~ wt"}` reads better than anything structural can. It is also lossy, and lossy in the one way this package exists to prevent: a call may carry an arbitrary R object as a constant in its tree, and deparsing turns that constant into code that re-parses as something else.
+
+```{r}
+x <- as.call(list(quote(f), c(1.1, 2.2)))
+identical(str2lang(paste(deparse(x), collapse = "\n")), x)
+```
+
+The element that went in as a double vector comes back as a call to `c`, and a constant needing more than 15 significant digits comes back rounded, since `deparse()` does not default to `digits17`. The `control = "exact"` setting closes neither hole; it wraps the result in `quote(...)`, which re-parses as a call to `quote`. Other shapes measured did survive — non-syntactic names, a tab inside a string, `x[[1]]$y@z`, and the `if` and `function` forms — so the hole is narrow. It is also silent, and it hands back a wrong value, which is the failure mode the format is built to refuse.
+
+The structural spelling costs no new machinery. A call is its elements, and `as.list()` already produces them with the argument names attached, so the payload is a partially named list, which the writer already emits and the reader already rebuilds. An expression is an array of language values, and a pairlist is the same shape as a call payload, with a missing default written as the empty symbol.
+
+```{r, echo = FALSE}
+show_documents(
+  quote(mpg ~ wt), quote(f(0.1, a = x)), formals(function(x, y = 2) NULL)
+)
+```
+
+A call is mostly symbols, so their spelling decides whether the format stays readable. The tagged-object form is correct and costs more than twice the bytes.
+
+| Spelling | `quote(mpg ~ wt)` | Bytes |
+| --- | --- | --- |
+| prefix tag | `{"~t":"language","~v":["~:~","~:mpg","~:wt"]}` | 45 |
+| tagged object | `{"~t":"language","~v":[{"~t":"symbol","~v":"~"},{"~t":"symbol","~v":"mpg"},{"~t":"symbol","~v":"wt"}]}` | 102 |
+
+So a symbol takes the prefix tag, which is the device the format already uses for typed `NA` and the non-finite doubles, and is safe here for the same reason: any ordinary string beginning with `~` is escaped by doubling, so a single-`~` string can never originate from user data. The empty symbol — what `x[, 1]` holds where a row index would go, and what a formals entry with no default holds — is the tag with nothing after it. Depth is not a limit in practice either: a 10000-deep call round-trips, where the deparsed form overflows the parser's context stack in `str2lang()` at 2000.
+
+Attributes ride the ordinary rule, which is what still refuses a formula, since `y ~ x` carries the environment it was created in. A `{` block parsed with `keep.source = TRUE` is refused for the same reason one step further down, where its `srcref` reaches a `srcfile` environment.
+
+```{r, error = TRUE}
+json_write_str(y ~ x)
+```
+
 ### Object systems
 
 S3 falls out with no special case at all: an S3 object is a base type plus a `class` attribute.
@@ -206,7 +242,7 @@ The generator itself is an environment too, and is recorded the way an S7 one is
 
 Both halves have to be recoverable for the document to be readable, so a generator that names no class, or that was built inside a function, is refused where it is written. The same lookup runs on the way out as for an instance, which means it also catches a class vector no generator in that environment declares.
 
-Bare environments, closures, language objects and external pointers stay out. The principled line is that an environment is rescuable exactly when something else can supply its shape; for an instance that is the generator, for a generator its own name, and for a bare environment nothing can. What the writer refuses, it refuses loudly, naming the path it stopped at.
+Bare environments, closures and external pointers stay out. The principled line is that an environment is rescuable exactly when something else can supply its shape; for an instance that is the generator, for a generator its own name, and for a bare environment nothing can. What the writer refuses, it refuses loudly, naming the path it stopped at.
 
 A non-portable R6 class is on the far side of that line too, one level up. With `portable = FALSE` the object environment is also the environment its methods close over, so it binds `self` and `private` beside the fields and the generator stops accounting for everything that is not state. An instance of one is refused where it is written, naming the class, since making the class portable or giving it a `json_state()` method is what changes the answer.
 
@@ -241,6 +277,7 @@ One grammar, applied to whatever is handed to us. Nothing is inferred from conte
 | `[1,2,3]` | integer vector | shape |
 | `[[1],[2]]`, `[1,"a"]` | list | shape |
 | `{…}` | named list | nothing |
+| `"~:mpg"` | the symbol `mpg` | the reserved discriminator for a symbol |
 | `"~zBogus"` | an error | a reserved discriminator naming no known tag |
 | `{"~foo": …}` | an error | the reserved prefix at key position |
 
@@ -338,7 +375,7 @@ The cpp11 package unlocks nothing from any of these libraries; the customization
 
 One property over a corpus, and this is what decides whether the package is trustworthy.
 
-The corpus is every atomic type crossed with {empty, scalar, vector}, {no attributes, names, class} and {no NA, some NA, all NA}, plus the non-finites, the numeric extremes, the tag lookalikes, nesting, each object system, and a random-value fuzzer. Every entry is checked in each position it can occupy, since a value written bare at the document root and the same value written as an array element take different paths. Real payloads on top: a board produced by `blockr.core::blockr_ser()`, a recorded set of LLM conversation turns, and a link input of `"Inf"` as a named regression.
+The corpus is every atomic type crossed with {empty, scalar, vector}, {no attributes, names, class} and {no NA, some NA, all NA}, plus the non-finites, the numeric extremes, the tag lookalikes, nesting, the language types, each object system, and a random-value fuzzer. Every entry is checked in each position it can occupy, since a value written bare at the document root and the same value written as an array element take different paths. Real payloads on top: a board produced by `blockr.core::blockr_ser()`, a recorded set of LLM conversation turns, and a link input of `"Inf"` as a named regression.
 
 ## Prior art
 
