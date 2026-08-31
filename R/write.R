@@ -251,8 +251,8 @@ writer_hooks <- function() {
   )
 }
 
-writer_kind <- function(class) {
-  for (cls in class) {
+writer_kind <- function(class, s4) {
+  for (cls in state_classes(class, s4)) {
     if (!is.na(cls) && has_state_method(cls)) {
       return(TRUE)
     }
@@ -273,5 +273,5 @@ writer_state <- function(x, where) {
     return(unclass(state))
   }
 
-  list(tag_ext, list(class = class(x), state = state))
+  list(tag_ext, list(class = state_classes(class(x), isS4(x)), state = state))
 }

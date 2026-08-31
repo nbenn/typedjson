@@ -22,9 +22,9 @@ Copyright: The bundled 'yyjson' code in src/ is Copyright (c) 2020
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
+LinkingTo: cpp11
 Imports:
     methods
-LinkingTo: cpp11
 Suggests:
     jsonlite,
     knitr,
