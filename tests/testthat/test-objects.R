@@ -43,6 +43,83 @@ test_that("an S7 object comes back through its generator", {
   expect_match(doc, '"~s7"', fixed = TRUE)
 })
 
+test_that("an edited S4 object is refused by the class's own validity", {
+
+  obj <- methods::new("CorpusS4Valid", x = 2)
+  doc <- json_write_str(obj)
+
+  expect_identical(json_read_str(doc), obj)
+  expect_error(
+    json_read_str(sub("2.0", "-7.0", doc, fixed = TRUE)),
+    "x must be non-negative"
+  )
+})
+
+test_that("an edited S7 object is refused by the class's own validator", {
+
+  obj <- CorpusS7Valid(x = 3)
+  doc <- json_write_str(obj)
+
+  expect_identical(json_read_str(doc), obj)
+  expect_error(
+    json_read_str(sub("3.0", "-1.0", doc, fixed = TRUE)),
+    "@x must be non-negative", fixed = TRUE
+  )
+})
+
+test_that("an S7 property the document leaves out is caught as its type", {
+
+  expect_error(
+    json_read_str(
+      paste0(
+        '{"~t":"object","~a":{"class":["CorpusS7Valid","S7_object"],',
+        '"S7_class":{"~s7":{"class":"CorpusS7Valid","package":null}}}}'
+      )
+    ),
+    "@x must be <double>, not <NULL>", fixed = TRUE
+  )
+})
+
+test_that("an S7 constructor is reached past rather than run", {
+
+  obj <- CorpusS7Made(celsius = 21)
+  doc <- json_write_str(obj)
+
+  expect_identical(json_read_str(doc), obj)
+
+  back <- json_read_str(sub('"celsius":21.0', '"celsius":99.0', doc,
+                            fixed = TRUE))
+
+  expect_identical(back@celsius, 99)
+  expect_identical(back@label, "21 degC")
+})
+
+test_that("a class the session does not hold leaves nothing to validate", {
+
+  bare <- json_read_str('{"~t":"S4","~a":{"class":"CorpusS4Absent"},"~v":{}}')
+
+  expect_true(isS4(bare))
+  expect_identical(class(bare), "CorpusS4Absent")
+
+  # Looking a class up must not fetch one, or a document naming a package
+  # this session has not installed would stop at the gate rather than read.
+  elsewhere <- json_read_str(
+    paste0(
+      '{"~t":"S4","~a":{"class":{"~a":{"package":"corpusnotapackage"},',
+      '"~v":"CorpusS4Absent"}},"~v":{}}'
+    )
+  )
+
+  expect_identical(attr(class(elsewhere), "package"), "corpusnotapackage")
+})
+
+test_that("an attribute spelling a generator is not taken for one", {
+
+  obj <- json_read_str('{"~a":{"S7_class":"not a generator"},"~v":1.0}')
+
+  expect_identical(attr(obj, "S7_class"), "not a generator")
+})
+
 test_that("an S7 class generator is recorded by name rather than serialised", {
 
   doc <- json_write_str(CorpusS7)
