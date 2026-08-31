@@ -11,17 +11,17 @@ Writing an R value as JSON that a human can read, and reading it back unchanged.
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/nbenn/typedjson}
+  \item \url{https://nbenn.github.io/typedjson/}
   \item Report bugs at \url{https://github.com/nbenn/typedjson/issues}
 }
 
 }
 \author{
-\strong{Maintainer}: Nicolas Bennett \email{3158446+nbenn@users.noreply.github.com}
+\strong{Maintainer}: Nicolas Bennett \email{nicolas@cynkra.com}
 
 Authors:
 \itemize{
-  \item Nicolas Bennett \email{3158446+nbenn@users.noreply.github.com}
+  \item Nicolas Bennett \email{nicolas@cynkra.com}
 }
 
 Other contributors:
