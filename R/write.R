@@ -172,6 +172,18 @@
 #' is recorded by the class it names, and comes back the object it was
 #' written from.
 #'
+#' A reference class instance is refused on the second half of that reason
+#' alone. Fields are declared there, so what the representation is already
+#' has an answer, but the object is still a reference whose `initialize`
+#' may establish an invariant and whose fields hold whatever a private
+#' binding would, so a method of your own is what settles it here as well,
+#' on the concrete class or on any class between that and `envRefClass`,
+#' which is where the refusal sits. The generator that makes one is refused
+#' rather than recorded, since a walk into it reaches the internals of the
+#' `methods` package rather than the class. An environment you have classed
+#' yourself claims none of this, and is written by the environment rule
+#' above, contents and all.
+#'
 #' @param x Value to write.
 #' @param path Path to write to or read from.
 #' @param pretty Whether to indent the output. Files default to indented,

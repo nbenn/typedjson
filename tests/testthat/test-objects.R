@@ -596,17 +596,74 @@ test_that("a method on an S4 superclass is reached as dispatch reaches it", {
 test_that("a reference class instance is reached through its chain", {
 
   local_state_method(
-    "envRefClass",
+    "CorpusRefClass",
+    function(x) list(a = x$a),
+    function(class, state) CorpusRefClass$new(a = state[["a"]])
+  )
+
+  doc <- json_write_str(CorpusRefDerived$new(a = 3, b = "x"))
+
+  expect_match(
+    doc, '"class":["CorpusRefDerived","CorpusRefClass","envRefClass",',
+    fixed = TRUE
+  )
+  expect_identical(json_read_str(doc)$a, 3)
+})
+
+test_that("a reference class instance is refused, naming its own class", {
+
+  expect_error(
+    json_write_str(CorpusRefClass$new(a = 1)),
+    needs_ref_method("CorpusRefClass"), fixed = TRUE
+  )
+
+  expect_error(
+    json_write_str(CorpusRefDerived$new(a = 1, b = "x")),
+    needs_ref_method("CorpusRefDerived"), fixed = TRUE
+  )
+
+  expect_error(
+    json_write_str(CorpusRefClass), no_ref_generator("CorpusRefClass"),
+    fixed = TRUE
+  )
+})
+
+test_that("the refusal takes the rung it is registered on", {
+
+  local_state_method("envRefClass", function(x) list(a = x$a))
+
+  expect_error(
+    json_write_str(CorpusRefClass$new(a = 1)),
+    needs_ref_method("CorpusRefClass"), fixed = TRUE
+  )
+})
+
+test_that("a method on the concrete class settles the refusal", {
+
+  local_state_method(
+    "CorpusRefClass",
     function(x) list(a = x$a),
     function(class, state) CorpusRefClass$new(a = state[["a"]])
   )
 
   doc <- json_write_str(CorpusRefClass$new(a = 3))
 
-  expect_match(
-    doc, '"class":["CorpusRefClass","envRefClass",', fixed = TRUE
+  expect_identical(
+    doc,
+    paste0(
+      '{"~x":{"class":["CorpusRefClass","envRefClass",".environment",',
+      '"refClass","environment","refObject"],"state":{"a":3.0}}}'
+    )
   )
   expect_identical(json_read_str(doc)$a, 3)
+})
+
+test_that("a classed environment is written rather than refused", {
+
+  env <- corpus_env(root = "/tmp/y")
+  class(env) <- c("corpus_ref", "environment")
+
+  expect_identical(json_read_str(json_write_str(env))$root, "/tmp/y")
 })
 
 test_that("a basic type an S4 class extends is a rung the gate walks", {

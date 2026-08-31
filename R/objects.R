@@ -36,6 +36,31 @@ json_state.R6ClassGenerator <- function(x) {
   tagged_state(tag_r6_class, list(class = classes, package = package))
 }
 
+# Fields are declared, so the question an `R6` class leaves open — which
+# bindings are state — is one a reference class already answers. What it
+# does not answer is the other half: an instance is a reference, and
+# `initialize` may establish an invariant that no assignment reproduces,
+# so the bindings are still not a value to record on the class's behalf.
+#' @export
+json_state.envRefClass <- function(x) {
+  refuse(
+    "a reference class instance needs a `json_state()` method for class `",
+    class(x)[[1L]], "`"
+  )
+}
+
+# A generator shares no class with the instances it makes, so the refusal
+# above does not reach one, and a walk into it lands in the `methods`
+# package's own internals. Recording it by the class it names, the way an
+# `R6` or S7 generator is recorded, is a separate question.
+#' @export
+json_state.refObjectGenerator <- function(x) {
+  refuse(
+    "cannot write the generator of the reference class `",
+    class_text(x@className), "`"
+  )
+}
+
 #' @export
 json_state.S7_class <- function(x) {
   tagged_state(

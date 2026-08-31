@@ -431,13 +431,46 @@ corpus_refused <- function() {
         "R_GlobalEnv"
       ),
       path = "x$gen"
+    ),
+    "refclass/no-method" = list(
+      value = corpus_refclass(), message = needs_ref_method("CorpusRefClass"),
+      path = "x"
+    ),
+    "refclass/derived-no-method" = list(
+      value = corpus_generator("CorpusRefDerived")$new(a = 1, b = "x"),
+      message = needs_ref_method("CorpusRefDerived"), path = "x"
+    ),
+    "refclass/nested-no-method" = list(
+      value = list(a = 1, b = list(obj = corpus_refclass())),
+      message = needs_ref_method("CorpusRefClass"), path = "x$b$obj"
+    ),
+    "refclass/generator" = list(
+      value = corpus_generator("CorpusRefClass"),
+      message = no_ref_generator("CorpusRefClass"), path = "x"
     )
   )
+}
+
+corpus_refclass <- function() {
+  corpus_generator("CorpusRefClass")$new(a = 1)
 }
 
 needs_method <- function(class) {
   paste0(
     "an `R6` instance needs a `json_state()` method for class `", class, "`"
+  )
+}
+
+needs_ref_method <- function(class) {
+  paste0(
+    "a reference class instance needs a `json_state()` method for class `",
+    class, "`"
+  )
+}
+
+no_ref_generator <- function(class) {
+  paste0(
+    "cannot write the generator of the reference class `", class, "`"
   )
 }
 
