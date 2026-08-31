@@ -242,6 +242,24 @@ inline SEXP attrib_value(const std::vector<Attrib> &attrs, SEXP tag) {
   return R_NilValue;
 }
 
+// A hook is reached through `cpp11::function`, which splices the argument into
+// a call and evaluates it. Nearly every value that crosses the boundary is one
+// R hands back as-is, but a call is run, so a document could execute what it
+// was only meant to describe. Wrapping the argument gives the hook the value
+// rather than what evaluating it yields, and is identity for everything else.
+//
+// The `quote` object itself is spliced rather than its name, since cpp11
+// evaluates in the global environment and a binding of that name there would
+// otherwise be what decides whether the guard holds.
+inline SEXP quoted(SEXP x) {
+  static SEXP quote = nullptr;
+  if (quote == nullptr) {
+    quote = Rf_findFun(R_QuoteSymbol, R_BaseEnv);
+    R_PreserveObject(quote);
+  }
+  return Rf_lang2(quote, x);
+}
+
 // A yyjson document outlives every C++ frame that could clean it up, since
 // an R error raised anywhere in the walk longjmps past destructors. Handing
 // ownership to an external pointer lets R reclaim it through the finalizer.

@@ -660,8 +660,9 @@ void Reader::set_attribs(SEXP x, SEXP attrs) {
 
 SEXP Reader::build_env(yyjson_val *v, SEXP shell) {
   SEXP state = PROTECT(build(v));
-  cpp11::sexp out = env_(state, shell);
-  UNPROTECT(1);
+  SEXP value = PROTECT(quoted(state));
+  cpp11::sexp out = env_(value, shell);
+  UNPROTECT(2);
   return out;
 }
 
@@ -672,8 +673,9 @@ SEXP Reader::build_ref(yyjson_val *v) {
 
 SEXP Reader::build_fun(yyjson_val *v, const char *type) {
   SEXP state = PROTECT(build(v));
-  cpp11::sexp out = fun_(state, cpp11::as_sexp(std::string(type)));
-  UNPROTECT(1);
+  SEXP value = PROTECT(quoted(state));
+  cpp11::sexp out = fun_(value, cpp11::as_sexp(std::string(type)));
+  UNPROTECT(2);
   return out;
 }
 
@@ -683,8 +685,9 @@ SEXP Reader::build_hooked(yyjson_val *v, const char *tag) {
   int64_t id = marked(v, kTagId);
 
   SEXP state = PROTECT(build(yyjson_obj_get(v, tag)));
-  cpp11::sexp out = revive_(cpp11::as_sexp(std::string(tag)), state);
-  UNPROTECT(1);
+  SEXP value = PROTECT(quoted(state));
+  cpp11::sexp out = revive_(cpp11::as_sexp(std::string(tag)), value);
+  UNPROTECT(2);
 
   if (id != 0) bind(id, out);
 

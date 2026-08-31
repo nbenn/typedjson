@@ -317,3 +317,78 @@ test_that("a document from a foreign writer reads under the same grammar", {
     )
   )
 })
+
+test_that("a hook is handed what a document holds rather than what it yields", {
+
+  side <- new.env()
+  local_global_binding(
+    "mark", function() {
+      side$hit <- TRUE
+      42
+    }, environment()
+  )
+
+  call <- '{"~t":"language","~v":["~:mark"]}'
+
+  cases <- list(
+    list(paste0('{"~x":', call, "}"), "a recorded state needs a class"),
+    list(paste0('{"~r6class":', call, "}"), "payload has to be an object"),
+    list(paste0('{"~s7":', call, "}"), "a recorded generator needs a class"),
+    list(
+      paste0('{"~t":"environment","~v":', call, "}"),
+      "a recorded environment has to be an object"
+    ),
+    list(
+      paste0('{"~t":"closure","~v":', call, "}"),
+      "a recorded closure has to be an object"
+    )
+  )
+
+  for (case in cases) {
+    expect_error(json_read_str(case[[1]]), case[[2]], fixed = TRUE)
+    expect_null(side$hit)
+  }
+})
+
+test_that("a symbol a document records is not resolved at a hook either", {
+
+  side <- new.env()
+  delayedAssign("mark", side$hit <- TRUE, assign.env = globalenv())
+  withr::defer(rm("mark", envir = globalenv()))
+
+  expect_error(json_read_str('{"~x":"~:mark"}'), "not subsettable")
+  expect_null(side$hit)
+
+  expect_error(
+    json_read_str('{"~t":"environment","~v":"~:mark"}'),
+    "a recorded environment has to be an object",
+    fixed = TRUE
+  )
+  expect_null(side$hit)
+
+  expect_error(
+    json_read_str('{"~t":"closure","~v":"~:mark"}'),
+    "a recorded closure has to be an object",
+    fixed = TRUE
+  )
+  expect_null(side$hit)
+})
+
+test_that("a binding of `quote` where the hook is called does not undo this", {
+
+  side <- new.env()
+  local_global_binding(
+    "mark", function() {
+      side$hit <- TRUE
+      42
+    }, environment()
+  )
+  local_global_binding("quote", function(x) x, environment())
+
+  expect_error(
+    json_read_str('{"~x":{"~t":"language","~v":["~:mark"]}}'),
+    "a recorded state needs a class",
+    fixed = TRUE
+  )
+  expect_null(side$hit)
+})
