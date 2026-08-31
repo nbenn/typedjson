@@ -176,14 +176,14 @@ S7 needs exactly one special case. Properties are stored as attributes and come 
 R6 is rescuable because an R6 object is a generator plus state. Methods, the `self` / `private` / `super` plumbing and the enclosing environment all come from the generator; only the field values differ per instance.
 
 ```json
-{"~r6": {"class": "Derived", "package": "somepkg",
+{"~r6": {"class": ["Derived", "Base", "R6"], "package": "somepkg",
          "public":  {"n": 6, "tag": "t1"},
          "private": {"extra": "e", "seed": 42}}}
 ```
 
 Revival, verified end to end on a two-level class with private fields at both levels, an inherited method and an active binding:
 
-1. Find the generator. The expression `environmentName(parent.env(x$.__enclos_env__))` gives where the class was defined; scan that namespace for an `is.R6Class()` object whose `$classname` matches. Scanning is necessary rather than fussy, because the generator variable need not be named after the class.
+1. Find the generator. The expression `environmentName(parent.env(x$.__enclos_env__))` gives where the class was defined; scan that namespace for an `is.R6Class()` object whose `$classname` matches. Scanning is necessary rather than fussy, because the generator variable need not be named after the class — and for the same reason it can turn up two, which is an error rather than a coin toss. The recorded `class` is the instance's whole class vector, so the generator that answers has to declare the same chain, `c(gen$classname, ..., "R6")` walked through `get_inherit()`. A class prepended on the instance survives as the part of the vector no generator accounts for.
 2. Allocate without running `initialize`. Rebuild a twin generator from the original's `public_fields`, `public_methods`, `private_*`, `active`, `inherit` and `parent_env`, with a no-op `initialize` shadowing the real one — and the inherited one, which is what bites on subclasses — and `lock_objects = FALSE`.
 3. Populate and re-lock. Assign public fields into the object and private fields into `.__enclos_env__$private`, then call `lockEnvironment()` if the original was locked.
 
