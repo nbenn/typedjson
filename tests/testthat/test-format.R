@@ -162,6 +162,60 @@ test_that("each part of a complex value carries its own tag", {
   )
 })
 
+test_that("a symbol is a prefix-tagged string", {
+
+  expect_identical(json_write_str(as.name("x")), '"~:x"')
+  expect_identical(json_write_str(as.name("~t")), '"~:~t"')
+  expect_identical(json_write_str(as.name("a b")), '"~:a b"')
+  expect_identical(json_write_str(quote(expr = )), '"~:"')
+
+  expect_identical(json_read_str('"~:x"'), as.name("x"))
+  expect_identical(json_read_str('"~:"'), quote(expr = ))
+
+  expect_identical(json_write_str("~:x"), '"~~:x"')
+  expect_identical(json_read_str('"~~:x"'), "~:x")
+})
+
+test_that("a language value is its elements under a type tag", {
+
+  expect_identical(
+    json_write_str(quote(mpg ~ wt)),
+    '{"~t":"language","~v":["~:~","~:mpg","~:wt"]}'
+  )
+
+  expect_identical(
+    json_write_str(quote(f(0.1, a = x))),
+    '{"~t":"language","~v":{"":"~:f","":0.1,"a":"~:x"}}'
+  )
+
+  expect_identical(
+    json_write_str(quote(x[, 1])),
+    '{"~t":"language","~v":["~:[","~:x","~:",[1.0]]}'
+  )
+
+  expect_identical(
+    json_write_str(expression(x, 1L)), '{"~t":"expression","~v":["~:x",[1]]}'
+  )
+
+  expect_identical(
+    json_write_str(expression(a = x, y)),
+    '{"~t":"expression","~v":{"a":"~:x","":"~:y"}}'
+  )
+
+  expect_identical(
+    json_write_str(formals(function(x, y = 2) NULL)),
+    '{"~t":"pairlist","~v":{"x":"~:","y":2.0}}'
+  )
+})
+
+test_that("a constant in a call keeps the value it went in as", {
+
+  x <- as.call(list(quote(f), c(1.1, 2.2)))
+
+  expect_identical(json_read_str(json_write_str(x)), x)
+  expect_false(identical(str2lang(paste(deparse(x), collapse = "\n")), x))
+})
+
 test_that("a data frame keeps its columns keyed by name", {
   expect_identical(
     json_write_str(data.frame(x = 1:2, y = c("a", "b"))),

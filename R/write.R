@@ -14,17 +14,18 @@
 #'
 #' The first holds for every supported value: every atomic type, missing
 #' values of each type, the non-finite doubles, attributes of any shape,
-#' and objects built with S3, S4, S7 or `R6`. The second holds for every
-#' document this package can write. Foreign documents are read under the
-#' same grammar and normalise on the first round trip, since a mixed-type
-#' array such as `[1, "a"]` has to come back as a list. Two things are
-#' refused instead of normalised, both inside the namespace the `~`
-#' prefix reserves. A key beginning with a single `~` is a format tag,
-#' and one this reader does not know is an error rather than a name. A
-#' string beginning with `~` and a reserved discriminator, which is `z`
-#' today with `:` held for later, is a tag as well, and an unknown one
-#' is an error rather than text; every other tilde-leading string stays
-#' a string, so `~/data` is a path.
+#' language objects, and objects built with S3, S4, S7 or `R6`. The
+#' second holds for every document this package can write. Foreign
+#' documents are read under the same grammar and normalise on the first
+#' round trip, since a mixed-type array such as `[1, "a"]` has to come
+#' back as a list. Two things are refused instead of normalised, both
+#' inside the namespace the `~` prefix reserves. A key beginning with a
+#' single `~` is a format tag, and one this reader does not know is an
+#' error rather than a name. A string beginning with `~` and a reserved
+#' discriminator, which is `z` for what JSON has no lexeme for and `:`
+#' for a symbol, is a tag as well, and an unknown one is an error rather
+#' than text; every other tilde-leading string stays a string, so
+#' `~/data` is a path.
 #'
 #' Two rules decide the shape of a document. A JSON array of scalars is an
 #' atomic vector and a JSON object is a named list, so the two containers
@@ -36,10 +37,18 @@
 #' from `c(1, 2)`.
 #'
 #' Values that are handles rather than data stay out: environments (other
-#' than the ones an `R6` generator can rebuild), closures, external
-#' pointers and language objects are refused rather than silently written
-#' as something else. A class that owns such a handle can still be
-#' persisted by writing a [json_state()] method for it.
+#' than the ones an `R6` generator can rebuild), closures and external
+#' pointers are refused rather than silently written as something else. A
+#' class that owns such a handle can still be persisted by writing a
+#' [json_state()] method for it.
+#'
+#' A language object is a value rather than a handle, so it round-trips
+#' exactly and nothing about it is deparsed. A call, an expression and a
+#' pairlist are written as their elements under a `~t` naming the type,
+#' keeping the argument names R stores as tags, and a symbol is written
+#' as the string `~:name`. Attributes ride the ordinary rule, which is
+#' what still refuses a formula: it carries the environment it was
+#' created in.
 #'
 #' @param x Value to write.
 #' @param path Path to write to or read from.
@@ -55,6 +64,8 @@
 #' json_write_str(list(n = 1L, x = 2.5, missing = NA_character_))
 #'
 #' json_write_str(as.Date("2026-01-01"))
+#'
+#' json_write_str(quote(mpg ~ wt))
 #'
 #' x <- c(a = 1, b = Inf)
 #' identical(json_read_str(json_write_str(x)), x)

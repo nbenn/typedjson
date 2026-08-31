@@ -9,7 +9,7 @@ The typedjson package writes an R value as JSON a human can read, and reads it b
 
 R already has fast JSON, queryable JSON, and faithful-but-verbose JSON. Nothing was faithful *and* terse. The `jsonlite::toJSON()` / `fromJSON()` pair is readable and lossy — doubles come back as integers, all-`NA` vectors lose their type, names are dropped, `character()` and `integer()` both become `list()`. The `serializeJSON()` / `unserializeJSON()` pair is faithful and unreadable, and its default `digits = 8` silently changes doubles.
 
-This package keeps ordinary JSON for ordinary values and annotates only what JSON cannot express: the integer-versus-double distinction, typed missing values, the non-finite doubles, attributes, and objects from the S3, S4, S7 and R6 systems.
+This package keeps ordinary JSON for ordinary values and annotates only what JSON cannot express: the integer-versus-double distinction, typed missing values, the non-finite doubles, attributes, language objects, and objects from the S3, S4, S7 and R6 systems.
 
 ## Installation
 
@@ -20,7 +20,7 @@ pak::pak("nbenn/typedjson")
 
 ## Two contracts
 
-Both are properties rather than examples, and both are what the test suite checks over a corpus of about 380 values — every atomic type at every length crossed with every way of naming it, every list configuration, a board produced by `blockr.core::blockr_ser()` — each of them also checked in every position it can occupy, plus a thousand fuzzed values on top.
+Both are properties rather than examples, and both are what the test suite checks over a corpus of about 500 values — every atomic type at every length crossed with every way of naming it, every list configuration, the language types, a board produced by `blockr.core::blockr_ser()` — each of them also checked in every position it can occupy, plus a thousand fuzzed values on top.
 
 ```r
 identical(json_read(json_write(x, path)), x)   # for every supported R value
@@ -78,6 +78,21 @@ Names ride in the payload rather than in the attribute object, which is why a da
 
 The type rides in the payload too, wherever the payload can state it — the decimal points in `[1.0,2.0]` are already what make that a double vector — so a `~t` key appears only where reading the payload on its own would escalate it in turn: an empty vector, a complex or raw value, an object with no data part. Its presence is therefore a property of the value's type rather than of the document, and emptying a vector brings it back, since `[]` says nothing about what it held.
 
+## Language objects
+
+A call is its elements, so it is written as them, with the argument names R stores as tags riding in the payload. Nothing is deparsed, which matters because a call may carry an arbitrary R object as a constant in its tree: `str2lang(deparse(x))` hands back a call to `c()` where a double vector went in, and a constant needing more than 15 significant digits comes back rounded.
+
+| R value | Document |
+| --- | --- |
+| `as.name("x")` | `"~:x"` |
+| `quote(mpg ~ wt)` | `{"~t":"language","~v":["~:~","~:mpg","~:wt"]}` |
+| `quote(f(0.1, a = x))` | `{"~t":"language","~v":{"":"~:f","":0.1,"a":"~:x"}}` |
+| `formals(function(x, y = 2) NULL)` | `{"~t":"pairlist","~v":{"x":"~:","y":2.0}}` |
+
+A symbol takes the prefix tag rather than a tagged object of its own, since a call is mostly symbols and the object form costs more than twice the bytes. The empty symbol — what `x[, 1]` holds where a row index would go, and what a formals entry with no default holds — is the tag with nothing after it.
+
+This is what makes an object carrying a recorded call writable, a caught condition and a fitted model among them. A formula is not one of them yet: it is a `language` value carrying the environment it was created in, so it is refused there rather than in the call.
+
 ## Object systems
 
 S3 falls out with no special case: an S3 object is a base type plus a `class` attribute. S4 falls out too, with the S4 bit recorded separately, and an S4 object is rebuilt from its own contents — the class definition is needed to *use* it, not to read it back.
@@ -98,7 +113,7 @@ The generator is the authority on the instance's shape as well as on its lock, s
 
 ## What stays out
 
-Values that are handles rather than data are refused rather than written as something else: environments other than the ones an R6 generator can rebuild, closures, external pointers and language objects. An error names the path it stopped at.
+Values that are handles rather than data are refused rather than written as something else: environments other than the ones an R6 generator can rebuild, closures and external pointers. An error names the path it stopped at.
 
 ```r
 json_write_str(list(a = 1, e = new.env()))
@@ -115,7 +130,7 @@ One grammar, applied to whatever is handed over. Nothing is inferred from conten
 
 Integers beyond what R holds are read as doubles, and a number that cannot survive that conversion exactly is reported through a warning naming the literal rather than passed off as exact.
 
-What the `~` prefix reserves is refused outright. A key beginning with a single `~` is a format tag, so one this reader cannot use as a name is an error; the sole exception is `~zNA_character_`, since a name is a string and that is the only name JSON has no way to carry. A string is more selective, because `~/data` has to stay a path: the tag is the prefix plus a reserved discriminator, which is `z` today with `:` held for a later spelling, and an unknown one is an error while every other tilde-leading string is text.
+What the `~` prefix reserves is refused outright. A key beginning with a single `~` is a format tag, so one this reader cannot use as a name is an error; the sole exception is `~zNA_character_`, since a name is a string and that is the only name JSON has no way to carry. A string is more selective, because `~/data` has to stay a path: the tag is the prefix plus a reserved discriminator, which is `z` for what JSON has no lexeme for and `:` for a symbol, and an unknown one is an error while every other tilde-leading string is text.
 
 The writer doubles the prefix on a string of your own, which is what makes the namespace safe to reserve in the first place. A document written against a later version of the format therefore fails loudly here instead of coming back as the wrong value.
 

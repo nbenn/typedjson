@@ -256,11 +256,8 @@ corpus_refused <- function() {
     "handle/closure" = list(
       value = list(f = mean), type = "closure", path = "x$f"
     ),
-    "handle/language" = list(
-      value = quote(x + 1), type = "language", path = "x"
-    ),
-    "handle/symbol" = list(
-      value = as.symbol("x"), type = "symbol", path = "x"
+    "handle/formula" = list(
+      value = y ~ x, type = "environment", path = "x$.Environment"
     ),
     "r6/public-closure" = list(
       value = corpus_generator("CorpusR6PublicHook")$new(),
@@ -418,6 +415,8 @@ corpus_lists <- function() {
     named_vector = c(a = 1L),
     named_list = list(a = 1L),
     classed = structure(1L, class = "corpus_class"),
+    symbol = as.name("x"),
+    call = quote(f(1, a = x)),
     date = as.Date("2026-01-01"),
     frame = data.frame(x = 1:2)
   )
@@ -455,11 +454,44 @@ corpus_positions <- function(x) {
 
   if (!is.null(x)) {
     out[["attribute"]] <- structure(1L, meta = x)
+  }
+
+  if (!is.null(x) && !is.symbol(x)) {
     out[["tagged_payload"]] <- structure(x, class = "corpus_wrapper")
   }
 
   out
 }
 
+corpus_language <- function() {
+  list(
+    "symbol/plain" = as.name("x"),
+    "symbol/non-syntactic" = as.name("a b"),
+    "symbol/tilde" = as.name("~t"),
+    "symbol/unicode" = as.name("\u00e9t\u00e9"),
+    "symbol/dots" = as.name("..."),
+    "language/operator" = quote(mpg ~ wt),
+    "language/named-arguments" = quote(f(0.1, a = x)),
+    "language/index" = quote(x[, 1]),
+    "language/extract" = quote(x[[1]]$y@z),
+    "language/if" = str2lang("if (a) b else c"),
+    "language/brace" = str2lang("{ x; y }"),
+    "language/definition" = str2lang("function(x, y = 2) x + y"),
+    "language/dots" = quote(f(...)),
+    "language/null-argument" = quote(f(NULL)),
+    "language/vector-constant" = as.call(list(quote(f), c(1.1, 2.2))),
+    "language/tilde-argument" = as.call(list(quote(f), `~a` = 1L)),
+    "language/nested" = str2lang("f(g(h(1)), i = j(k))"),
+    "language/classed" = structure(quote(x + 1), class = "corpus_class"),
+    "language/condition" = tryCatch(stop("x"), error = function(e) e),
+    "expression/one" = expression(x + 1),
+    "expression/named" = expression(a = x + 1, y),
+    "expression/empty" = expression(),
+    "pairlist/formals" = formals(function(x, y = 2) NULL),
+    "pairlist/no-defaults" = formals(function(x, y) NULL)
+  )
+}
+
 corpus <- c(corpus_atomic(), corpus_edges(), corpus_payloads(), corpus_shapes(),
-            corpus_lists(), list("payload/blockr-board" = corpus_board))
+            corpus_lists(), corpus_language(),
+            list("payload/blockr-board" = corpus_board))

@@ -32,6 +32,7 @@ Kind kind_of(yyjson_val *v) {
           return K_REAL;
       }
     case YYJSON_TYPE_STR:
+      if (is_symbol_tag(yyjson_get_str(v), yyjson_get_len(v))) return K_LIST;
       switch (ztag_of(yyjson_get_str(v), yyjson_get_len(v))) {
         case Z_NA_LGL:
           return K_LGL;
@@ -68,6 +69,9 @@ SEXPTYPE sexptype_of(const char *name) {
   if (std::strcmp(name, "complex") == 0) return CPLXSXP;
   if (std::strcmp(name, "raw") == 0) return RAWSXP;
   if (std::strcmp(name, "list") == 0) return VECSXP;
+  if (std::strcmp(name, "language") == 0) return LANGSXP;
+  if (std::strcmp(name, "pairlist") == 0) return LISTSXP;
+  if (std::strcmp(name, "expression") == 0) return EXPRSXP;
   if (std::strcmp(name, "object") == 0 || std::strcmp(name, "S4") == 0) {
     return OBJSXP;
   }
@@ -149,6 +153,8 @@ class Reader {
   SEXP build_hooked(yyjson_val *v, const char *tag);
   SEXP build_complex(yyjson_val *v);
   SEXP build_raw(yyjson_val *v);
+  SEXP build_symbol(yyjson_val *v);
+  SEXP build_nodes(yyjson_val *v, SEXPTYPE type);
   SEXP build_vector(Kind kind, size_t n);
   void fill(SEXP out, Kind kind, size_t i, yyjson_val *v);
   SEXP coerce(SEXP x, SEXPTYPE type);
@@ -383,6 +389,64 @@ SEXP Reader::build_raw(yyjson_val *v) {
   return out;
 }
 
+SEXP Reader::build_symbol(yyjson_val *v) {
+  const char *s = yyjson_get_str(v) + 2;
+  size_t len = yyjson_get_len(v) - 2;
+
+  if (len == 0) return R_MissingArg;
+  if (len > (size_t)INT_MAX) {
+    cpp11::stop("a symbol of %g bytes is longer than R can hold", (double)len);
+  }
+
+  SEXP name = PROTECT(Rf_mkCharLenCE(s, (int)len, CE_UTF8));
+  SEXP out = Rf_installChar(name);
+  UNPROTECT(1);
+
+  return out;
+}
+
+SEXP Reader::build_nodes(yyjson_val *v, SEXPTYPE type) {
+  bool call = (type == LANGSXP);
+
+  if (!yyjson_is_arr(v) && !yyjson_is_obj(v)) {
+    cpp11::stop("a %s value needs an array or an object under `%s`",
+                Rf_type2char(type), kTagValue);
+  }
+
+  SEXP built = PROTECT(build(v));
+  SEXP items = PROTECT(coerce(built, VECSXP));
+  SEXP nms = Rf_getAttrib(items, R_NamesSymbol);
+  R_xlen_t n = XLENGTH(items);
+
+  if (call && n == 0) {
+    UNPROTECT(2);
+    cpp11::stop("a language value needs the function it calls under `%s`",
+                kTagValue);
+  }
+
+  SEXP out = R_NilValue;
+  PROTECT_INDEX at;
+  PROTECT_WITH_INDEX(out, &at);
+
+  for (R_xlen_t i = n - 1; i >= 0; --i) {
+    SEXP head = call && i == 0 ? Rf_lcons(VECTOR_ELT(items, i), out)
+                               : Rf_cons(VECTOR_ELT(items, i), out);
+    REPROTECT(out = head, at);
+
+    if (nms == R_NilValue) continue;
+
+    SEXP nm = STRING_ELT(nms, i);
+    if (nm == NA_STRING) {
+      UNPROTECT(3);
+      cpp11::stop("an argument name cannot be missing");
+    }
+    if (CHAR(nm)[0] != '\0') SET_TAG(out, Rf_installChar(nm));
+  }
+
+  UNPROTECT(3);
+  return out;
+}
+
 SEXP Reader::coerce(SEXP x, SEXPTYPE type) {
   if ((SEXPTYPE)TYPEOF(x) == type) return x;
 
@@ -427,6 +491,8 @@ SEXP Reader::build_tagged(yyjson_val *v) {
     out = build_complex(payload);
   } else if (type == RAWSXP) {
     out = build_raw(payload);
+  } else if (type == LANGSXP || type == LISTSXP) {
+    out = build_nodes(payload, type);
   } else {
     out = build(payload);
     if (type != kNoType) out = coerce(out, type);
@@ -491,6 +557,11 @@ SEXP Reader::build(yyjson_val *v) {
       cpp11::stop("the document holds no value");
     default:
       break;
+  }
+
+  if (yyjson_is_str(v) &&
+      is_symbol_tag(yyjson_get_str(v), yyjson_get_len(v))) {
+    return build_symbol(v);
   }
 
   Kind kind = kind_of(v);
