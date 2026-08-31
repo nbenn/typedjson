@@ -136,7 +136,7 @@ class Writer {
   yyjson_mut_val *ztag_val(ZTag tag);
   const char *utf8_text(SEXP chr, size_t *len);
 
-  bool needs_state(SEXP klass);
+  bool needs_state(SEXP x, SEXP klass);
   SEXP usable_names(SEXP x, const std::vector<Attrib> &attrs);
   bool escalate(SEXP x, const std::vector<Attrib> &attrs, SEXP nms);
 
@@ -280,8 +280,15 @@ yyjson_mut_val *Writer::real_val(double v) {
   return yyjson_mut_real(doc_, v);
 }
 
-bool Writer::needs_state(SEXP klass) {
-  std::string key;
+// The hook walks the classes dispatch would, which for an S4 object runs past
+// the attribute into the inheritance chain. Two values wearing the same class
+// attribute therefore answer differently depending on the S4 bit, so the bit
+// is keyed on as well as handed over. What is not handed over is the value
+// itself: an argument reaching an R closure through a call is evaluated, so a
+// classed call would run where it is meant to be inspected.
+bool Writer::needs_state(SEXP x, SEXP klass) {
+  bool s4 = Rf_isS4(x);
+  std::string key(s4 ? "4" : "3");
   for (R_xlen_t i = 0; i < XLENGTH(klass); ++i) {
     SEXP elt = STRING_ELT(klass, i);
     if (elt == NA_STRING) continue;
@@ -292,7 +299,8 @@ bool Writer::needs_state(SEXP klass) {
   std::unordered_map<std::string, bool>::const_iterator hit = memo_.find(key);
   if (hit != memo_.end()) return hit->second;
 
-  cpp11::sexp res = kind_(klass);
+  cpp11::sexp flag(Rf_ScalarLogical(s4));
+  cpp11::sexp res = kind_(klass, flag);
   bool needs = (TYPEOF(res) == LGLSXP && XLENGTH(res) == 1 &&
                 LOGICAL(res)[0] == TRUE);
   memo_[key] = needs;
@@ -339,7 +347,8 @@ yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
   if (carries_srcref(x)) drop_srcref(&attrs);
 
   SEXP klass = attrib_value(attrs, R_ClassSymbol);
-  if (klass != R_NilValue && TYPEOF(klass) == STRSXP && needs_state(klass)) {
+  if (klass != R_NilValue && TYPEOF(klass) == STRSXP &&
+      needs_state(x, klass)) {
     yyjson_mut_val *out = emit_state(x);
     if (out != nullptr) return out;
   }

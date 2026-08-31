@@ -10,6 +10,23 @@ methods::setClass(
   methods::representation(unit = "character"), where = global
 )
 
+methods::setClass(
+  "CorpusS4Base", methods::representation(a = "numeric"), where = global
+)
+
+methods::setClass(
+  "CorpusS4Derived", contains = "CorpusS4Base",
+  methods::representation(b = "character"), where = global
+)
+
+assign(
+  "CorpusRefClass",
+  methods::setRefClass(
+    "CorpusRefClass", fields = list(a = "numeric"), where = global
+  ),
+  envir = global
+)
+
 assign(
   "CorpusR6Base",
   R6::R6Class(
@@ -179,12 +196,15 @@ withr::defer(
   {
     methods::removeClass("CorpusS4", where = global)
     methods::removeClass("CorpusS4Numeric", where = global)
+    methods::removeClass("CorpusS4Derived", where = global)
+    methods::removeClass("CorpusS4Base", where = global)
+    methods::removeClass("CorpusRefClass", where = global)
     rm(
       list = c(
         "CorpusR6", "CorpusR6Base", "CorpusR6Plain", "CorpusR6PublicHook",
         "CorpusR6PrivateHook", "CorpusR6Holder", "CorpusR6Bound",
         "CorpusR6BoundBare", "CorpusR6Mute", "CorpusR6Anon", "CorpusR6Amb1",
-        "CorpusR6Amb2", "CorpusS7"
+        "CorpusR6Amb2", "CorpusS7", "CorpusRefClass"
       ),
       envir = global
     )

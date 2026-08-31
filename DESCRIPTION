@@ -23,6 +23,8 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
 LinkingTo: cpp11
+Imports:
+    methods
 Suggests:
     jsonlite,
     knitr,
