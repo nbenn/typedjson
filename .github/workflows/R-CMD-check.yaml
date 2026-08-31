@@ -84,7 +84,8 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::roxygen2, local::.
+          # The decor package is a cpp11 Suggests, needed by cpp_register()
+          extra-packages: any::roxygen2, any::decor, local::.
 
       - name: Regenerate
         run: roxygen2::roxygenise(".")
