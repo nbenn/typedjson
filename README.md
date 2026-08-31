@@ -140,6 +140,34 @@ An environment itself is recorded rather than refused, up to the equivalence bas
 
 Cycles and observable sharing are possible only through reference types, so they arrive with environments and R6. A reference the document reaches twice is numbered `~id` where it is first written and named by `{"~ref": n}` everywhere after, so two positions that held one environment still hold one on the way back and a stateful pair of closures over one frame still moves together. Nothing is numbered where nothing repeats, so a document carrying no sharing is unchanged. A cycle rides the same numbering, because the reader creates an environment and numbers it before reading what it binds; what stays refused, naming both ends, is a cycle closing through an object the extension protocol builds in one call, since a constructor cannot be handed an object that already exists.
 
+## Plain JSON for a consumer that brings its own schema
+
+Some JSON is written for a consumer that already defines the shape it expects. There the annotations are noise at best and a validation failure at worst, so `typed = FALSE` leaves them out: attributes and the S4 bit are dropped, and what is left is the two container rules and the number lexemes.
+
+One distinction survives, because no encoder can recover it by looking. A schema wants a scalar at `additionalProperties` and an array at `required` whatever its length, and at length one a scalar and a one-element array are the same R object — so unboxing everything breaks the second and unboxing nothing breaks the first. The distinction already lives in the value, where `I("x")` differs from `"x"`, and plain mode renders it rather than taking a policy for it.
+
+```r
+json_write_str(
+  list(
+    type = "object",
+    properties = list(x = list(type = "string")),
+    required = I("x"),
+    additionalProperties = FALSE
+  ),
+  typed = FALSE
+)
+#> {"type":"object","properties":{"x":{"type":"string"}},"required":["x"],"additionalProperties":false}
+```
+
+Nothing is written that the value is not. A missing value becomes `null`, which is what JSON spells absence with, and anything the annotations were the only way to write is refused where it sits rather than written as `null`.
+
+```r
+json_write_str(list(created = Sys.time(), at = quote(f(x))), typed = FALSE)
+#> Error: cannot write a value of type 'language' as plain JSON at `x$at`
+```
+
+Plain output is not read back as the value that wrote it; that is what the default is for.
+
 ## Reading foreign JSON
 
 One grammar, applied to whatever is handed over. Nothing is inferred from content, only from the lexeme and the shape — no `NA` from `"NA"`, no `Inf` from `"Inf"`, no date from an ISO-8601-looking string, no data frame from an array of objects. There is no strict mode and no lossy mode, because there is only one set of rules.

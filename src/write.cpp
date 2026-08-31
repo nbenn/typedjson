@@ -24,6 +24,37 @@ bool is_node_list(SEXP x) {
   return TYPEOF(x) == LANGSXP || TYPEOF(x) == LISTSXP;
 }
 
+// Wrapping in `I()` prepends the marker rather than replacing the class, so
+// it is a member of the class vector rather than its head.
+bool is_as_is(const std::vector<Attrib> &attrs) {
+  SEXP klass = attrib_value(attrs, R_ClassSymbol);
+  if (TYPEOF(klass) != STRSXP) return false;
+
+  for (R_xlen_t i = 0; i < XLENGTH(klass); ++i) {
+    SEXP elt = STRING_ELT(klass, i);
+    if (elt != NA_STRING && std::strcmp(CHAR(elt), "AsIs") == 0) return true;
+  }
+  return false;
+}
+
+// Plain mode is typed mode with the annotations left out, so what the tags
+// were the only way to write has nothing left to render it. What stays is
+// the list and the four atomic types JSON has a lexeme for; the S4 bit and
+// every attribute are dropped like any other annotation, so a base type
+// wearing one still writes its data.
+bool has_plain_form(SEXP x) {
+  switch (TYPEOF(x)) {
+    case LGLSXP:
+    case INTSXP:
+    case REALSXP:
+    case STRSXP:
+    case VECSXP:
+      return true;
+    default:
+      return false;
+  }
+}
+
 bool needs_type(SEXP x) {
   int type = TYPEOF(x);
   if (type == CPLXSXP || type == RAWSXP || type == OBJSXP) return true;
@@ -59,8 +90,9 @@ void drop_srcref(std::vector<Attrib> *attrs) {
 
 class Writer {
  public:
-  Writer(yyjson_mut_doc *doc, cpp11::list hooks)
+  Writer(yyjson_mut_doc *doc, bool typed, cpp11::list hooks)
       : doc_(doc),
+        typed_(typed),
         kind_(cpp11::function(hooks["kind"])),
         state_(cpp11::function(hooks["state"])),
         env_(cpp11::function(hooks["env"])),
@@ -78,6 +110,7 @@ class Writer {
     bool atomic;
   };
 
+  yyjson_mut_val *emit_untyped(SEXP x);
   yyjson_mut_val *emit_state(SEXP x);
   yyjson_mut_val *emit_env(SEXP x, const std::vector<Attrib> &attrs);
   yyjson_mut_val *emit_env_named(SEXP named);
@@ -115,6 +148,7 @@ class Writer {
   [[noreturn]] void fail(const std::string &msg) const;
 
   yyjson_mut_doc *doc_;
+  bool typed_;
   cpp11::function kind_;
   cpp11::function state_;
   cpp11::function env_;
@@ -162,7 +196,7 @@ void Writer::fail(const std::string &msg) const {
 
 yyjson_mut_val *Writer::text_val(const char *s, size_t len) {
   yyjson_mut_val *out;
-  if (len > 0 && s[0] == kEscape) {
+  if (typed_ && len > 0 && s[0] == kEscape) {
     std::string escaped(1, kEscape);
     escaped.append(s, len);
     out = yyjson_mut_strncpy(doc_, escaped.data(), escaped.size());
@@ -174,6 +208,22 @@ yyjson_mut_val *Writer::text_val(const char *s, size_t len) {
 }
 
 yyjson_mut_val *Writer::ztag_val(ZTag tag) {
+
+  // JSON spells an absent value `null`, so a missing value keeps a plain
+  // rendering where a non-finite double has none: no lexeme spells `Inf`, and
+  // a spelling invented for one would change the type of what it stood for.
+  if (!typed_) {
+    switch (tag) {
+      case Z_NA_LGL:
+      case Z_NA_INT:
+      case Z_NA_REAL:
+      case Z_NA_STR:
+        return yyjson_mut_null(doc_);
+      default:
+        fail("cannot write a non-finite number as plain JSON");
+    }
+  }
+
   const char *text = ztag_text(tag);
   return yyjson_mut_strncpy(doc_, text, std::strlen(text));
 }
@@ -273,6 +323,9 @@ bool Writer::escalate(SEXP x, const std::vector<Attrib> &attrs, SEXP nms) {
 
 yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
   if (x == R_NilValue) return yyjson_mut_null(doc_);
+
+  if (!typed_) return emit_untyped(x);
+
   if (TYPEOF(x) == SYMSXP) return symbol_val(x);
 
   if (TYPEOF(x) == ENVSXP) {
@@ -316,6 +369,26 @@ yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
   SEXP nms = usable_names(x, attrs);
   if (escalate(x, attrs, nms)) return emit_tagged(x, attrs, nms);
   return emit_plain(x, nms, boxed);
+}
+
+// A document written for a consumer that brings its own schema has to satisfy
+// that schema rather than describe the value, so the annotations go and the
+// attributes with them. What is left is the two container rules, the number
+// lexemes and one distinction the R value already carries: `I("x")` keeps its
+// brackets where `"x"` loses them, since at length one nothing else separates
+// an array from a scalar. A value the annotations were the only way to write
+// is refused where it sits rather than written as something it is not.
+yyjson_mut_val *Writer::emit_untyped(SEXP x) {
+
+  if (!has_plain_form(x)) {
+    fail(std::string("cannot write a value of type '") +
+         Rf_type2char(TYPEOF(x)) + "' as plain JSON");
+  }
+
+  std::vector<Attrib> attrs;
+  attributes_of(x, &attrs);
+
+  return emit_plain(x, usable_names(x, attrs), is_as_is(attrs));
 }
 
 yyjson_mut_val *Writer::emit_state(SEXP x) {
@@ -538,16 +611,19 @@ yyjson_mut_val *Writer::emit_plain(SEXP x, SEXP nms, bool boxed) {
     yyjson_mut_val *arr = yyjson_mut_arr(doc_);
     for (R_xlen_t i = 0; i < n; ++i) {
       Step step(this, R_NilValue, i);
-      yyjson_mut_arr_append(arr, emit(VECTOR_ELT(x, i), true));
+      yyjson_mut_arr_append(arr, emit(VECTOR_ELT(x, i), typed_));
     }
     return arr;
   }
 
   yyjson_mut_val *obj = yyjson_mut_obj(doc_);
   for (R_xlen_t i = 0; i < n; ++i) {
-    Step step(this, STRING_ELT(nms, i), i);
-    yyjson_mut_val *key = str_val(STRING_ELT(nms, i));
-    yyjson_mut_obj_add(obj, key, emit(VECTOR_ELT(x, i), false));
+    SEXP name = STRING_ELT(nms, i);
+    Step step(this, name, i);
+    if (!typed_ && name == NA_STRING) {
+      fail("cannot write a missing name as a plain JSON key");
+    }
+    yyjson_mut_obj_add(obj, str_val(name), emit(VECTOR_ELT(x, i), false));
   }
   return obj;
 }
@@ -687,6 +763,7 @@ void finalize_mut_doc(SEXP xp) {
 }  // namespace typedjson
 
 [[cpp11::register]] cpp11::sexp typedjson_write_(SEXP x, bool pretty,
+                                                 bool typed,
                                                  cpp11::list hooks) {
   using namespace typedjson;
 
@@ -696,7 +773,7 @@ void finalize_mut_doc(SEXP xp) {
 
   std::string json;
   {
-    Writer writer(doc, hooks);
+    Writer writer(doc, typed, hooks);
     yyjson_mut_doc_set_root(doc, writer.emit(x));
 
     yyjson_write_flag flags =

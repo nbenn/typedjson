@@ -13,17 +13,17 @@ extern "C" SEXP _typedjson_typedjson_read_(SEXP bytes, SEXP hooks) {
   END_CPP11
 }
 // write.cpp
-cpp11::sexp typedjson_write_(SEXP x, bool pretty, cpp11::list hooks);
-extern "C" SEXP _typedjson_typedjson_write_(SEXP x, SEXP pretty, SEXP hooks) {
+cpp11::sexp typedjson_write_(SEXP x, bool pretty, bool typed, cpp11::list hooks);
+extern "C" SEXP _typedjson_typedjson_write_(SEXP x, SEXP pretty, SEXP typed, SEXP hooks) {
   BEGIN_CPP11
-    return cpp11::as_sexp(typedjson_write_(cpp11::as_cpp<cpp11::decay_t<SEXP>>(x), cpp11::as_cpp<cpp11::decay_t<bool>>(pretty), cpp11::as_cpp<cpp11::decay_t<cpp11::list>>(hooks)));
+    return cpp11::as_sexp(typedjson_write_(cpp11::as_cpp<cpp11::decay_t<SEXP>>(x), cpp11::as_cpp<cpp11::decay_t<bool>>(pretty), cpp11::as_cpp<cpp11::decay_t<bool>>(typed), cpp11::as_cpp<cpp11::decay_t<cpp11::list>>(hooks)));
   END_CPP11
 }
 
 extern "C" {
 static const R_CallMethodDef CallEntries[] = {
     {"_typedjson_typedjson_read_",  (DL_FUNC) &_typedjson_typedjson_read_,  2},
-    {"_typedjson_typedjson_write_", (DL_FUNC) &_typedjson_typedjson_write_, 3},
+    {"_typedjson_typedjson_write_", (DL_FUNC) &_typedjson_typedjson_write_, 4},
     {NULL, NULL, 0}
 };
 }
