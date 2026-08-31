@@ -113,10 +113,10 @@ r6_revive <- function(state) {
 
   classes <- state[["class"]]
 
-  gen <- r6_generator(classes, state[["package"]])
-  obj <- r6_allocate(gen)
+  blueprint <- r6_blueprint(classes, state[["package"]])
+  obj <- r6_allocate(blueprint)
   private <- obj[[".__enclos_env__"]][["private"]]
-  locked <- isTRUE(gen$lock_objects)
+  locked <- blueprint[["locked"]]
 
   state <- drop_unbindable(state, obj, private, locked)
 
@@ -164,8 +164,15 @@ check_r6_state <- function(state, tag) {
 
 r6_generator <- function(class, package) {
   generator_cache$fetch(
-    paste0(c(package, class), collapse = "\x1f"),
+    cache_key("generator", package, class),
     function() find_r6_generator(class, package)
+  )
+}
+
+r6_blueprint <- function(class, package) {
+  generator_cache$fetch(
+    cache_key("blueprint", package, class),
+    function() new_r6_blueprint(r6_generator(class, package))
   )
 }
 
@@ -247,7 +254,7 @@ bindable_names <- function(values, env, locked) {
   names(values)
 }
 
-r6_allocate <- function(gen) {
+new_r6_blueprint <- function(gen) {
 
   public <- c(gen$public_fields, gen$public_methods)
   public[["clone"]] <- NULL
@@ -267,9 +274,18 @@ r6_allocate <- function(gen) {
 
   twin$inherit <- gen$inherit
 
-  obj <- twin$new()
+  list(
+    twin = twin,
+    declares_initialize = "initialize" %in% r6_methods(gen)[["public"]],
+    locked = isTRUE(gen$lock_objects)
+  )
+}
 
-  if (!"initialize" %in% r6_methods(gen)[["public"]]) {
+r6_allocate <- function(blueprint) {
+
+  obj <- blueprint[["twin"]]$new()
+
+  if (!blueprint[["declares_initialize"]]) {
     rm("initialize", envir = obj)
   }
 
@@ -370,23 +386,39 @@ env_by_name <- function(name) {
   asNamespace(name)
 }
 
+cache_key <- function(...) {
+  paste0(c(...), collapse = "\x1f")
+}
+
 generator_cache <- local({
 
   cache <- NULL
+  scoped <- FALSE
 
   list(
     scope = function(expr) {
 
       outer <- cache
-      cache <<- new.env(parent = emptyenv())
-      on.exit(cache <<- outer)
+      enclosing <- scoped
+
+      cache <<- NULL
+      scoped <<- TRUE
+
+      on.exit({
+        cache <<- outer
+        scoped <<- enclosing
+      })
 
       expr
     },
     fetch = function(key, resolve) {
 
-      if (is.null(cache)) {
+      if (!scoped) {
         return(resolve())
+      }
+
+      if (is.null(cache)) {
+        cache <<- new.env(parent = emptyenv())
       }
 
       hit <- get0(key, envir = cache, inherits = FALSE)

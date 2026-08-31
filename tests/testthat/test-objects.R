@@ -268,6 +268,72 @@ test_that("a class is resolved once per call rather than once per object", {
   expect_identical(calls, 1L)
 })
 
+test_that("a class builds one twin per call rather than one per instance", {
+
+  build <- R6::R6Class
+  calls <- 0L
+
+  local_mocked_bindings(
+    R6Class = function(...) {
+      calls <<- calls + 1L
+      build(...)
+    },
+    .package = "R6"
+  )
+
+  doc <- json_write_str(replicate(20L, CorpusR6$new(), simplify = FALSE))
+
+  calls <- 0L
+  revived <- json_read_str(doc)
+
+  expect_identical(calls, 1L)
+  expect_length(revived, 20L)
+})
+
+test_that("a generator and an instance of a class get separate entries", {
+
+  both <- function(...) json_read_str(json_write_str(list(...)))
+
+  first <- both(instance = CorpusR6Plain$new(), generator = CorpusR6Plain)
+
+  expect_s3_class(first$instance, "CorpusR6Plain")
+  expect_identical(first$generator, CorpusR6Plain)
+
+  second <- both(generator = CorpusR6Plain, instance = CorpusR6Plain$new())
+
+  expect_identical(second$generator, CorpusR6Plain)
+  expect_s3_class(second$instance, "CorpusR6Plain")
+})
+
+test_that("the generator cache holds entries only inside their own call", {
+
+  calls <- 0L
+
+  resolve <- function() {
+    calls <<- calls + 1L
+    "value"
+  }
+
+  generator_cache$fetch("k", resolve)
+  generator_cache$fetch("k", resolve)
+
+  expect_identical(calls, 2L)
+
+  generator_cache$scope({
+    generator_cache$fetch("k", resolve)
+    generator_cache$fetch("k", resolve)
+    generator_cache$scope(generator_cache$fetch("k", resolve))
+    generator_cache$fetch("k", resolve)
+  })
+
+  expect_identical(calls, 4L)
+
+  generator_cache$fetch("k", resolve)
+  generator_cache$fetch("k", resolve)
+
+  expect_identical(calls, 6L)
+})
+
 test_that("a resolved generator does not outlive the call that found it", {
 
   doc <- paste0(
