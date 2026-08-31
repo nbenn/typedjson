@@ -59,9 +59,9 @@ identical(json_write_str(json_read_str(doc)), doc)
 
 The second falls out of the first once foreign documents are read under the same grammar rather than a separate lossy mode. It holds for every document this package writes; a foreign one settles after a single round trip, since a mixed-type array such as `[1, "a"]` has to come back as a list.
 
-One value cannot meet the first contract and is not asked to. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test.
+Two values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
 
-- **Exact.** The relation above, which every other value in scope meets, and which an environment recorded by name meets too.
+- **Exact.** The relation above, which every other value in scope meets, and which an environment recorded by name meets too. A string carrying no encoding declaration meets it on its bytes.
 - **Equivalent.** Same bindings by name and by value, same locked and active status, and a parent that is itself equivalent.
 
 The second contract is untouched either way: a document written from a rebuilt environment writes the same bytes again.
@@ -88,13 +88,11 @@ Two rules decide the container. A JSON array of scalars is an atomic vector and 
 show_documents(list(1L, 2L), list(name = "config", retries = 3L))
 ```
 
-A length-one vector is written bare wherever an array could not be mistaken for it: at the document root, as an object value, as an attribute value, and as the payload of a tagged object. Brackets survive around an array element alone, and there they are load-bearing — they are the one thing separating `list(1, 2)` from `c(1, 2)`.
+A length-one vector is written bare wherever an array could not be mistaken for it: at the document root, as an object value, as an attribute value, and as the payload of a tagged object. Brackets survive only around an array element, where they are the one thing separating `list(1, 2)` from `c(1, 2)`.
 
 ```{r, echo = FALSE}
 show_documents(TRUE, 1L, list(1, 2))
 ```
-
-A length-one vector is written bare wherever an array cannot be mistaken for it: at the document root, as an object value, as an attribute value, and as the payload of a tagged object. Brackets survive only around an array element, where they are the one thing separating `list(1, 2)` from `c(1, 2)`.
 
 A document is UTF-8, and so is every string that goes into one. A string R has declared as UTF-8 or latin1 is converted from what it declares; one it has not declared is taken as the bytes it holds, rather than translated through the locale, so the same value writes the same document on every machine. Undeclared bytes that are not valid UTF-8 have no reading to fall back on and are refused where they sit, naming the path.
 

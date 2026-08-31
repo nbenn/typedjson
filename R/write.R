@@ -14,16 +14,18 @@
 #'
 #' The first holds for every supported value: every atomic type, missing
 #' values of each type, the non-finite doubles, attributes of any shape,
-#' language objects, and objects built with S3, S4, S7 or `R6`. An
-#' environment recorded by its contents is the one exception, and it is
-#' the exception base R's own `serialize()` makes as well: what comes back
-#' binds the same names to the same values, locked the same way, under a
-#' parent that is itself equivalent, but it is a new environment rather
-#' than the one that went in. The second holds for every document this
-#' package can write. Foreign documents are read under the same grammar
-#' and normalise on the first round trip, since a mixed-type array such as
-#' `[1, "a"]` has to come back as a list. Two things are refused instead
-#' of normalised, both inside the namespace the `~` prefix reserves. A key
+#' language objects, and objects built with S3, S4, S7 or `R6`. Two
+#' values need it stated differently. An environment recorded by its
+#' contents comes back a new environment, which is the exception base R's
+#' own `serialize()` makes as well: what comes back binds the same names
+#' to the same values, locked the same way, under a parent that is itself
+#' equivalent. A string R has not declared an encoding for comes back
+#' declared UTF-8, so the property holds on its bytes rather than under
+#' `identical()`. The second holds for every document this package can
+#' write. Foreign documents are read under the same grammar and normalise
+#' on the first round trip, since a mixed-type array such as `[1, "a"]`
+#' has to come back as a list. Two things are refused instead of
+#' normalised, both inside the namespace the `~` prefix reserves. A key
 #' beginning with a single `~` is a format tag, and one this reader does
 #' not know is an error rather than a name. A string beginning with `~`
 #' and a reserved discriminator, which is `z` for what JSON has no lexeme
@@ -46,7 +48,13 @@
 #' locale, so the same value writes the same document on every machine.
 #' Undeclared bytes that are not valid UTF-8 have no reading to fall
 #' back on and are refused, naming the path they sit at, as is a string
-#' declared with the `"bytes"` encoding.
+#' declared with the `"bytes"` encoding. A document carries one encoding,
+#' so every string read out of one comes back marked UTF-8, and an
+#' undeclared string therefore revives declared. Comparing the two with
+#' `identical()` translates the native one through the locale and so
+#' disagrees wherever that locale cannot represent the bytes; the bytes
+#' themselves are the same in every locale, and only the declaration has
+#' moved.
 #'
 #' An environment is recorded by name wherever a name finds it again: the
 #' global, base and empty environments, a namespace, a package environment
