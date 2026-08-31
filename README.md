@@ -138,9 +138,7 @@ json_write_str(list(a = 1, e = local({delayedAssign("f", stop("!")); environment
 
 An environment itself is recorded rather than refused, up to the equivalence base R's own `serialize()` settles for. The global, base and empty environments, a namespace, a package environment and the imports environment of a namespace are written as the name that finds them again, so they come back as the object they were written from; anything else is written by its contents, with the parent following the same rule, and comes back binding the same names to the same values under an equivalent parent.
 
-Cycles and observable sharing are possible only through reference types, so they arrive with environments and R6. A cycle is an error naming both ends of it, since in C an unguarded walk would overflow the stack rather than report anything. An object written more than once is a warning, because it will come back as separate objects.
-
-Reference identity across a document is deferred rather than dropped: a document containing no sharing is byte-identical either way, so back-references can land later without invalidating anything already written.
+Cycles and observable sharing are possible only through reference types, so they arrive with environments and R6. A reference the document reaches twice is numbered `~id` where it is first written and named by `{"~ref": n}` everywhere after, so two positions that held one environment still hold one on the way back and a stateful pair of closures over one frame still moves together. Nothing is numbered where nothing repeats, so a document carrying no sharing is unchanged. A cycle rides the same numbering, because the reader creates an environment and numbers it before reading what it binds; what stays refused, naming both ends, is a cycle closing through an object the extension protocol builds in one call, since a constructor cannot be handed an object that already exists.
 
 ## Reading foreign JSON
 

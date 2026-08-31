@@ -215,43 +215,39 @@ test_that("an active binding is refused rather than read", {
   expect_false(read)
 })
 
-test_that("a cycle through a bare environment names both ends", {
+test_that("a cycle through a bare environment closes again on the way back", {
 
   env <- new.env(parent = emptyenv())
   env$self <- env
 
-  expect_error(json_write_str(env), "contains itself")
-  expect_error(json_write_str(list(top = env)), "`x$top`", fixed = TRUE)
+  back <- json_read_str(json_write_str(env))
+
+  expect_identical(back$self, back)
+  expect_env_equivalent(back, env)
 
   outer <- new.env(parent = emptyenv())
   inner <- new.env(parent = outer)
   outer$inner <- inner
 
-  expect_error(json_write_str(inner), "reference cycle")
-  expect_error(
-    json_write_str(inner), "itself at `x$parent$bindings$inner`", fixed = TRUE
-  )
+  back <- json_read_str(json_write_str(inner))
 
-  env$self <- NULL
-  expect_silent(json_write_str(env))
+  expect_identical(get("inner", envir = parent.env(back)), back)
 })
 
-test_that("a bare environment written twice is reported, not refused", {
+test_that("a bare environment written twice comes back as one object", {
 
   env <- new.env(parent = emptyenv())
   env$n <- 1L
 
-  expect_warning(
-    doc <- json_write_str(list(x = env, y = env)), "more than once"
-  )
-
-  back <- suppressWarnings(json_read_str(doc))
+  back <- json_read_str(json_write_str(list(x = env, y = env)))
 
   expect_env_equivalent(back$x, env)
-  expect_false(identical(back$x, back$y))
+  expect_identical(back$x, back$y)
 
-  expect_silent(json_write_str(list(x = env, y = new.env(parent = emptyenv()))))
-  expect_silent(json_write_str(list(x = globalenv(), y = globalenv())))
+  for (pair in list(list(x = env, y = new.env(parent = emptyenv())),
+                    list(x = globalenv(), y = globalenv()))) {
+    expect_no_match(json_write_str(pair), "~id", fixed = TRUE)
+  }
 })
 
 test_that("an environment recorded by name is replaced loudly when absent", {
@@ -309,7 +305,7 @@ test_that("a recorded environment the reader cannot use is an error", {
     "does not bind"
   )
   expect_error(
-    json_read_str('{"~t":"environment","~v":{"~ref":1}}'), "not a tag"
+    json_read_str('{"~t":"environment","~v":{"~q":1}}'), "not a tag"
   )
 })
 

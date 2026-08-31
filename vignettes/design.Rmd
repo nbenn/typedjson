@@ -124,10 +124,10 @@ show_documents(setNames(list(1L), NA), setNames(list(1L), "~zInf"))
 ```
 
 ```{r, error = TRUE}
-json_read_str('{"~ref": 3}')
+json_read_str('{"~span": 3}')
 ```
 
-Refusing is what lets the format grow. Back-references are deferred rather than dropped, and the natural spelling for them is a new tag; a reader carrying this rule refuses a document written against that tag instead of quietly returning a wrong value. That is the useful half of a version stamp for zero bytes, and a stamp itself does not fit, since an attribute-free vector emits as a bare array and so would need a wrapper that the foreign round trip cannot afford.
+Refusing is what lets the format grow, and the back-references below are what it grew into: they spell themselves as two new tags, and a reader carrying this rule refuses a document written against a tag it does not have instead of quietly returning a wrong value. That is the useful half of a version stamp for zero bytes, and a stamp itself does not fit, since an attribute-free vector emits as a bare array and so would need a wrapper that the foreign round trip cannot afford.
 
 ### Attributes
 
@@ -209,7 +209,7 @@ A call is mostly symbols, so their spelling decides whether the format stays rea
 
 So a symbol takes the prefix tag, which is the device the format already uses for typed `NA` and the non-finite doubles, and is safe here for the same reason: any ordinary string beginning with `~` is escaped by doubling, so a single-`~` string can never originate from user data. The empty symbol — what `x[, 1]` holds where a row index would go, and what a formals entry with no default holds — is the tag with nothing after it. Depth is not a limit in practice either: a 10000-deep call round-trips, where the deparsed form overflows the parser's context stack in `str2lang()` at 2000.
 
-Attributes ride the ordinary rule, which is what carries the `.Environment` of a formula, so `y ~ x` round-trips exactly once an environment does. A `{` block parsed with `keep.source = TRUE` reaches one step further down, where every `srcref` points at the same `srcfile` environment: the block writes, but that one environment comes back as separate copies, which is the shared-reference warning below rather than an exact round trip.
+Attributes ride the ordinary rule, which is what carries the `.Environment` of a formula, so `y ~ x` round-trips exactly once an environment does. A `{` block parsed with `keep.source = TRUE` reaches one step further down, where five `srcref` attributes point at one `srcfile` environment holding the source text; none of that is recorded, because a source reference is dropped wherever a parser attached one.
 
 ```{r, error = TRUE}
 json_write_str(y ~ x)
@@ -346,11 +346,43 @@ And a closure a method stored back into the object it belongs to reaches that ob
 
 Cycles and observable sharing are possible only through reference types. A value list cannot contain itself, because `l$self <- l` stores a copy, and copy-on-write means value types cannot tell whether they are shared. So this question arrives with environments and with R6, and with nothing else.
 
-Two tiers ship, one is deferred:
+Sharing needs no cycle and no `R6`. Two closures returned from one factory share their environment, which is the ordinary way to write a stateful pair in R, and without reference identity the pair comes back over two separate frames, so setting through one no longer moves what the other reads.
 
-- **Cycle detection.** An ancestor stack of the reference objects currently being visited; a cycle is a back-edge onto it. Costs O(depth) with no hash table, and turns what would be a C stack overflow into an error naming the path. Non-negotiable — in C, unguarded recursion on a cycle segfaults rather than erroring, and crashing the session is the worst outcome a persistence library can have.
-- **Shared-reference warning.** A seen-set, so the writer can say that an object appears more than once and will be restored as separate objects. Costs a hash set and changes no bytes in the document.
-- **Deferred: back-references and identity preservation.** Base R's own `serialize()` does maintain a reference table for environments, so this is the one axis on which we sit behind `saveRDS`. It is also what a cycle costs today: an environment whose parent frame binds it back, which is what `function() {e <- new.env(); e}` returns, is a genuine cycle and is reported rather than written. It is deferred rather than dropped because a document containing no sharing is byte-identical either way, so it can land later without invalidating anything already written — and because real cycles cluster in objects nobody serializes. The chromote package has two (`Chromote` holds `sessions`, each `ChromoteSession` holds `parent`; `Chromote` holds `event_manager`, which holds `session`), and both wrap a live browser process.
+```{r}
+mk <- local(
+  function() {
+    i <- 0
+    list(get = function() i, set = function(v) i <<- v)
+  },
+  globalenv()
+)
+
+pair <- json_read_str(json_write_str(mk()))
+pair$set(2)
+pair$get()
+```
+
+Three pieces, and the third is what the first two are for:
+
+- **A reference table.** Every reference the walk has reached, keyed by its `SEXP`. Reaching one a second time numbers the first write with `~id` and writes `{"~ref": n}` in its place. The number is minted where the repeat happens rather than where the first write did, so a document holding no sharing carries no marker and reads byte for byte as it would have without any of this. Base R's own `serialize()` keeps such a table for environments, which is the axis this used to sit behind `saveRDS` on.
+- **Numbering before descending.** The reader creates an environment and numbers it before reading what it binds, which is where a reference back to it comes from. That is what turns a cycle from an error into a document: `function() {e <- new.env(); e}` returns an environment whose parent frame binds it back, and it now writes and comes back bound the same way. Attributes are read before contents for the same reason, since that is the order they were written in and a reference only ever points backwards.
+- **What is still refused.** A cycle closing through an object the extension protocol builds in one call — an `R6` instance, or any class with a `json_state()` method — since a constructor cannot be handed an object that already exists. The error names both ends of it. Sharing such an object is fine; only the cycle is not, which leaves the chromote shape out (`Chromote` holds `sessions`, each `ChromoteSession` holds `parent`), and both of those wrap a live browser process anyway.
+
+The cycle in that second bullet is not a corner case: it is what any function returning an environment it created produces.
+
+```{r}
+frame <- local(
+  function() {
+    inner <- new.env()
+    inner
+  },
+  globalenv()
+)
+
+back <- json_read_str(json_write_str(frame()))
+
+identical(parent.env(back)$inner, back)
+```
 
 ## Reading foreign JSON
 
@@ -372,6 +404,7 @@ One grammar, applied to whatever is handed to us. Nothing is inferred from conte
 | `"~:mpg"` | the symbol `mpg` | the reserved discriminator for a symbol |
 | `"~zBogus"` | an error | a reserved discriminator naming no known tag |
 | `{"~foo": …}` | an error | the reserved prefix at key position |
+| `{"~ref": 3}` | an error unless something carries `"~id": 3` | the reference table |
 
 No `NA` from `"NA"`, no `Inf` from `"Inf"`, no date from an ISO-8601-looking string, no data frame from an array of objects. There is no strict mode and no lossy mode, because there is only one set of rules.
 
@@ -479,4 +512,4 @@ Closest analogue is `TypedJSON.jl`, which states the same three goals — type f
 
 ## Deferred
 
-Back-references and reference identity. Determinism of key order, which is a separate and worthwhile guarantee for diffing and hashing, and which the JSON world already calls "stable". A binary sibling via CBOR or MessagePack, which would have argued for jsoncons over yyjson and can be revisited if it ever earns its place.
+Determinism of key order, which is a separate and worthwhile guarantee for diffing and hashing, and which the JSON world already calls "stable". A binary sibling via CBOR or MessagePack, which would have argued for jsoncons over yyjson and can be revisited if it ever earns its place.

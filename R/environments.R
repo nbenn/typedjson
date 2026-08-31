@@ -17,17 +17,21 @@ writer_env <- function(x) {
   list(name = name)
 }
 
-reader_env <- function(state) {
+reader_env <- function(state, env) {
 
   if (!is_named_list(state)) {
     stop("a recorded environment has to be an object", call. = FALSE)
   }
 
   if (is.null(state[["name"]])) {
-    return(env_contents(state))
+    return(env_contents(state, env))
   }
 
   env_reference(state[["name"]])
+}
+
+reader_shell <- function() {
+  new.env(parent = emptyenv())
 }
 
 named_env <- function(name, load = FALSE) {
@@ -129,7 +133,7 @@ env_reference <- function(name) {
   found
 }
 
-env_contents <- function(state) {
+env_contents <- function(state, env) {
 
   parent <- state[["parent"]]
 
@@ -146,7 +150,12 @@ env_contents <- function(state) {
     )
   }
 
-  env <- new.env(parent = parent)
+  if (is.null(env)) {
+    env <- new.env(parent = parent)
+  } else {
+    parent.env(env) <- parent
+  }
+
   fill_env(env, bindings)
 
   for (nm in locked_names(state[["locked_bindings"]], env)) {

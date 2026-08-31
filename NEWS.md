@@ -22,7 +22,7 @@ First release, carrying the format and the two round-trip contracts described in
 
 * An extension protocol, `json_state()` and `json_revive()`, for classes the default rule does not fit.
 
-* Cycle detection that errors naming both ends, and a warning when a reference object is written more than once. Both cover bare environments as well as `R6` instances, and both land before the payload rather than after it, so an unguarded walk cannot overflow the C stack on the way in.
+* Reference identity across a document, which covers bare environments and `R6` instances alike. A reference the walk reaches more than once is numbered with a `~id` where it is first written, and each later position carries `{"~ref": n}` rather than a second copy, so two positions holding one environment on the way in hold one on the way back and a stateful pair of closures over one frame still moves together. The number is minted where the repeat happens, so a document carrying no sharing carries no marker either. A cycle rides the same numbering, since the reader creates an environment and numbers it before reading what it binds: an environment whose parent frame binds it back, which is what `function() {e <- new.env(); e}` returns, writes and comes back bound the same way. What stays refused, as an error naming both ends of it, is a cycle closing through an object the extension protocol builds in one call — an `R6` instance among them — since a constructor cannot be handed an object that already exists.
 
 ## Format
 

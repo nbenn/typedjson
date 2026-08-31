@@ -10,24 +10,24 @@ expect_env_equivalent <- function(object, expected) {
   invisible(object)
 }
 
-env_difference <- function(x, y, at = "x") {
+env_difference <- function(x, y, at = "x", seen = env_pairs()) {
 
   if (is.environment(x) || is.environment(y)) {
-    return(env_frame_difference(x, y, at))
+    return(env_frame_difference(x, y, at, seen))
   }
 
   if (is_closure(x) || is_closure(y)) {
-    return(env_closure_difference(x, y, at))
+    return(env_closure_difference(x, y, at, seen))
   }
 
-  difference <- env_attribute_difference(x, y, at)
+  difference <- env_attribute_difference(x, y, at, seen)
 
   if (!is.null(difference)) {
     return(difference)
   }
 
   if (is.list(x) && is.list(y)) {
-    return(env_element_difference(x, y, at))
+    return(env_element_difference(x, y, at, seen))
   }
 
   if (identical(bare_value(x), bare_value(y))) {
@@ -40,7 +40,7 @@ env_difference <- function(x, y, at = "x") {
 # An environment reached through an attribute or a list element compares up to
 # equivalence like any other, so the walk descends through both rather than
 # handing the whole value to identical().
-env_attribute_difference <- function(x, y, at) {
+env_attribute_difference <- function(x, y, at, seen) {
 
   attrs <- attributes(x)
 
@@ -52,7 +52,7 @@ env_attribute_difference <- function(x, y, at) {
 
     difference <- env_difference(
       attrs[[nm]], attr(y, nm, exact = TRUE),
-      paste0("attr(", at, ", \"", nm, "\")")
+      paste0("attr(", at, ", \"", nm, "\")"), seen
     )
 
     if (!is.null(difference)) {
@@ -67,7 +67,7 @@ is_closure <- function(x) {
   is.function(x) && !is.primitive(x)
 }
 
-env_closure_difference <- function(x, y, at) {
+env_closure_difference <- function(x, y, at, seen) {
 
   if (!is_closure(x) || !is_closure(y)) {
     return(paste0("`", at, "` is a closure on one side only"))
@@ -78,11 +78,11 @@ env_closure_difference <- function(x, y, at) {
   }
 
   env_difference(
-    environment(x), environment(y), paste0("environment(", at, ")")
+    environment(x), environment(y), paste0("environment(", at, ")"), seen
   )
 }
 
-env_element_difference <- function(x, y, at) {
+env_element_difference <- function(x, y, at, seen) {
 
   if (length(x) != length(y)) {
     return(paste0("`", at, "` differs in length"))
@@ -91,7 +91,7 @@ env_element_difference <- function(x, y, at) {
   for (i in seq_along(x)) {
 
     difference <- env_difference(
-      .subset2(x, i), .subset2(y, i), paste0(at, "[[", i, "]]")
+      .subset2(x, i), .subset2(y, i), paste0(at, "[[", i, "]]"), seen
     )
 
     if (!is.null(difference)) {
@@ -109,13 +109,13 @@ bare_value <- function(x) {
   x
 }
 
-env_frame_difference <- function(x, y, at) {
+env_frame_difference <- function(x, y, at, seen) {
 
   if (!is.environment(x) || !is.environment(y)) {
     return(paste0("`", at, "` is an environment on one side only"))
   }
 
-  if (identical(x, y)) {
+  if (identical(x, y) || env_pair_known(seen, x, y)) {
     return(NULL)
   }
 
@@ -125,7 +125,7 @@ env_frame_difference <- function(x, y, at) {
     return(paste0("`", at, "` binds different names"))
   }
 
-  difference <- env_attribute_difference(x, y, at)
+  difference <- env_attribute_difference(x, y, at, seen)
 
   if (!is.null(difference)) {
     return(difference)
@@ -148,7 +148,7 @@ env_frame_difference <- function(x, y, at) {
     difference <- env_difference(
       get(nm, envir = x, inherits = FALSE),
       get(nm, envir = y, inherits = FALSE),
-      paste0(at, "$", nm)
+      paste0(at, "$", nm), seen
     )
 
     if (!is.null(difference)) {
@@ -156,9 +156,111 @@ env_frame_difference <- function(x, y, at) {
     }
   }
 
-  env_difference(parent.env(x), parent.env(y), paste0("parent.env(", at, ")"))
+  env_difference(
+    parent.env(x), parent.env(y), paste0("parent.env(", at, ")"), seen
+  )
+}
+
+# A cycle reaches the same pair of environments twice, so the pair standing
+# open counts as equivalent and the walk stops rather than descending forever.
+env_pairs <- function() {
+
+  state <- new.env(parent = emptyenv())
+  state$pairs <- list()
+
+  state
+}
+
+env_pair_known <- function(seen, x, y) {
+
+  for (pair in seen$pairs) {
+    if (identical(pair[[1L]], x) && identical(pair[[2L]], y)) {
+      return(TRUE)
+    }
+  }
+
+  seen$pairs <- c(seen$pairs, list(list(x, y)))
+
+  FALSE
 }
 
 binding_flags <- function(nms, env, test) {
   vapply(nms, test, logical(1L), env = env, USE.NAMES = FALSE)
+}
+
+env_sharing <- function(x) {
+
+  state <- new.env(parent = emptyenv())
+  state$envs <- list()
+  state$group <- integer()
+  state$where <- character()
+
+  env_sharing_visit(x, "x", state)
+
+  stats::setNames(state$group, state$where)
+}
+
+env_sharing_visit <- function(x, at, state) {
+
+  if (is.environment(x)) {
+    return(env_sharing_frame(x, at, state))
+  }
+
+  for (nm in setdiff(names(attributes(x)), c("srcref", "wholeSrcref"))) {
+    env_sharing_visit(
+      attr(x, nm, exact = TRUE), paste0("attr(", at, ", \"", nm, "\")"), state
+    )
+  }
+
+  if (is.list(x)) {
+    for (i in seq_along(x)) {
+      env_sharing_visit(.subset2(x, i), paste0(at, "[[", i, "]]"), state)
+    }
+  }
+
+  if (is_closure(x)) {
+    env_sharing_visit(formals(x), paste0("formals(", at, ")"), state)
+    env_sharing_visit(environment(x), paste0("environment(", at, ")"), state)
+  }
+
+  invisible(NULL)
+}
+
+env_sharing_frame <- function(x, at, state) {
+
+  group <- env_sharing_group(x, state$envs)
+  fresh <- is.na(group)
+
+  if (fresh) {
+    state$envs <- c(state$envs, list(x))
+    group <- length(state$envs)
+  }
+
+  state$where <- c(state$where, at)
+  state$group <- c(state$group, group)
+
+  if (!fresh || nzchar(environmentName(x))) {
+    return(invisible(NULL))
+  }
+
+  for (nm in ls(x, all.names = TRUE)) {
+    env_sharing_visit(
+      get(nm, envir = x, inherits = FALSE), paste0(at, "$", nm), state
+    )
+  }
+
+  env_sharing_visit(
+    parent.env(x), paste0("parent.env(", at, ")"), state
+  )
+}
+
+env_sharing_group <- function(x, envs) {
+
+  for (i in seq_along(envs)) {
+    if (identical(envs[[i]], x)) {
+      return(i)
+    }
+  }
+
+  NA_integer_
 }
