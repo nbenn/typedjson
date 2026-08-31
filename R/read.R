@@ -18,7 +18,14 @@ json_read_str <- function(txt) {
 
   stopifnot(is.character(txt), length(txt) == 1L, !is.na(txt))
 
-  json_read_bytes(charToRaw(enc2utf8(txt)))
+  # Only a declared latin1 string needs converting: any other string already
+  # holds the document's own bytes, which a locale conversion would replace
+  # with R's `<xx>` escape text wherever the locale cannot represent them.
+  if (Encoding(txt) == "latin1") {
+    txt <- enc2utf8(txt)
+  }
+
+  json_read_bytes(charToRaw(txt))
 }
 
 json_read_bytes <- function(bytes) {

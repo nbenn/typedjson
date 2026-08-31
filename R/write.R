@@ -36,6 +36,14 @@
 #' because there the brackets are the sole thing separating `list(1, 2)`
 #' from `c(1, 2)`.
 #'
+#' Text is carried as UTF-8. A string R has declared as UTF-8 or latin1
+#' is converted from what it declares, and one it has not declared is
+#' taken as the bytes it holds rather than translated through the
+#' locale, so the same value writes the same document on every machine.
+#' Undeclared bytes that are not valid UTF-8 have no reading to fall
+#' back on and are refused, naming the path they sit at, as is a string
+#' declared with the `"bytes"` encoding.
+#'
 #' Values that are handles rather than data stay out: environments (other
 #' than an `R6` generator and the instances it can rebuild), closures and
 #' external pointers are refused rather than silently written as something
