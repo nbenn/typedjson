@@ -357,35 +357,6 @@ find_generator <- function(env, class, test) {
   get(found, envir = env, inherits = FALSE)
 }
 
-env_by_name <- function(name) {
-
-  if (!is.character(name) || length(name) != 1L || is.na(name) ||
-        !nzchar(name)) {
-    refuse(
-      "the class was defined in an environment that cannot be found again"
-    )
-  }
-
-  if (identical(name, "R_GlobalEnv")) {
-    return(globalenv())
-  }
-
-  if (identical(name, "base")) {
-    return(baseenv())
-  }
-
-  if (startsWith(name, "package:")) {
-    return(as.environment(name))
-  }
-
-  if (!requireNamespace(name, quietly = TRUE)) {
-    stop("the ", name, " package is needed to revive this object",
-         call. = FALSE)
-  }
-
-  asNamespace(name)
-}
-
 cache_key <- function(...) {
   paste0(c(...), collapse = "\x1f")
 }

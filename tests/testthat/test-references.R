@@ -57,7 +57,7 @@ test_that("a handle rather than data is refused, with the path", {
 })
 
 test_that("an error leaves the session able to write again", {
-  expect_error(json_write_str(new.env()))
+  expect_error(json_write_str(mean))
   expect_identical(json_write_str(1:3), "[1,2,3]")
   invisible(gc())
   expect_identical(json_read_str("[1,2,3]"), 1:3)

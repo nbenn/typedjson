@@ -108,6 +108,55 @@ inline bool records_by_name(const char *tag) {
 const char *const kPartRe = "re";
 const char *const kPartIm = "im";
 
+const char *const kEnvParent = "parent";
+const char *const kEnvBindings = "bindings";
+const char *const kEnvLocked = "locked";
+const char *const kEnvLockedBindings = "locked_bindings";
+
+// R 4.5 added R_ParentEnv() and R 4.6 withdrew ENCLOS(), so which accessor
+// reads an environment's parent depends on which side of that change we are on.
+inline SEXP parent_env(SEXP x) {
+#if defined(R_VERSION) && R_VERSION >= R_Version(4, 5, 0)
+  return R_ParentEnv(x);
+#else
+  return ENCLOS(x);
+#endif
+}
+
+enum BindKind { BIND_VALUE = 0, BIND_ACTIVE, BIND_PROMISE };
+
+// R 4.6 reports the kind of a binding directly and moved findVarInFrame()
+// behind the legacy switch, so the two releases ask the same question through
+// different calls. Neither forces: an active binding is read through its own
+// predicate and a promise is refused rather than evaluated, which is why the
+// delayed and forced cases need no telling apart.
+#if defined(R_VERSION) && R_VERSION >= R_Version(4, 6, 0)
+inline BindKind binding_of(SEXP sym, SEXP env, SEXP *value) {
+  switch (R_GetBindingType(sym, env)) {
+    case R_BindingTypeActive:
+      return BIND_ACTIVE;
+    case R_BindingTypeDelayed:
+    case R_BindingTypeForced:
+      return BIND_PROMISE;
+    case R_BindingTypeMissing:
+      *value = R_MissingArg;
+      return BIND_VALUE;
+    default:
+      break;
+  }
+  *value = R_getVarEx(sym, env, FALSE, R_UnboundValue);
+  return BIND_VALUE;
+}
+#else
+inline BindKind binding_of(SEXP sym, SEXP env, SEXP *value) {
+  if (R_BindingIsActive(sym, env)) return BIND_ACTIVE;
+  SEXP found = Rf_findVarInFrame(env, sym);
+  if (TYPEOF(found) == PROMSXP) return BIND_PROMISE;
+  *value = found;
+  return BIND_VALUE;
+}
+#endif
+
 enum ZTag {
   Z_NONE = 0,
   Z_NA_LGL,

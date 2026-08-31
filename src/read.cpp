@@ -72,6 +72,7 @@ SEXPTYPE sexptype_of(const char *name) {
   if (std::strcmp(name, "language") == 0) return LANGSXP;
   if (std::strcmp(name, "pairlist") == 0) return LISTSXP;
   if (std::strcmp(name, "expression") == 0) return EXPRSXP;
+  if (std::strcmp(name, "environment") == 0) return ENVSXP;
   if (std::strcmp(name, "object") == 0 || std::strcmp(name, "S4") == 0) {
     return OBJSXP;
   }
@@ -140,7 +141,8 @@ int attrib_rank(SEXP sym) {
 class Reader {
  public:
   explicit Reader(cpp11::list hooks)
-      : revive_(cpp11::function(hooks["revive"])) {}
+      : revive_(cpp11::function(hooks["revive"])),
+        env_(cpp11::function(hooks["env"])) {}
 
   SEXP build(yyjson_val *v);
 
@@ -151,6 +153,7 @@ class Reader {
   SEXP build_obj(yyjson_val *v);
   SEXP build_tagged(yyjson_val *v);
   SEXP build_hooked(yyjson_val *v, const char *tag);
+  SEXP build_env(yyjson_val *v);
   SEXP build_complex(yyjson_val *v);
   SEXP build_raw(yyjson_val *v);
   SEXP build_symbol(yyjson_val *v);
@@ -167,6 +170,7 @@ class Reader {
   void note_lossy(const std::string &lexeme);
 
   cpp11::function revive_;
+  cpp11::function env_;
   std::vector<std::string> lossy_;
 };
 
@@ -496,6 +500,8 @@ SEXP Reader::build_tagged(yyjson_val *v) {
     out = build_raw(payload);
   } else if (type == LANGSXP || type == LISTSXP) {
     out = build_nodes(payload, type);
+  } else if (type == ENVSXP) {
+    out = build_env(payload);
   } else {
     out = build(payload);
     if (type != kNoType) out = coerce(out, type);
@@ -535,6 +541,13 @@ SEXP Reader::build_tagged(yyjson_val *v) {
     }
   }
 
+  UNPROTECT(1);
+  return out;
+}
+
+SEXP Reader::build_env(yyjson_val *v) {
+  SEXP state = PROTECT(build(v));
+  cpp11::sexp out = env_(state);
   UNPROTECT(1);
   return out;
 }

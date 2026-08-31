@@ -115,6 +115,18 @@ corpus_edges <- function() {
   )
 }
 
+corpus_envs <- function() {
+  list(
+    "env/named/global" = globalenv(),
+    "env/named/base" = baseenv(),
+    "env/named/empty" = emptyenv(),
+    "env/named/namespace" = asNamespace("stats"),
+    "env/named/base-namespace" = asNamespace("base"),
+    "env/named/package" = as.environment("package:stats"),
+    "env/named/imports" = parent.env(asNamespace("stats"))
+  )
+}
+
 corpus_payloads <- function() {
 
   board <- list(
@@ -176,6 +188,79 @@ corpus_payloads <- function() {
     "payload/conversation" = turns,
     "payload/link-input-inf" = list(id = "l2", input = "Inf", value = Inf)
   )
+}
+
+corpus_env <- function(..., parent = emptyenv()) {
+
+  env <- new.env(parent = parent)
+  fill <- list(...)
+
+  for (nm in names(fill)) {
+    assign(nm, fill[[nm]], envir = env)
+  }
+
+  env
+}
+
+corpus_env_contents <- function() {
+
+  values <- corpus_env(
+    n = 1L,
+    x = c(a = 1, b = NA, c = Inf),
+    s = "~zInf",
+    l = list(1, "a", NULL),
+    d = as.Date("2026-01-01"),
+    `~t` = TRUE,
+    `a b` = as.raw(c(0, 255)),
+    frame = data.frame(x = 1:2, y = c("a", "b"))
+  )
+
+  locked <- corpus_env(k = 1, m = 2)
+  lockBinding("k", locked)
+  lockEnvironment(locked)
+
+  list(
+    "env/contents/empty" = corpus_env(),
+    "env/contents/global-parent" = corpus_env(n = 1L, parent = globalenv()),
+    "env/contents/namespace-parent" = corpus_env(
+      n = 1L, parent = asNamespace("stats")
+    ),
+    "env/contents/package-parent" = corpus_env(
+      n = 1L, parent = as.environment("package:stats")
+    ),
+    "env/contents/values" = values,
+    "env/contents/nested" = corpus_env(inner = values, parent = globalenv()),
+    "env/contents/locked" = locked,
+    "env/contents/attributes" = structure(
+      corpus_env(n = 1L, parent = baseenv()),
+      class = "corpus_class", meta = c(a = 1L)
+    ),
+    "env/contents/dotted" = corpus_env(.hidden = 1L, visible = 2L)
+  )
+}
+
+corpus_env_active <- function() {
+
+  env <- corpus_env(n = 1L)
+  makeActiveBinding("live", function() 42, env)
+
+  env
+}
+
+corpus_env_promise <- function() {
+
+  env <- corpus_env(n = 1L)
+  delayedAssign("lazy", stop("forced!"), assign.env = env)
+
+  env
+}
+
+corpus_env_missing <- function() {
+
+  env <- corpus_env(n = 1L)
+  assign("a", quote(expr = ), envir = env)
+
+  env
 }
 
 round_trip_failures <- function(values) {
@@ -253,21 +338,22 @@ corpus_refused <- function() {
   )
 
   list(
-    "handle/environment" = list(
-      value = new.env(), type = "environment", path = "x"
+    "env/active-binding" = list(
+      value = corpus_env_active(), message = "cannot write an active binding",
+      path = "x$bindings$live"
     ),
-    "handle/environment-in-list" = list(
-      value = list(a = 1, e = new.env()), type = "environment", path = "x$e"
+    "env/promise" = list(
+      value = corpus_env_promise(), type = "promise", path = "x$bindings$lazy"
     ),
-    "handle/environment-nested" = list(
-      value = list(list(new.env())), type = "environment",
-      path = "x[[1]][[1]]"
+    "env/closure" = list(
+      value = corpus_env(f = mean), type = "closure", path = "x$bindings$f"
+    ),
+    "env/closure-in-list" = list(
+      value = list(a = 1, e = corpus_env(f = mean)), type = "closure",
+      path = "x$e$bindings$f"
     ),
     "handle/closure" = list(
       value = list(f = mean), type = "closure", path = "x$f"
-    ),
-    "handle/formula" = list(
-      value = y ~ x, type = "environment", path = "x$.Environment"
     ),
     "r6/public-closure" = list(
       value = corpus_generator("CorpusR6PublicHook")$new(),
@@ -843,10 +929,14 @@ corpus_language <- function() {
     "expression/named" = expression(a = x + 1, y),
     "expression/empty" = expression(),
     "pairlist/formals" = formals(function(x, y = 2) NULL),
-    "pairlist/no-defaults" = formals(function(x, y) NULL)
+    "pairlist/no-defaults" = formals(function(x, y) NULL),
+    "formula/simple" = stats::as.formula("y ~ x", env = globalenv()),
+    "formula/terms" = stats::terms(
+      stats::as.formula("y ~ x + z", env = globalenv())
+    )
   )
 }
 
-corpus <- c(corpus_atomic(), corpus_edges(), corpus_payloads(), corpus_shapes(),
-            corpus_lists(), corpus_language(),
+corpus <- c(corpus_atomic(), corpus_edges(), corpus_envs(), corpus_payloads(),
+            corpus_shapes(), corpus_lists(), corpus_language(),
             list("payload/blockr-board" = corpus_board))

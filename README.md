@@ -91,7 +91,7 @@ A call is its elements, so it is written as them, with the argument names R stor
 
 A symbol takes the prefix tag rather than a tagged object of its own, since a call is mostly symbols and the object form costs more than twice the bytes. The empty symbol — what `x[, 1]` holds where a row index would go, and what a formals entry with no default holds — is the tag with nothing after it.
 
-This is what makes an object carrying a recorded call writable, a caught condition and a fitted model among them. A formula is not one of them yet: it is a `language` value carrying the environment it was created in, so it is refused there rather than in the call.
+This is what makes an object carrying a recorded call writable — a caught condition, a formula and the fitted model built on one among them, since a formula is a `language` value carrying the environment it was created in and an environment is recorded rather than refused.
 
 ## Object systems
 
@@ -113,14 +113,16 @@ The generator is the authority on the instance's shape as well as on its lock, s
 
 ## What stays out
 
-Values that are handles rather than data are refused rather than written as something else: environments other than an R6 generator and the instances it can rebuild, closures and external pointers. An error names the path it stopped at.
+Values that are handles rather than data are refused rather than written as something else: closures and external pointers, plus the two bindings an environment can hold that would have to be run to be read — a promise and an active binding. An error names the path it stopped at.
 
 ```r
-json_write_str(list(a = 1, e = new.env()))
-#> Error: cannot write a value of type 'environment' at `x$e`
+json_write_str(list(a = 1, e = local({f <- mean; environment()})))
+#> Error: cannot write a value of type 'closure' at `x$e$bindings$f`
 ```
 
-Cycles and observable sharing are possible only through reference types, so they exist here only because R6 is in scope. A cycle is an error naming both ends of it, since in C an unguarded walk would overflow the stack rather than report anything. An object written more than once is a warning, because it will come back as separate objects.
+An environment itself is recorded rather than refused, up to the equivalence base R's own `serialize()` settles for. The global, base and empty environments, a namespace, a package environment and the imports environment of a namespace are written as the name that finds them again, so they come back as the object they were written from; anything else is written by its contents, with the parent following the same rule, and comes back binding the same names to the same values under an equivalent parent.
+
+Cycles and observable sharing are possible only through reference types, so they arrive with environments and R6. A cycle is an error naming both ends of it, since in C an unguarded walk would overflow the stack rather than report anything. An object written more than once is a warning, because it will come back as separate objects.
 
 Reference identity across a document is deferred rather than dropped: a document containing no sharing is byte-identical either way, so back-references can land later without invalidating anything already written.
 

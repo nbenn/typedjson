@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -27,7 +28,7 @@ bool is_node_list(SEXP x) {
 bool needs_type(SEXP x) {
   int type = TYPEOF(x);
   if (type == CPLXSXP || type == RAWSXP || type == OBJSXP) return true;
-  if (is_node_list(x) || type == EXPRSXP) return true;
+  if (is_node_list(x) || type == EXPRSXP || type == ENVSXP) return true;
 
   return XLENGTH(x) == 0 && type != VECSXP;
 }
@@ -37,7 +38,8 @@ class Writer {
   Writer(yyjson_mut_doc *doc, cpp11::list hooks)
       : doc_(doc),
         kind_(cpp11::function(hooks["kind"])),
-        state_(cpp11::function(hooks["state"])) {}
+        state_(cpp11::function(hooks["state"])),
+        env_(cpp11::function(hooks["env"])) {}
 
   yyjson_mut_val *emit(SEXP x, bool boxed = false);
 
@@ -45,6 +47,9 @@ class Writer {
 
  private:
   yyjson_mut_val *emit_state(SEXP x);
+  yyjson_mut_val *emit_env(SEXP x, const std::vector<Attrib> &attrs);
+  yyjson_mut_val *emit_env_named(SEXP named);
+  yyjson_mut_val *emit_env_contents(SEXP x);
   yyjson_mut_val *emit_plain(SEXP x, SEXP nms, bool boxed);
   yyjson_mut_val *emit_tagged(SEXP x, const std::vector<Attrib> &attrs,
                               SEXP nms);
@@ -66,12 +71,16 @@ class Writer {
   SEXP usable_names(SEXP x, const std::vector<Attrib> &attrs);
   bool escalate(SEXP x, const std::vector<Attrib> &attrs, SEXP nms);
 
+  void enter_reference(SEXP x, const std::string &at);
+  void leave_reference();
+
   std::string path() const;
   [[noreturn]] void fail(const std::string &msg) const;
 
   yyjson_mut_doc *doc_;
   cpp11::function kind_;
   cpp11::function state_;
+  cpp11::function env_;
   std::unordered_map<std::string, bool> memo_;
   std::vector<Crumb> crumbs_;
   std::vector<std::pair<SEXP, std::string> > refs_;
@@ -251,6 +260,8 @@ yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
     case LISTSXP:
     case EXPRSXP:
       break;
+    case ENVSXP:
+      return emit_env(x, attrs);
     default:
       fail(std::string("cannot write a value of type '") +
            Rf_type2char(TYPEOF(x)) + "'");
@@ -277,24 +288,126 @@ yyjson_mut_val *Writer::emit_state(SEXP x) {
   const char *key = CHAR(STRING_ELT(VECTOR_ELT(state, 0), 0));
 
   bool reference = (TYPEOF(x) == ENVSXP) && !records_by_name(key);
-  if (reference) {
-    for (size_t i = 0; i < refs_.size(); ++i) {
-      if (refs_[i].first == x) {
-        std::string msg = "cannot write a reference cycle: the object at `" +
-                          refs_[i].second + "` contains itself at `" + at + "`";
-        cpp11::stop("%s", msg.c_str());
-      }
-    }
-    if (!seen_.insert(x).second) shared_.push_back(at);
-    refs_.push_back(std::make_pair(x, at));
-  }
+  if (reference) enter_reference(x, at);
 
   yyjson_mut_val *out = yyjson_mut_obj(doc_);
   yyjson_mut_obj_add(out, yyjson_mut_strncpy(doc_, key, std::strlen(key)),
                      emit(VECTOR_ELT(state, 1), false));
 
-  if (reference) refs_.pop_back();
+  if (reference) leave_reference();
   return out;
+}
+
+void Writer::enter_reference(SEXP x, const std::string &at) {
+
+  for (size_t i = 0; i < refs_.size(); ++i) {
+    if (refs_[i].first == x) {
+      std::string msg = "cannot write a reference cycle: the object at `" +
+                        refs_[i].second + "` contains itself at `" + at + "`";
+      cpp11::stop("%s", msg.c_str());
+    }
+  }
+
+  if (!seen_.insert(x).second) shared_.push_back(at);
+  refs_.push_back(std::make_pair(x, at));
+}
+
+void Writer::leave_reference() { refs_.pop_back(); }
+
+yyjson_mut_val *Writer::emit_env(SEXP x, const std::vector<Attrib> &attrs) {
+
+  cpp11::sexp named = env_(x);
+  if (named != R_NilValue) return emit_env_named(named);
+
+  enter_reference(x, path());
+  yyjson_mut_val *out = emit_tagged(x, attrs, R_NilValue);
+  leave_reference();
+
+  return out;
+}
+
+yyjson_mut_val *Writer::emit_env_named(SEXP named) {
+
+  const char *type = Rf_type2char(ENVSXP);
+
+  yyjson_mut_val *obj = yyjson_mut_obj(doc_);
+  yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kTagType),
+                     yyjson_mut_strncpy(doc_, type, std::strlen(type)));
+  yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kTagValue), emit(named, false));
+
+  return obj;
+}
+
+yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
+
+  yyjson_mut_val *obj = yyjson_mut_obj(doc_);
+
+  {
+    Step step(this, PRINTNAME(Rf_install(kEnvParent)), 0);
+    yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kEnvParent),
+                       emit(parent_env(x), false));
+  }
+
+  SEXP nms = PROTECT(R_lsInternal3(x, TRUE, FALSE));
+  R_xlen_t n = XLENGTH(nms);
+  std::vector<SEXP> locked;
+
+  // R sorts `ls()` by the collation locale, which would write one environment
+  // as two different documents on two machines. Order by bytes instead.
+  std::vector<std::pair<std::string, SEXP> > order;
+  order.reserve((size_t)n);
+  for (R_xlen_t i = 0; i < n; ++i) {
+    SEXP name = STRING_ELT(nms, i);
+    order.push_back(std::make_pair(std::string(Rf_translateCharUTF8(name)),
+                                   name));
+  }
+  std::sort(order.begin(), order.end());
+
+  if (n > 0) {
+    Step step(this, PRINTNAME(Rf_install(kEnvBindings)), 0);
+    yyjson_mut_val *bindings = yyjson_mut_obj(doc_);
+
+    for (R_xlen_t i = 0; i < n; ++i) {
+
+      SEXP name = order[(size_t)i].second;
+      SEXP sym = Rf_installChar(name);
+      SEXP value = R_NilValue;
+      Step at(this, name, i);
+
+      switch (binding_of(sym, x, &value)) {
+        case BIND_ACTIVE:
+          fail("cannot write an active binding");
+        case BIND_PROMISE:
+          fail("cannot write a value of type 'promise'");
+        default:
+          break;
+      }
+
+      if (R_BindingIsLocked(sym, x)) locked.push_back(name);
+
+      yyjson_mut_obj_add(bindings, str_val(name), emit(value, false));
+    }
+
+    yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kEnvBindings), bindings);
+  }
+
+  if (R_EnvironmentIsLocked(x)) {
+    yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kEnvLocked),
+                       yyjson_mut_bool(doc_, true));
+  }
+
+  if (!locked.empty()) {
+    SEXP some = PROTECT(Rf_allocVector(STRSXP, (R_xlen_t)locked.size()));
+    for (size_t i = 0; i < locked.size(); ++i) {
+      SET_STRING_ELT(some, (R_xlen_t)i, locked[i]);
+    }
+    yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kEnvLockedBindings),
+                       emit_plain(some, R_NilValue, false));
+    UNPROTECT(1);
+  }
+
+  UNPROTECT(1);
+  return obj;
 }
 
 yyjson_mut_val *Writer::emit_scalar(SEXP x, R_xlen_t i) {
@@ -428,6 +541,7 @@ yyjson_mut_val *Writer::emit_payload(SEXP x, SEXP nms) {
   if (TYPEOF(x) == CPLXSXP) return emit_complex(x);
   if (TYPEOF(x) == RAWSXP) return emit_raw(x);
   if (is_node_list(x)) return emit_nodes(x);
+  if (TYPEOF(x) == ENVSXP) return emit_env_contents(x);
   return emit_plain(x, nms, false);
 }
 
