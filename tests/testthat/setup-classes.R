@@ -95,6 +95,57 @@ assign(
 )
 
 assign(
+  "CorpusR6Holder",
+  R6::R6Class(
+    "CorpusR6Holder", public = list(inner = NULL), parent_env = global
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusR6Bound",
+  R6::R6Class(
+    "CorpusR6Bound", portable = FALSE,
+    public = list(n = 1, get = function() n + secret),
+    private = list(secret = 10), parent_env = global
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusR6BoundBare",
+  R6::R6Class(
+    "CorpusR6BoundBare", portable = FALSE, public = list(n = 1),
+    parent_env = global
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusR6Anon",
+  R6::R6Class(NULL, public = list(v = 1), parent_env = global),
+  envir = global
+)
+
+assign(
+  "CorpusR6Amb1",
+  R6::R6Class(
+    "CorpusR6Amb", public = list(who = function() "FIRST"),
+    parent_env = global
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusR6Amb2",
+  R6::R6Class(
+    "CorpusR6Amb", public = list(who = function() "SECOND"),
+    parent_env = global
+  ),
+  envir = global
+)
+
+assign(
   "CorpusS7",
   S7::new_class(
     "CorpusS7",
@@ -111,7 +162,9 @@ withr::defer(
     rm(
       list = c(
         "CorpusR6", "CorpusR6Base", "CorpusR6Plain", "CorpusR6PublicHook",
-        "CorpusR6PrivateHook", "CorpusS7"
+        "CorpusR6PrivateHook", "CorpusR6Holder", "CorpusR6Bound",
+        "CorpusR6BoundBare", "CorpusR6Anon", "CorpusR6Amb1", "CorpusR6Amb2",
+        "CorpusS7"
       ),
       envir = global
     )

@@ -212,3 +212,31 @@ close(revived$con)
 ```
 
 Going through `$new()` on the way back is the usual shape for a class whose constructor acquires the resource. The state list records what the constructor needs, and whatever the constructor cannot know — here the offset — is applied to the instance afterwards.
+
+## A finalizer with nothing to release
+
+There is a second reason to take an `R6` class off the default path, and it is easy to miss because it costs nothing until it costs everything. The `~r6` reviver allocates through `$new()` on a rebuilt generator, so `R6` registers the class's `finalize` on the object that comes back exactly as it does on one the constructor produced. The revived object acquired nothing, and its finalizer runs anyway once the garbage collector reaches it.
+
+```{r, eval = requireNamespace("R6", quietly = TRUE)}
+Session <- R6::R6Class("Session",
+  public = list(
+    id = NULL,
+    initialize = function(id) self$id <- id
+  ),
+  private = list(finalize = function() released <<- c(released, self$id))
+)
+
+released <- character()
+
+live <- Session$new("s1")
+revived <- json_read_str(json_write_str(live))
+
+rm(revived)
+invisible(gc())
+
+released
+```
+
+Cleanup ran for a session that was never opened. A `finalize` written defensively — one that checks the field it releases and returns early when it is `NULL` — no-ops here, which is why this is a hazard rather than a present bug. One that closes, kills or unlinks unconditionally acts on a handle the revived object never held, and the damage lands on whatever else owns that name.
+
+The pair on this page is the answer for a class it reaches. A `json_state()` method takes the class off the `~r6` path, and a `json_revive()` method that rebuilds through the constructor acquires the resource the finalizer will later release, so registration and ownership line up again — the same argument as `ChunkReader` above, made from the other end.

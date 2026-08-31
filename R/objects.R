@@ -3,15 +3,23 @@ json_state.R6 <- function(x) {
 
   enclos <- x[[".__enclos_env__"]]
 
-  name <- class(x)[1L]
+  classes <- class(x)
+
+  if (identical(enclos, x)) {
+    refuse(
+      "cannot write an instance of the non-portable R6 class `",
+      class_text(classes), "`"
+    )
+  }
+
   package <- environmentName(parent.env(enclos))
 
-  methods <- r6_methods(r6_generator(name, package))
+  methods <- r6_methods(r6_generator(classes, package))
 
   tagged_state(
     tag_r6,
     list(
-      class = name,
+      class = classes,
       package = package,
       public = env_state(x, methods[["public"]]),
       private = env_state(enclos[["private"]], methods[["private"]])
@@ -38,19 +46,34 @@ env_state <- function(env, methods) {
   mget(nms, envir = env)
 }
 
-r6_methods <- function(gen) {
+r6_chain <- function(gen) {
 
-  out <- list(public = character(), private = character())
+  out <- list()
 
   while (inherits(gen, "R6ClassGenerator")) {
-
-    out[["public"]] <- c(out[["public"]], names(gen[["public_methods"]]))
-    out[["private"]] <- c(out[["private"]], names(gen[["private_methods"]]))
-
+    out <- c(out, list(gen))
     gen <- gen$get_inherit()
   }
 
   out
+}
+
+r6_classes <- function(gen) {
+  c(unlist(lapply(r6_chain(gen), `[[`, "classname")), "R6")
+}
+
+r6_methods <- function(gen) {
+
+  chain <- r6_chain(gen)
+
+  list(
+    public = declared_names(chain, "public_methods"),
+    private = declared_names(chain, "private_methods")
+  )
+}
+
+declared_names <- function(chain, slot) {
+  unlist(lapply(lapply(chain, `[[`, slot), names))
 }
 
 r6_revive <- function(state) {
@@ -59,15 +82,23 @@ r6_revive <- function(state) {
     stop("the R6 package is needed to revive an R6 object", call. = FALSE)
   }
 
-  gen <- r6_generator(state[["class"]], state[["package"]])
+  check_r6_state(state)
 
+  classes <- state[["class"]]
+
+  gen <- r6_generator(classes, state[["package"]])
   obj <- r6_allocate(gen)
   private <- obj[[".__enclos_env__"]][["private"]]
+  locked <- isTRUE(gen$lock_objects)
+
+  state <- drop_unbindable(state, obj, private, locked)
 
   fill_env(obj, state[["public"]])
   fill_env(private, state[["private"]])
 
-  if (isTRUE(gen$lock_objects)) {
+  class(obj) <- classes
+
+  if (locked) {
     if (is.environment(private)) {
       lockEnvironment(private)
     }
@@ -77,18 +108,116 @@ r6_revive <- function(state) {
   obj
 }
 
-r6_generator <- function(class, package) {
+check_r6_state <- function(state) {
 
-  gen <- find_generator(generator_env(package), class, is_r6_generator)
+  if (!is_named_list(state)) {
+    stop("a `~r6` payload has to be an object", call. = FALSE)
+  }
 
-  if (is.null(gen)) {
+  if (is.null(state[["package"]])) {
+    stop("a `~r6` payload needs a `package` key", call. = FALSE)
+  }
+
+  if (!is_one_string(state[["package"]])) {
     stop(
-      "no R6 generator for class `", class, "` in ", format(package),
+      "the `package` key of a `~r6` payload has to be one string",
       call. = FALSE
     )
   }
 
-  gen
+  for (key in c("public", "private")) {
+    if (!is.null(state[[key]]) && !is_named_list(state[[key]])) {
+      stop(
+        "the `", key, "` key of a `~r6` payload has to be an object",
+        call. = FALSE
+      )
+    }
+  }
+}
+
+r6_generator <- function(class, package) {
+  generator_cache$fetch(
+    paste0(c(package, class), collapse = "\x1f"),
+    function() find_r6_generator(class, package)
+  )
+}
+
+find_r6_generator <- function(class, package) {
+
+  if (!is.character(class) || length(class) == 0L) {
+    refuse("a recorded R6 object needs a class vector")
+  }
+
+  env <- env_by_name(package)
+  mismatch <- NULL
+
+  for (i in seq_along(class)) {
+
+    gen <- find_generator(env, class[[i]], is_r6_generator)
+
+    if (is.null(gen)) {
+      next
+    }
+
+    recorded <- class[i:length(class)]
+    declared <- r6_classes(gen)
+
+    if (identical(declared, recorded)) {
+      return(gen)
+    }
+
+    if (is.null(mismatch)) {
+      mismatch <- list(declared = declared, recorded = recorded)
+    }
+  }
+
+  if (is.null(mismatch)) {
+    refuse("no R6 generator for class `", class_text(class), "` in ", package)
+  }
+
+  refuse(
+    "the R6 generator in ", package, " declares class `",
+    class_text(mismatch[["declared"]]), "` where `",
+    class_text(mismatch[["recorded"]]), "` was recorded"
+  )
+}
+
+drop_unbindable <- function(state, public, private, locked) {
+
+  keep_public <- bindable_names(state[["public"]], public, locked)
+  keep_private <- bindable_names(state[["private"]], private, locked)
+
+  gone <- c(
+    sprintf("public$%s", setdiff(names(state[["public"]]), keep_public)),
+    sprintf("private$%s", setdiff(names(state[["private"]]), keep_private))
+  )
+
+  if (length(gone) > 0L) {
+    warning(
+      "the `", class_text(state[["class"]]), "` class no longer declares ",
+      "state the document records, so it is dropped rather than written ",
+      "into the instance:", paste0("\n  `", gone, "`", collapse = ""),
+      call. = FALSE
+    )
+  }
+
+  state[["public"]] <- state[["public"]][keep_public]
+  state[["private"]] <- state[["private"]][keep_private]
+
+  state
+}
+
+bindable_names <- function(values, env, locked) {
+
+  if (!is.environment(env) || is.null(values)) {
+    return(character())
+  }
+
+  if (locked) {
+    return(intersect(names(values), ls(env, all.names = TRUE)))
+  }
+
+  names(values)
 }
 
 r6_allocate <- function(gen) {
@@ -138,7 +267,7 @@ s7_revive <- function(state) {
   }
 
   gen <- find_generator(
-    generator_env(package), state[["class"]], is_s7_generator
+    env_by_name(package), state[["class"]], is_s7_generator
   )
 
   if (is.null(gen)) {
@@ -153,7 +282,7 @@ s7_revive <- function(state) {
 
 find_generator <- function(env, class, test) {
 
-  if (!is.character(class) || length(class) != 1L || is.na(class)) {
+  if (!is_one_string(class)) {
     stop("a recorded generator needs a class name", call. = FALSE)
   }
 
@@ -163,43 +292,101 @@ find_generator <- function(env, class, test) {
     return(named)
   }
 
+  found <- character()
+
   for (nm in ls(env, all.names = TRUE)) {
-    found <- get0(nm, envir = env, inherits = FALSE)
-    if (test(found, class)) {
-      return(found)
+    if (test(get0(nm, envir = env, inherits = FALSE), class)) {
+      found <- c(found, nm)
     }
   }
 
-  NULL
-}
-
-generator_env <- function(package) {
-
-  if (!is.character(package) || length(package) != 1L || !nzchar(package)) {
-    stop(
-      "the class was defined in an environment that cannot be found again",
-      call. = FALSE
+  if (length(found) > 1L) {
+    refuse(
+      "the class `", class, "` names more than one generator in ",
+      environmentName(env), ": `", paste0(found, collapse = "`, `"), "`"
     )
   }
 
-  if (identical(package, "R_GlobalEnv")) {
+  if (length(found) == 0L) {
+    return(NULL)
+  }
+
+  get(found, envir = env, inherits = FALSE)
+}
+
+env_by_name <- function(name) {
+
+  if (!is.character(name) || length(name) != 1L || is.na(name) ||
+        !nzchar(name)) {
+    refuse(
+      "the class was defined in an environment that cannot be found again"
+    )
+  }
+
+  if (identical(name, "R_GlobalEnv")) {
     return(globalenv())
   }
 
-  if (identical(package, "base")) {
+  if (identical(name, "base")) {
     return(baseenv())
   }
 
-  if (startsWith(package, "package:")) {
-    return(as.environment(package))
+  if (startsWith(name, "package:")) {
+    return(as.environment(name))
   }
 
-  if (!requireNamespace(package, quietly = TRUE)) {
-    stop("the ", package, " package is needed to revive this object",
+  if (!requireNamespace(name, quietly = TRUE)) {
+    stop("the ", name, " package is needed to revive this object",
          call. = FALSE)
   }
 
-  asNamespace(package)
+  asNamespace(name)
+}
+
+generator_cache <- local({
+
+  cache <- NULL
+
+  list(
+    scope = function(expr) {
+
+      outer <- cache
+      cache <<- new.env(parent = emptyenv())
+      on.exit(cache <<- outer)
+
+      expr
+    },
+    fetch = function(key, resolve) {
+
+      if (is.null(cache)) {
+        return(resolve())
+      }
+
+      hit <- get0(key, envir = cache, inherits = FALSE)
+
+      if (is.null(hit)) {
+        hit <- resolve()
+        assign(key, hit, envir = cache)
+      }
+
+      hit
+    }
+  )
+})
+
+is_named_list <- function(x) {
+
+  if (!is.list(x)) {
+    return(FALSE)
+  }
+
+  nms <- names(x)
+
+  !is.null(nms) && all(!is.na(nms) & nzchar(nms))
+}
+
+is_one_string <- function(x) {
+  is.character(x) && length(x) == 1L && !is.na(x)
 }
 
 is_r6_generator <- function(x, class) {

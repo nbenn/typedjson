@@ -208,7 +208,10 @@ yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
 }
 
 yyjson_mut_val *Writer::emit_state(SEXP x) {
-  cpp11::sexp state = state_(x);
+  std::string at = path();
+  cpp11::sexp where(
+      Rf_ScalarString(Rf_mkCharLenCE(at.data(), at.size(), CE_UTF8)));
+  cpp11::sexp state = state_(x, where);
   if (state == R_NilValue) return nullptr;
 
   if (TYPEOF(state) != VECSXP || XLENGTH(state) != 2 ||
@@ -219,17 +222,15 @@ yyjson_mut_val *Writer::emit_state(SEXP x) {
 
   bool reference = (TYPEOF(x) == ENVSXP);
   if (reference) {
-    std::string here = path();
     for (size_t i = 0; i < refs_.size(); ++i) {
       if (refs_[i].first == x) {
         std::string msg = "cannot write a reference cycle: the object at `" +
-                          refs_[i].second + "` contains itself at `" + here +
-                          "`";
+                          refs_[i].second + "` contains itself at `" + at + "`";
         cpp11::stop("%s", msg.c_str());
       }
     }
-    if (!seen_.insert(x).second) shared_.push_back(here);
-    refs_.push_back(std::make_pair(x, here));
+    if (!seen_.insert(x).second) shared_.push_back(at);
+    refs_.push_back(std::make_pair(x, at));
   }
 
   SEXP tag = VECTOR_ELT(state, 0);

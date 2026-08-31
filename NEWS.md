@@ -10,7 +10,7 @@ First release, carrying the format and the two round-trip contracts described in
 
 * A tagged `~a` / `~v` object for anything carrying attributes, which covers `Date`, `POSIXct`, factors, matrices, data frames and classed lists through one rule, with a `~t` naming the type only where the payload cannot.
 
-* Objects from all four systems: S3 and S4 through the attribute rule, S7 through a recorded class reference, and R6 through a generator lookup that rebuilds an instance without running `initialize`.
+* Objects from all four systems: S3 and S4 through the attribute rule, S7 through a recorded class reference, and R6 through a generator lookup that rebuilds an instance without running `initialize`. The `R6` lookup runs on the way out as well, so a class no reader could find again is refused where it is written, naming the path it stopped at, rather than producing a document that fails on the read. The generator settles the instance's shape as well as its lock, so recorded state a class no longer declares is dropped with a warning naming it rather than bound into an object no constructor could produce.
 
 * An extension protocol, `json_state()` and `json_revive()`, for classes the default rule does not fit.
 
@@ -34,4 +34,7 @@ Breaking changes to the document shape, settled before any documents exist in th
 
 * A string tag is now recognised by a reserved discriminator rather than by exact match, so one this reader does not know is an error rather than data. The reserved set is `~z`, which spells the typed `NA` and non-finite tags, and `~:`, which is held for a later spelling and refused in the meantime; every other tilde-leading string stays a string, which is what keeps `"~/data"` a path. The key rule above shuts the same hole at key position, and `~:` is reserved now rather than when it is spent because a discriminator only earns a refusal from readers that already carry it.
 
+* An `~r6` record carries the instance's whole class vector rather than its first element, so `{"class":["Derived","Base","R6"]}` replaces `{"class":"Derived"}`. The reader rebuilds the same vector by walking the generator's `get_inherit()` chain and errors when the two disagree, which turns a generator answering to the right name while declaring a different class into a report rather than a wrong object. A class prepended on an instance now survives the round trip, since the recorded vector still names the class the generator declares.
+
 Measured on a board produced by `blockr.core::blockr_ser()`, the unboxing rule unwraps all 55 wrapped scalars and shortens the document from 2284 to 2174 bytes. A payload rich in named atomic vectors moves the other way, since those now escalate.
+

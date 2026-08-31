@@ -52,8 +52,8 @@ json_state <- function(x) {
 #' @export
 json_state.default <- function(x) {
   stop(
-    "no `json_state()` method for class `", paste0(class(x), collapse = "/"),
-    "`", call. = FALSE
+    "no `json_state()` method for class `", class_text(class(x)), "`",
+    call. = FALSE
   )
 }
 
@@ -66,13 +66,21 @@ json_revive <- function(class, state) {
 #' @export
 json_revive.default <- function(class, state) {
   stop(
-    "no `json_revive()` method for class `",
-    paste0(class(class), collapse = "/"), "`", call. = FALSE
+    "no `json_revive()` method for class `", class_text(class(class)), "`",
+    call. = FALSE
   )
 }
 
 tagged_state <- function(tag, state) {
   structure(list(tag, state), class = "typedjson_state")
+}
+
+refuse <- function(...) {
+  stop(errorCondition(paste0(...), class = "typedjson_refusal"))
+}
+
+class_text <- function(class) {
+  paste0(class, collapse = "/")
 }
 
 has_state_method <- function(cls) {
