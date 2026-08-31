@@ -89,13 +89,16 @@ r6_revive <- function(state) {
   gen <- r6_generator(classes, state[["package"]])
   obj <- r6_allocate(gen)
   private <- obj[[".__enclos_env__"]][["private"]]
+  locked <- isTRUE(gen$lock_objects)
+
+  state <- drop_unbindable(state, obj, private, locked)
 
   fill_env(obj, state[["public"]])
   fill_env(private, state[["private"]])
 
   class(obj) <- classes
 
-  if (isTRUE(gen$lock_objects)) {
+  if (locked) {
     if (is.environment(private)) {
       lockEnvironment(private)
     }
@@ -177,6 +180,44 @@ find_r6_generator <- function(class, package) {
     class_text(mismatch[["declared"]]), "` where `",
     class_text(mismatch[["recorded"]]), "` was recorded"
   )
+}
+
+drop_unbindable <- function(state, public, private, locked) {
+
+  keep_public <- bindable_names(state[["public"]], public, locked)
+  keep_private <- bindable_names(state[["private"]], private, locked)
+
+  gone <- c(
+    sprintf("public$%s", setdiff(names(state[["public"]]), keep_public)),
+    sprintf("private$%s", setdiff(names(state[["private"]]), keep_private))
+  )
+
+  if (length(gone) > 0L) {
+    warning(
+      "the `", class_text(state[["class"]]), "` class no longer declares ",
+      "state the document records, so it is dropped rather than written ",
+      "into the instance:", paste0("\n  `", gone, "`", collapse = ""),
+      call. = FALSE
+    )
+  }
+
+  state[["public"]] <- state[["public"]][keep_public]
+  state[["private"]] <- state[["private"]][keep_private]
+
+  state
+}
+
+bindable_names <- function(values, env, locked) {
+
+  if (!is.environment(env) || is.null(values)) {
+    return(character())
+  }
+
+  if (locked) {
+    return(intersect(names(values), ls(env, all.names = TRUE)))
+  }
+
+  names(values)
 }
 
 r6_allocate <- function(gen) {

@@ -334,6 +334,79 @@ test_that("a locked R6 object is locked again after revival", {
   expect_true(environmentIsLocked(back))
 })
 
+test_that("a field the class no longer declares is dropped rather than bound", {
+
+  gen <- local_r6_class(
+    "CorpusR6Drift", public = list(a = 1, b = 2), lock_objects = TRUE
+  )
+
+  doc <- json_write_str(gen$new())
+
+  gen <- local_r6_class(
+    "CorpusR6Drift", public = list(a = 1), lock_objects = TRUE
+  )
+
+  expect_warning(back <- json_read_str(doc), "public$b", fixed = TRUE)
+
+  expect_identical(ls(back), ls(gen$new()))
+  expect_identical(back$a, 1)
+  expect_true(environmentIsLocked(back))
+})
+
+test_that("private state the class has dropped goes with it", {
+
+  gen <- local_r6_class(
+    "CorpusR6Shed", public = list(a = 1), private = list(s = 9),
+    lock_objects = TRUE
+  )
+
+  doc <- json_write_str(gen$new())
+
+  local_r6_class("CorpusR6Shed", public = list(a = 1), lock_objects = TRUE)
+
+  expect_warning(back <- json_read_str(doc), "private$s", fixed = TRUE)
+
+  expect_null(back$.__enclos_env__$private)
+  expect_identical(back$a, 1)
+})
+
+test_that("a class taking new bindings keeps state its generator never had", {
+
+  gen <- local_r6_class(
+    "CorpusR6Open", public = list(a = 1), lock_objects = FALSE
+  )
+
+  obj <- gen$new()
+  obj$extra <- "set by hand"
+
+  expect_silent(back <- json_read_str(json_write_str(obj)))
+
+  expect_identical(back$extra, "set by hand")
+  expect_identical(back$a, 1)
+})
+
+test_that("a locked subclass keeps the fields it inherits", {
+
+  local_r6_class(
+    "CorpusR6DriftBase", public = list(a = 1), private = list(ps = 1)
+  )
+
+  gen <- local_r6_class(
+    "CorpusR6DriftKid", inherit = CorpusR6DriftBase, public = list(b = 2),
+    private = list(pk = 2), lock_objects = TRUE
+  )
+
+  obj <- gen$new()
+  obj$a <- 5
+
+  expect_silent(back <- json_read_str(json_write_str(obj)))
+
+  expect_identical(back$a, 5)
+  expect_identical(back$b, 2)
+  expect_identical(back$.__enclos_env__$private$ps, 1)
+  expect_identical(back$.__enclos_env__$private$pk, 2)
+})
+
 test_that("a class supplies its own state through the extension protocol", {
 
   local_state_method(

@@ -94,6 +94,8 @@ json_write_str(Counter$new())
 
 The class vector is recorded whole, so revival can check the generator it finds against what was written rather than trusting the name. Revival then allocates an instance without running `initialize`, populates the fields, and locks the environment again if the generator asked for that. Both halves run on the way out too: a document whose generator cannot be found again, or whose class names more than one, is refused where it is written rather than on the read that fails months later.
 
+The generator is the authority on the instance's shape as well as on its lock, so a lock placed on one object is not carried, and recorded state the class no longer declares is dropped with a warning rather than bound into an object no constructor could produce.
+
 ## What stays out
 
 Values that are handles rather than data are refused rather than written as something else: environments other than the ones an R6 generator can rebuild, closures, external pointers and language objects. An error names the path it stopped at.

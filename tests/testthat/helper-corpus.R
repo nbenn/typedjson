@@ -347,6 +347,18 @@ local_state_method <- function(class, state, revive = NULL,
   invisible(names)
 }
 
+local_r6_class <- function(class, ..., env = parent.frame()) {
+
+  if (!exists(class, envir = globalenv(), inherits = FALSE)) {
+    withr::defer(rm(list = class, envir = globalenv()), envir = env)
+  }
+
+  gen <- R6::R6Class(class, ..., parent_env = globalenv())
+  assign(class, gen, envir = globalenv())
+
+  invisible(gen)
+}
+
 corpus_shapes <- function() {
 
   types <- list(
