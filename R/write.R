@@ -182,12 +182,11 @@
 json_write <- function(x, path, pretty = TRUE, typed = TRUE) {
 
   stopifnot(is.character(path), length(path) == 1L, !is.na(path))
+  check_flags(pretty, typed)
 
-  doc <- json_write_str(x, pretty = pretty, typed = typed)
-
-  con <- file(path, open = "wb")
-  on.exit(close(con))
-  writeLines(doc, con = con, useBytes = TRUE)
+  generator_cache$scope(
+    typedjson_write_file_(x, path, pretty, typed, writer_hooks())
+  )
 
   invisible(path)
 }
@@ -196,19 +195,24 @@ json_write <- function(x, path, pretty = TRUE, typed = TRUE) {
 #' @export
 json_write_str <- function(x, pretty = FALSE, typed = TRUE) {
 
+  check_flags(pretty, typed)
+
+  generator_cache$scope(
+    typedjson_write_(x, pretty, typed, writer_hooks())
+  )
+}
+
+check_flags <- function(pretty, typed) {
   stopifnot(
     is.logical(pretty), length(pretty) == 1L, !is.na(pretty),
     is.logical(typed), length(typed) == 1L, !is.na(typed)
   )
+}
 
-  generator_cache$scope(
-    typedjson_write_(
-      x, pretty, typed,
-      list(
-        kind = writer_kind, state = writer_state, env = writer_env,
-        fun = writer_fun
-      )
-    )
+writer_hooks <- function() {
+  list(
+    kind = writer_kind, state = writer_state, env = writer_env,
+    fun = writer_fun
   )
 }
 

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -758,6 +759,10 @@ void finalize_mut_doc(SEXP xp) {
   }
 }
 
+yyjson_write_flag write_flags(bool pretty) {
+  return pretty ? YYJSON_WRITE_PRETTY_TWO_SPACES : YYJSON_WRITE_NOFLAG;
+}
+
 }  // namespace
 
 }  // namespace typedjson
@@ -776,11 +781,10 @@ void finalize_mut_doc(SEXP xp) {
     Writer writer(doc, typed, hooks);
     yyjson_mut_doc_set_root(doc, writer.emit(x));
 
-    yyjson_write_flag flags =
-        pretty ? YYJSON_WRITE_PRETTY_TWO_SPACES : YYJSON_WRITE_NOFLAG;
     size_t len = 0;
     yyjson_write_err err;
-    Text text(yyjson_mut_write_opts(doc, flags, nullptr, &len, &err));
+    Text text(
+        yyjson_mut_write_opts(doc, write_flags(pretty), nullptr, &len, &err));
     if (text.ptr == nullptr) cpp11::stop("failed to write JSON: %s", err.msg);
 
     json.assign(text.ptr, len);
@@ -791,4 +795,66 @@ void finalize_mut_doc(SEXP xp) {
   UNPROTECT(1);
 
   return cpp11::as_sexp(json);
+}
+
+// Handing the document to a `FILE*` keeps it out of R: the text goes from
+// yyjson's buffer to the disk rather than through a `std::string`, an R
+// string and a connection, which are two copies proportional to a document
+// that a file is the large case for. Peak is the DOM and the one buffer,
+// where writing through `json_write_str()` also held the `std::string` the
+// buffer was copied into.
+//
+// The walk runs first and to completion, so a refusal fires before `path` is
+// opened and a document already sitting there outlives the refused write.
+// Nothing between the open and the close calls into R, so no error longjmps
+// past the close: a failure is carried out in `problem` and raised once the
+// handle and the document are both gone.
+[[cpp11::register]] void typedjson_write_file_(SEXP x, cpp11::strings path,
+                                               bool pretty, bool typed,
+                                               cpp11::list hooks) {
+  using namespace typedjson;
+
+  yyjson_mut_doc *doc = yyjson_mut_doc_new(nullptr);
+  if (doc == nullptr) cpp11::stop("failed to allocate a JSON document");
+  SEXP owner = PROTECT(guard(doc, finalize_mut_doc));
+
+  {
+    Writer writer(doc, typed, hooks);
+    yyjson_mut_doc_set_root(doc, writer.emit(x));
+  }
+
+  // Opening through `file()` expanded a leading `~`, so a handle opened here
+  // has to ask for it.
+  std::string named(Rf_translateChar(STRING_ELT(path, 0)));
+  const char *expanded = R_ExpandFileName(named.c_str());
+
+  std::string problem;
+  FILE *fp = std::fopen(expanded, "wb");
+
+  if (fp == nullptr) {
+    problem = "it could not be opened for writing";
+  } else {
+    yyjson_write_err err;
+    if (!yyjson_mut_write_fp(fp, doc, write_flags(pretty), nullptr, &err)) {
+      problem = err.msg;
+    } else if (std::fputc('\n', fp) == EOF) {
+      // The yyjson writers end on the last token, where `writeLines()` ended
+      // on a newline, so the byte it added is added here instead.
+      problem = "its trailing newline could not be written";
+    }
+    // Buffered bytes reach the disk at the close, so a full one surfaces
+    // there rather than at the write above.
+    if (std::fclose(fp) != 0 && problem.empty()) {
+      problem = "it could not be closed";
+    }
+  }
+
+  R_ClearExternalPtr(owner);
+  yyjson_mut_doc_free(doc);
+  UNPROTECT(1);
+
+  if (!problem.empty()) {
+    cpp11::stop("failed to write JSON to `%s`: %s", named.c_str(),
+                problem.c_str());
+  }
 }

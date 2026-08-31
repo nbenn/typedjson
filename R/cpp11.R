@@ -7,3 +7,7 @@ typedjson_read_ <- function(bytes, hooks) {
 typedjson_write_ <- function(x, pretty, typed, hooks) {
   .Call(`_typedjson_typedjson_write_`, x, pretty, typed, hooks)
 }
+
+typedjson_write_file_ <- function(x, path, pretty, typed, hooks) {
+  invisible(.Call(`_typedjson_typedjson_write_file_`, x, path, pretty, typed, hooks))
+}

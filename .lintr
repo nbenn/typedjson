@@ -3,4 +3,4 @@ linters: linters_with_defaults(
       styles = c("snake_case", "CamelCase", "symbols")
     )
   )
-exclusions: list("tests/testthat/helper-board.R")
+exclusions: list("tests/testthat/helper-board.R", "R/cpp11.R")
