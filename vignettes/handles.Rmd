@@ -159,9 +159,9 @@ json_write_str(leaky)
 close(leaky$con)
 ```
 
-## Classes that already have a method
+## A class with no default to fall back on
 
-An R6 object is written through a generator lookup plus its field values, so `json_state.R6` ships with the package. That method collects the fields, and a field holding a connection is then refused exactly as before.
+An `R6` class is the case where there is no default at all. What an `R6` class guarantees is what its methods say, and its private fields are private precisely because they are not part of that, so recording an instance as the bindings it happens to hold is an assertion only the class can make. Writing one is refused, naming the class and the method that would settle it.
 
 ```{r, error = TRUE, eval = requireNamespace("R6", quietly = TRUE)}
 ChunkReader <- R6::R6Class("ChunkReader",
@@ -184,7 +184,7 @@ reader <- ChunkReader$new(path)
 json_write_str(reader)
 ```
 
-Ordinary dispatch settles it. The class vector is `c("ChunkReader", "R6")`, so a method on the class is found ahead of the one on `R6`, and the record that gets written is an ordinary extension record rather than the `~r6` one.
+The pair on this page is the answer, written exactly as it was for the S3 reader above. Ordinary dispatch settles which one is found: the class vector is `c("ChunkReader", "R6")`, so a method on `ChunkReader` is reached ahead of the one on `R6` that does the refusing.
 
 ```{r, eval = requireNamespace("R6", quietly = TRUE)}
 json_state.ChunkReader <- function(x) {
@@ -213,30 +213,4 @@ close(revived$con)
 
 Going through `$new()` on the way back is the usual shape for a class whose constructor acquires the resource. The state list records what the constructor needs, and whatever the constructor cannot know — here the offset — is applied to the instance afterwards.
 
-## A finalizer with nothing to release
-
-There is a second reason to take an `R6` class off the default path, and it is easy to miss because it costs nothing until it costs everything. The `~r6` reviver allocates through `$new()` on a rebuilt generator, so `R6` registers the class's `finalize` on the object that comes back exactly as it does on one the constructor produced. The revived object acquired nothing, and its finalizer runs anyway once the garbage collector reaches it.
-
-```{r, eval = requireNamespace("R6", quietly = TRUE)}
-Session <- R6::R6Class("Session",
-  public = list(
-    id = NULL,
-    initialize = function(id) self$id <- id
-  ),
-  private = list(finalize = function() released <<- c(released, self$id))
-)
-
-released <- character()
-
-live <- Session$new("s1")
-revived <- json_read_str(json_write_str(live))
-
-rm(revived)
-invisible(gc())
-
-released
-```
-
-Cleanup ran for a session that was never opened. A `finalize` written defensively — one that checks the field it releases and returns early when it is `NULL` — no-ops here, which is why this is a hazard rather than a present bug. One that closes, kills or unlinks unconditionally acts on a handle the revived object never held, and the damage lands on whatever else owns that name.
-
-The pair on this page is the answer for a class it reaches. A `json_state()` method takes the class off the `~r6` path, and a `json_revive()` method that rebuilds through the constructor acquires the resource the finalizer will later release, so registration and ownership line up again — the same argument as `ChunkReader` above, made from the other end.
+Rebuilding through the constructor is also what keeps a finalizer honest. Where `initialize` acquires a handle and `finalize` releases it, the two only line up if the revived object went through `initialize` as well; an object filled in from a document acquired nothing, and its finalizer runs against a handle it never held. That hazard is one of the reasons an `R6` instance has no default in the first place, and `vignette("r6")` walks through deciding what a class's state actually is.

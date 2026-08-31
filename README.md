@@ -9,7 +9,7 @@ The typedjson package writes an R value as JSON a human can read, and reads it b
 
 R already has fast JSON, queryable JSON, and faithful-but-verbose JSON. Nothing was faithful *and* terse. The `jsonlite::toJSON()` / `fromJSON()` pair is readable and lossy — doubles come back as integers, all-`NA` vectors lose their type, names are dropped, `character()` and `integer()` both become `list()`. The `serializeJSON()` / `unserializeJSON()` pair is faithful and unreadable, and its default `digits = 8` silently changes doubles.
 
-This package keeps ordinary JSON for ordinary values and annotates only what JSON cannot express: the integer-versus-double distinction, typed missing values, the non-finite doubles, attributes, language objects, and objects from the S3, S4, S7 and R6 systems.
+This package keeps ordinary JSON for ordinary values and annotates only what JSON cannot express: the integer-versus-double distinction, typed missing values, the non-finite doubles, attributes, language objects, and objects from the S3, S4 and S7 systems.
 
 ## Installation
 
@@ -115,17 +115,17 @@ S3 falls out with no special case: an S3 object is a base type plus a `class` at
 
 S7 needs one special case, since the `S7_class` attribute holds a generator containing constructor closures. The class name and package are recorded and looked up on read, so the object round-trips directly.
 
-R6 is rescuable because an R6 object is a generator plus state; methods, the `self` / `private` / `super` plumbing and the enclosing environment all come from the generator, and only the field values differ per instance.
+An R6 class generator is recorded by the class it names and the package it was defined in, so it comes back as the object it was written from rather than as a copy. That lookup runs on the way out too: a generator that no name finds again, or a class that names more than one, is refused where it is written rather than on the read that fails months later.
+
+An R6 instance is refused. Every other type here has a value its own type system supplies — an S4 object is its slots as an S7 object is its properties — where an R6 object is defined by what its methods guarantee, and its private fields are private precisely because they are not part of that. Recording one as the bindings it happens to hold is an assertion about the class that only the class can make, so the writer asks instead.
 
 ```r
 Counter <- R6::R6Class("Counter", public = list(n = 0, bump = function() self$n <- self$n + 1))
 json_write_str(Counter$new())
-#> {"~r6":{"class":["Counter","R6"],"package":"R_GlobalEnv","public":{"n":0.0},"private":null}}
+#> Error: an `R6` instance needs a `json_state()` method for class `Counter` at `x`
 ```
 
-The class vector is recorded whole, so revival can check the generator it finds against what was written rather than trusting the name. Revival then allocates an instance without running `initialize`, populates the fields, and locks the environment again if the generator asked for that. Both halves run on the way out too: a document whose generator cannot be found again, or whose class names more than one, is refused where it is written rather than on the read that fails months later.
-
-The generator is the authority on the instance's shape as well as on its lock, so a lock placed on one object is not carried, and recorded state the class no longer declares is dropped with a warning rather than bound into an object no constructor could produce.
+The method pair below is the answer, and `r6_state()` with `r6_restore()` is the ready-made version of it for a class whose bindings really are its state. See `vignette("r6")` for deciding which of a class's fields are state, and what the ready-made pair does not guarantee.
 
 ## What stays out
 
@@ -192,7 +192,7 @@ json_revive.file_handle <- function(class, state) {
 
 Dispatch on the way back happens on the recorded class name through an empty object carrying it, so the method signature starts with the class rather than the object being rebuilt.
 
-Worked through end to end in `vignette("handles", package = "typedjson")`: a chunked file reader that holds a connection open between calls, refused by the default rule, and then persisted as the file it walks and the offset it has reached.
+Worked through end to end in `vignette("handles", package = "typedjson")`: a chunked file reader that holds a connection open between calls, refused by the default rule, and then persisted as the file it walks and the offset it has reached. An R6 class is the other side of the same protocol, since it has no default rule to fall back on, and `vignette("r6", package = "typedjson")` walks through deciding what one of those is worth recording.
 
 ## Speed and size
 

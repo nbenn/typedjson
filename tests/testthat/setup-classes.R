@@ -122,6 +122,12 @@ assign(
 )
 
 assign(
+  "CorpusR6Mute",
+  R6::R6Class("CorpusR6Mute", public = list(n = 1), parent_env = global),
+  envir = global
+)
+
+assign(
   "CorpusR6Anon",
   R6::R6Class(NULL, public = list(v = 1), parent_env = global),
   envir = global
@@ -157,6 +163,18 @@ assign(
 
 corpus <- c(corpus, list("r6/generator" = get("CorpusR6", envir = global)))
 
+# An instance has no method of its own, so every corpus class that is meant
+# to be written opts in to `r6_state()` the way a class author would. The
+# anonymous class is left out: its class vector is `"R6"` alone, so there is
+# no concrete class to register a method on.
+for (cls in c(
+  "CorpusR6", "CorpusR6Base", "CorpusR6Plain", "CorpusR6PublicHook",
+  "CorpusR6PrivateHook", "CorpusR6Holder", "CorpusR6Bound",
+  "CorpusR6BoundBare", "CorpusR6Amb", "CorpusR6Local"
+)) {
+  local_r6_optin(cls, env = teardown_env())
+}
+
 withr::defer(
   {
     methods::removeClass("CorpusS4", where = global)
@@ -165,8 +183,8 @@ withr::defer(
       list = c(
         "CorpusR6", "CorpusR6Base", "CorpusR6Plain", "CorpusR6PublicHook",
         "CorpusR6PrivateHook", "CorpusR6Holder", "CorpusR6Bound",
-        "CorpusR6BoundBare", "CorpusR6Anon", "CorpusR6Amb1", "CorpusR6Amb2",
-        "CorpusS7"
+        "CorpusR6BoundBare", "CorpusR6Mute", "CorpusR6Anon", "CorpusR6Amb1",
+        "CorpusR6Amb2", "CorpusS7"
       ),
       envir = global
     )

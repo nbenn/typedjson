@@ -6,7 +6,7 @@
 \alias{typedjson-package}
 \title{typedjson: Type-Faithful and Human-Readable JSON for R Values}
 \description{
-Writing an R value as JSON that a human can read, and reading it back unchanged. The 'jsonlite' package offers either a readable but lossy pair of functions or a faithful but verbose one; this package emits ordinary JSON for ordinary values and annotates only what JSON cannot express, namely the distinction between integer and double, typed missing values, non-finite numbers, attributes, and objects from the S3, S4, S7 and 'R6' systems. Foreign documents are read under the same grammar, so files stay diffable, greppable and editable by hand.
+Writing an R value as JSON that a human can read, and reading it back unchanged. The 'jsonlite' package offers either a readable but lossy pair of functions or a faithful but verbose one; this package emits ordinary JSON for ordinary values and annotates only what JSON cannot express, namely the distinction between integer and double, typed missing values, non-finite numbers, attributes, and objects from the S3, S4 and S7 systems. Foreign documents are read under the same grammar, so files stay diffable, greppable and editable by hand.
 }
 \seealso{
 Useful links:

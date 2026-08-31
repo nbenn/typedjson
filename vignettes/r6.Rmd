@@ -1,0 +1,183 @@
+---
+title: "Persisting an R6 class"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Persisting an R6 class}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE, comment = "#>",
+  eval = requireNamespace("R6", quietly = TRUE)
+)
+```
+
+## Where the default would have to guess
+
+Most classes need nothing from this page. An S3, S4 or S7 object is a base type plus attributes, so `json_write()` records it without help: the class system says what the object *is*, and the writer takes it at its word. An S4 object is its slots, an S7 object is its properties, and `new("Pt", x = 1, y = 2)` is a complete description of one.
+
+An `R6` object is the exception, because no such statement exists. What an `R6` class guarantees is what its methods say, and its private fields are private precisely because they are not part of that. A field may be stored or derived, a private binding may be a credential that must never leave the session, and `initialize` may establish an invariant that no assignment reproduces. Nothing in the class distinguishes those cases, and the writer cannot tell them apart by looking.
+
+So it does not try. Writing an instance is refused, naming the class and the method that would settle the question.
+
+```{r}
+library(typedjson)
+
+Store <- R6::R6Class("Store",
+  public = list(
+    root = NULL,
+    format = "rds",
+
+    initialize = function(root, key, format = "rds") {
+      self$root <- root
+      self$format <- format
+      private$key <- key
+      private$index <- private$scan()
+      dir.create(root, showWarnings = FALSE, recursive = TRUE)
+    },
+
+    put = function(name, value) {
+      saveRDS(value, private$file(name))
+      private$index <- private$scan()
+      private$writes <- private$writes + 1L
+      invisible(self)
+    },
+
+    get = function(name) readRDS(private$file(name)),
+
+    names = function() private$index
+  ),
+
+  private = list(
+    key = NULL,
+    index = character(),
+    writes = 0L,
+
+    file = function(name) {
+      file.path(self$root, paste0(name, ".", self$format))
+    },
+
+    scan = function() {
+      sub("\\..*$", "", list.files(self$root))
+    }
+  )
+)
+
+root <- file.path(tempdir(), "store")
+store <- Store$new(root, key = "s3cret")
+
+store$put("a", 1:3)$put("b", letters)
+store$names()
+```
+
+```{r, error = TRUE}
+json_write_str(store)
+```
+
+## Deciding what the state is
+
+The refusal is asking a question, and the four fields of this class answer it four different ways.
+
+The `root` and `format` fields are state. They are what makes this store *this* store, they are exactly what the constructor was called with, and nothing else in the session can supply them.
+
+The `index` field is derived. It is a list of what happens to be on disk, and `private$scan()` rebuilds it from `root` at any time. Persisting it would record a snapshot that goes stale the moment anything else writes to the directory — worse than not recording it, because it would come back looking authoritative.
+
+The `key` field must not be persisted at all. It is a credential the caller supplied, the document is a text file meant to be read in diffs, and writing it there is how a secret ends up in a commit.
+
+The `writes` counter is the interesting one, and it is genuinely the author's call. If it is instrumentation, it belongs to the session and should reset. If a caller can read it back and act on it, it is state and has to survive. Only whoever wrote the class knows which, and that is the argument for asking rather than guessing: a default would have to pick, and would pick the same way for every class.
+
+## Writing the pair
+
+Two methods settle it, modelled on the `__getstate__` and `__setstate__` protocol of Python's pickle. The first returns a plain list of what to persist.
+
+```{r}
+json_state.Store <- function(x) {
+  list(root = x$root, format = x$format)
+}
+```
+
+The second rebuilds. Note the first argument: reviving happens before the object exists, so there is nothing to dispatch on yet. What `json_revive()` dispatches on instead is an empty object carrying the recorded class vector, which is why a method signature always starts with `class` rather than with the object being rebuilt.
+
+```{r}
+json_revive.Store <- function(class, state) {
+  Store$new(state$root, key = Sys.getenv("STORE_KEY"), format = state$format)
+}
+```
+
+Going back through the class's own constructor is the whole point. The constructor is the interface the class offers for making one of these, so it re-derives `index`, resets `writes`, and takes `key` from wherever a key is supposed to come from in the session doing the reading. An invariant `initialize` establishes is established again, because `initialize` ran.
+
+```{r}
+doc <- json_write_str(store, pretty = TRUE)
+cat(doc)
+```
+
+Nothing in that document is opaque, and nothing in it is a secret. The `~x` tag says an extension method produced it, `class` is what dispatches on the way back, and `state` is the list the method returned, written under the ordinary rules.
+
+```{r}
+back <- json_read_str(doc)
+
+back$names()
+back$get("b")
+```
+
+The revived store found its own contents by scanning, so `index` is right rather than merely restored.
+
+## When the bindings really are the state
+
+Some classes are plain records that happen to be written as `R6`: every field is stored, nothing is derived, and `initialize` only assigns. For those the pair above is boilerplate, and the package ships the mechanism to skip it.
+
+```{r}
+Point <- R6::R6Class("Point",
+  public = list(
+    x = 0, y = 0,
+    initialize = function(x = 0, y = 0) {
+      self$x <- x
+      self$y <- y
+    }
+  )
+)
+
+json_state.Point <- function(x) r6_state(x)
+json_revive.Point <- function(class, state) r6_restore(class, state)
+
+cat(json_write_str(Point$new(3, 4), pretty = TRUE))
+```
+
+```{r}
+json_read_str(json_write_str(Point$new(3, 4)))$y
+```
+
+The `r6_state()` function records the class's package alongside the public and private bindings, skipping methods and active bindings; `r6_restore()` finds the generator again by name, allocates an instance without running `initialize`, and writes the bindings back in.
+
+Reading past `initialize` is exactly what makes this the author's decision rather than the default. Opting in says the class has no invariant to re-establish, no resource to acquire and no field worth leaving out — which is true of `Point` and false of `Store`. It also ties the document to the class's current shape: where the generator locks its instances, recorded state the class no longer declares has nowhere to go and is dropped as the document is read.
+
+```{r}
+doc <- json_write_str(Point$new(3, 4))
+
+Point <- R6::R6Class("Point",
+  public = list(x = 0, initialize = function(x = 0) self$x <- x),
+  lock_objects = TRUE
+)
+
+json_read_str(doc)$x
+```
+
+The warning is the honest outcome rather than a failure: the document still holds a `y`, and the class no longer has anywhere to put it. A pair written by hand would have decided that question in `json_revive()`, where the class author can say what an old document ought to mean.
+
+## Generators need no method
+
+A class generator is a different kind of thing and is handled without help. It is recorded by the class it names and the package it was defined in, rather than by its contents, so it comes back as the same object rather than as a copy.
+
+```{r}
+json_write_str(Point)
+
+identical(json_read_str(json_write_str(Point)), Point)
+```
+
+That lookup runs on the way out as well as on the way in, so a generator built inside a function — one no name finds again — is refused where it is written rather than producing a document that fails on the read.
+
+```{r, error = TRUE}
+json_write_str((function() R6::R6Class("Local", public = list(v = 1)))())
+```

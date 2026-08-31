@@ -94,7 +94,6 @@ const char *const kTagType = "~t";
 const char *const kTagAttr = "~a";
 const char *const kTagValue = "~v";
 const char *const kTagS4 = "~s4";
-const char *const kTagR6 = "~r6";
 const char *const kTagR6Class = "~r6class";
 const char *const kTagS7 = "~s7";
 const char *const kTagExt = "~x";
