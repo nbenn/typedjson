@@ -60,6 +60,7 @@ class Writer {
   yyjson_mut_val *symbol_val(SEXP x);
   yyjson_mut_val *text_val(const char *s, size_t len);
   yyjson_mut_val *ztag_val(ZTag tag);
+  const char *utf8_text(SEXP chr, size_t *len);
 
   bool needs_state(SEXP klass);
   SEXP usable_names(SEXP x, const std::vector<Attrib> &attrs);
@@ -131,11 +132,35 @@ yyjson_mut_val *Writer::ztag_val(ZTag tag) {
   return yyjson_mut_strncpy(doc_, text, std::strlen(text));
 }
 
+const char *Writer::utf8_text(SEXP chr, size_t *len) {
+  cetype_t enc = Rf_getCharCE(chr);
+
+  if (enc == CE_UTF8 || enc == CE_LATIN1) {
+    const char *s = Rf_translateCharUTF8(chr);
+    *len = std::strlen(s);
+    return s;
+  }
+
+  if (enc == CE_BYTES) {
+    fail("cannot write a string declared with \"bytes\" encoding");
+  }
+
+  const char *s = CHAR(chr);
+  *len = (size_t)LENGTH(chr);
+
+  if (!valid_utf8(s, *len)) {
+    fail("cannot write a string that is not valid UTF-8");
+  }
+
+  return s;
+}
+
 yyjson_mut_val *Writer::symbol_val(SEXP x) {
-  const char *name = Rf_translateCharUTF8(PRINTNAME(x));
+  size_t len;
+  const char *name = utf8_text(PRINTNAME(x), &len);
   std::string tagged(1, kEscape);
   tagged.push_back(kSymbol);
-  tagged.append(name);
+  tagged.append(name, len);
 
   yyjson_mut_val *out = yyjson_mut_strncpy(doc_, tagged.data(), tagged.size());
   if (out == nullptr) cpp11::stop("failed to allocate a JSON string");
@@ -145,8 +170,9 @@ yyjson_mut_val *Writer::symbol_val(SEXP x) {
 
 yyjson_mut_val *Writer::str_val(SEXP chr) {
   if (chr == NA_STRING) return ztag_val(Z_NA_STR);
-  const char *s = Rf_translateCharUTF8(chr);
-  return text_val(s, std::strlen(s));
+  size_t len;
+  const char *s = utf8_text(chr, &len);
+  return text_val(s, len);
 }
 
 yyjson_mut_val *Writer::real_val(double v) {

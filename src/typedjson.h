@@ -1,6 +1,7 @@
 #ifndef TYPEDJSON_TYPEDJSON_H
 #define TYPEDJSON_TYPEDJSON_H
 
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -27,6 +28,60 @@ const char *const kReserved = "z:";
 inline bool is_reserved(char discriminator) {
   return discriminator != '\0' &&
          std::strchr(kReserved, discriminator) != nullptr;
+}
+
+// R hands a string with no declared encoding to the writer as bytes in the
+// locale's encoding, and translating those where the locale cannot represent
+// them substitutes R's `<xx>` escape text rather than failing. Validating
+// first lets bytes that already are UTF-8 through whatever the locale says,
+// and leaves the rest to be refused where the path is still known.
+inline bool valid_utf8(const char *s, size_t len) {
+  const unsigned char *p = reinterpret_cast<const unsigned char *>(s);
+  size_t i = 0;
+
+  while (i < len) {
+    // Text is overwhelmingly ASCII, so step a word at a time while every high
+    // bit is clear rather than paying a branch per byte.
+    while (len - i >= sizeof(std::uint64_t)) {
+      std::uint64_t word;
+      std::memcpy(&word, p + i, sizeof(word));
+      if (word & 0x8080808080808080ULL) break;
+      i += sizeof(word);
+    }
+    if (i >= len) break;
+
+    unsigned char lead = p[i];
+    unsigned char lo = 0x80, hi = 0xbf;
+    size_t extra;
+
+    if (lead < 0x80) {
+      ++i;
+      continue;
+    } else if (lead >= 0xc2 && lead <= 0xdf) {
+      extra = 1;
+    } else if (lead >= 0xe0 && lead <= 0xef) {
+      extra = 2;
+      if (lead == 0xe0) lo = 0xa0;
+      if (lead == 0xed) hi = 0x9f;
+    } else if (lead >= 0xf0 && lead <= 0xf4) {
+      extra = 3;
+      if (lead == 0xf0) lo = 0x90;
+      if (lead == 0xf4) hi = 0x8f;
+    } else {
+      return false;
+    }
+
+    if (len - i <= extra) return false;
+    if (p[i + 1] < lo || p[i + 1] > hi) return false;
+
+    for (size_t k = 2; k <= extra; ++k) {
+      if (p[i + k] < 0x80 || p[i + k] > 0xbf) return false;
+    }
+
+    i += extra + 1;
+  }
+
+  return true;
 }
 
 const char kSymbol = ':';
