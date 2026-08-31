@@ -49,10 +49,14 @@ values of each type, the non-finite doubles, attributes of any shape,
 and objects built with S3, S4, S7 or \code{R6}. The second holds for every
 document this package can write. Foreign documents are read under the
 same grammar and normalise on the first round trip, since a mixed-type
-array such as \verb{[1, "a"]} has to come back as a list. One is refused
-instead of normalised: a key beginning with a single \code{~} is reserved
-for the format, and one this reader does not know is an error rather
-than a name.
+array such as \verb{[1, "a"]} has to come back as a list. Two things are
+refused instead of normalised, both inside the namespace the \code{~}
+prefix reserves. A key beginning with a single \code{~} is a format tag,
+and one this reader does not know is an error rather than a name. A
+string beginning with \code{~} and a reserved discriminator, which is \code{z}
+today with \code{:} held for later, is a tag as well, and an unknown one
+is an error rather than text; every other tilde-leading string stays
+a string, so \verb{~/data} is a path.
 
 Two rules decide the shape of a document. A JSON array of scalars is an
 atomic vector and a JSON object is a named list, so the two containers

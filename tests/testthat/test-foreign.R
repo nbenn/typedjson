@@ -13,7 +13,6 @@ test_that("only the known tags are interpreted", {
   expect_identical(json_read_str('["~zInf"]'), Inf)
   expect_identical(json_read_str('["~~foo"]'), "~foo")
   expect_identical(json_read_str('["~foo"]'), "~foo")
-  expect_identical(json_read_str('["~zNope"]'), "~zNope")
   expect_identical(json_read_str('["~"]'), "~")
 })
 
@@ -185,6 +184,46 @@ test_that("an unrecognised tag is refused rather than read as data", {
   expect_error(
     json_read_str('{"~x":{"class":"nope","state":1},"~id":3}'), "not a tag"
   )
+})
+
+test_that("an unrecognised tag at string position is refused as well", {
+
+  expect_error(json_read_str('"~zBogus"'), "not a tag")
+  expect_error(json_read_str('"~zInf_extra"'), "not a tag")
+  expect_error(json_read_str('"~z"'), "not a tag")
+  expect_error(json_read_str('["~zNope"]'), "not a tag")
+  expect_error(json_read_str('{"a":"~zNope"}'), "not a tag")
+  expect_error(json_read_str('{"~t":"character","~v":"~zNope"}'), "not a tag")
+  expect_error(
+    json_read_str('{"~t":"integer","~a":{"meta":"~zNope"},"~v":1}'), "not a tag"
+  )
+
+  expect_error(json_read_str('"~:"'), "not a tag")
+  expect_error(json_read_str('"~:mpg"'), "not a tag")
+})
+
+test_that("a tilde-leading string outside the reserved alphabet is data", {
+
+  expect_identical(json_read_str('"~/data"'), "~/data")
+  expect_identical(json_read_str('{"home":"~/data"}'), list(home = "~/data"))
+  expect_identical(json_read_str('"~foo"'), "~foo")
+  expect_identical(json_read_str('"~ x"'), "~ x")
+  expect_identical(json_read_str('"~t"'), "~t")
+  expect_identical(json_read_str('"~"'), "~")
+  expect_identical(json_read_str('"~~zBogus"'), "~zBogus")
+})
+
+test_that("every string tag the format defines still reads", {
+
+  tags <- list(
+    "~zNA" = NA, "~zNA_integer_" = NA_integer_, "~zNA_real_" = NA_real_,
+    "~zNA_character_" = NA_character_, "~zInf" = Inf, "~z-Inf" = -Inf,
+    "~zNaN" = NaN
+  )
+
+  for (tag in names(tags)) {
+    expect_identical(json_read_str(paste0('"', tag, '"')), tags[[tag]])
+  }
 })
 
 test_that("a key that is not a format tag is data", {

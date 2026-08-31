@@ -115,7 +115,9 @@ One grammar, applied to whatever is handed over. Nothing is inferred from conten
 
 Integers beyond what R holds are read as doubles, and a number that cannot survive that conversion exactly is reported through a warning naming the literal rather than passed off as exact.
 
-One thing is refused outright. A key beginning with a single `~` is a format tag, so one this reader cannot use as a name is an error; the writer doubles the prefix on a name of your own, which is what makes the whole namespace safe to reserve. A document written against a later version of the format therefore fails loudly here instead of coming back as the wrong value. The sole exception is `~zNA_character_`, since a name is a string and that is the only name JSON has no way to carry.
+What the `~` prefix reserves is refused outright. A key beginning with a single `~` is a format tag, so one this reader cannot use as a name is an error; the sole exception is `~zNA_character_`, since a name is a string and that is the only name JSON has no way to carry. A string is more selective, because `~/data` has to stay a path: the tag is the prefix plus a reserved discriminator, which is `z` today with `:` held for a later spelling, and an unknown one is an error while every other tilde-leading string is text.
+
+The writer doubles the prefix on a string of your own, which is what makes the namespace safe to reserve in the first place. A document written against a later version of the format therefore fails loudly here instead of coming back as the wrong value.
 
 ## Persisting a class the default rule does not fit
 

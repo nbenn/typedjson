@@ -99,9 +99,16 @@ show_documents(NA_real_, c(1, Inf), "~foo", "Inf")
 
 Borrowed from Transit, whose spec escapes any data string beginning with `~`, `^` or a backtick by prepending `~`. The escape closes the ambiguity by construction rather than by choosing a spelling nobody uses, which is what makes it a genuine fix for the class of bug where a link input of `"Inf"` restores as numeric infinity.
 
-On read, only the known tags are interpreted. An unrecognised `~`-prefixed string is a literal, so "a string is always a string" holds for everything except a foreign document containing a string exactly equal to one of our tags.
+On read, a `~` string is a tag when what follows the prefix is a discriminator the format has reserved. The reserved set is `z`, which spells every tag above, and `:`, which is held for a spelling not yet in use; a reserved string this reader does not know is refused rather than rebuilt as a plausible value. Every other tilde-leading string is a literal, so `~/data` stays a path and "a string is always a string" holds for all of foreign JSON that the format has no claim on.
 
-The prefix is reserved at key position too, and there the reservation is total rather than tag-by-tag: a key beginning with a single `~` is a format tag, and one this reader does not know is refused rather than rebuilt as data. No document this package writes is affected, since a name of your own carries the doubled prefix.
+```{r, error = TRUE}
+json_read_str('{"home": "~/data"}')
+json_read_str('"~zBogus"')
+```
+
+Reserving an alphabet rather than the bare prefix is where the two positions part company, and the reason is that a tilde-leading string is ordinary in foreign JSON while a tilde-leading key is not. Reserving late does not work either way, since a discriminator only earns a refusal from readers that already carry it, which is why `:` lands in the release that names it rather than the one that spends it.
+
+The prefix is reserved at key position too, and there the reservation is total rather than by discriminator: a key beginning with a single `~` is a format tag, and one this reader does not know is refused rather than rebuilt as data. No document this package writes is affected, since a name of your own carries the doubled prefix.
 
 A name is a string, and JSON keys are strings, so the only name JSON cannot carry is `NA_character_` and `~zNA_character_` is the one string tag a key can hold. The rest of the vocabulary tags a value no name can take, and refusing those at key position is what keeps the escape rule honest there: `{"~zInf":1}` and `{"~~zInf":1}` would otherwise both rebuild the name `"~zInf"`.
 
@@ -218,7 +225,7 @@ One grammar, applied to whatever is handed to us. Nothing is inferred from conte
 | `"abc"` | `"abc"`, always character | nothing |
 | `"~zNA_real_"` | `NA_real_` | exact match against the known tags |
 | `"~~foo"` | `"~foo"` | the escape rule |
-| `"~foo"` (unknown tag) | `"~foo"`, literal | nothing |
+| `"~foo"`, `"~/data"` | the string itself | nothing; `f` and `/` are not reserved |
 | `123` | integer | the lexeme; yyjson reports `SINT` / `UINT` |
 | `1.0`, `1e3` | double | the lexeme carries `.` or an exponent |
 | `true` | logical | nothing |
@@ -226,6 +233,7 @@ One grammar, applied to whatever is handed to us. Nothing is inferred from conte
 | `[1,2,3]` | integer vector | shape |
 | `[[1],[2]]`, `[1,"a"]` | list | shape |
 | `{…}` | named list | nothing |
+| `"~zBogus"` | an error | a reserved discriminator naming no known tag |
 | `{"~foo": …}` | an error | the reserved prefix at key position |
 
 No `NA` from `"NA"`, no `Inf` from `"Inf"`, no date from an ISO-8601-looking string, no data frame from an array of objects. There is no strict mode and no lossy mode, because there is only one set of rules.
