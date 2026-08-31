@@ -93,6 +93,22 @@ A symbol takes the prefix tag rather than a tagged object of its own, since a ca
 
 This is what makes an object carrying a recorded call writable — a caught condition, a formula and the fitted model built on one among them, since a formula is a `language` value carrying the environment it was created in and an environment is recorded rather than refused.
 
+## Closures
+
+A closure is formals, body and environment, so once those three are writable it is too. It compares by its parts rather than by reference — `identical(function(x) x + 1, function(x) x + 1)` is `TRUE` — and so it round-trips exactly wherever the environment it closes over is recorded by name, and up to the same equivalence an environment does wherever that environment is recorded by contents.
+
+```r
+json_write_str(mean)
+#> {"~t":"closure","~v":{"formals":{"~t":"pairlist","~v":{"x":"~:","...":"~:"}},
+#>  "body":{"~t":"language","~v":["~:UseMethod",["mean"]]},
+#>  "environment":{"~t":"environment","~v":{"name":"namespace:base"}}}}
+
+json_write_str(sum)
+#> {"~t":"builtin","~v":"sum"}
+```
+
+A primitive closes over nothing, so it is recorded by the name that finds it again, which is what base R's own `serialize()` does with one. No source reference is recorded, since `identical()` ignores one by default and a `srcref` would drag the source text of a whole file into the document. A byte-compiled closure is written from `body()` and left to the compiler.
+
 ## Object systems
 
 S3 falls out with no special case: an S3 object is a base type plus a `class` attribute. S4 falls out too, with the S4 bit recorded separately, and an S4 object is rebuilt from its own contents — the class definition is needed to *use* it, not to read it back.
@@ -113,11 +129,11 @@ The generator is the authority on the instance's shape as well as on its lock, s
 
 ## What stays out
 
-Values that are handles rather than data are refused rather than written as something else: closures and external pointers, plus the two bindings an environment can hold that would have to be run to be read — a promise and an active binding. An error names the path it stopped at.
+Values that are handles rather than data are refused rather than written as something else: an external pointer, plus the two bindings an environment can hold that would have to be run to be read — a promise and an active binding. An error names the path it stopped at, and a closure over a frame holding either one is refused there.
 
 ```r
-json_write_str(list(a = 1, e = local({f <- mean; environment()})))
-#> Error: cannot write a value of type 'closure' at `x$e$bindings$f`
+json_write_str(list(a = 1, e = local({delayedAssign("f", stop("!")); environment()})))
+#> Error: cannot write a value of type 'promise' at `x$e$bindings$f`
 ```
 
 An environment itself is recorded rather than refused, up to the equivalence base R's own `serialize()` settles for. The global, base and empty environments, a namespace, a package environment and the imports environment of a namespace are written as the name that finds them again, so they come back as the object they were written from; anything else is written by its contents, with the parent following the same rule, and comes back binding the same names to the same values under an equivalent parent.

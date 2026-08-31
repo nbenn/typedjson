@@ -16,6 +16,10 @@ env_difference <- function(x, y, at = "x") {
     return(env_frame_difference(x, y, at))
   }
 
+  if (is_closure(x) || is_closure(y)) {
+    return(env_closure_difference(x, y, at))
+  }
+
   difference <- env_attribute_difference(x, y, at)
 
   if (!is.null(difference)) {
@@ -57,6 +61,25 @@ env_attribute_difference <- function(x, y, at) {
   }
 
   NULL
+}
+
+is_closure <- function(x) {
+  is.function(x) && !is.primitive(x)
+}
+
+env_closure_difference <- function(x, y, at) {
+
+  if (!is_closure(x) || !is_closure(y)) {
+    return(paste0("`", at, "` is a closure on one side only"))
+  }
+
+  if (!identical(x, y, ignore.environment = TRUE)) {
+    return(paste0("`", at, "` differs"))
+  }
+
+  env_difference(
+    environment(x), environment(y), paste0("environment(", at, ")")
+  )
 }
 
 env_element_difference <- function(x, y, at) {

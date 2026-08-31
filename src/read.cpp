@@ -73,6 +73,9 @@ SEXPTYPE sexptype_of(const char *name) {
   if (std::strcmp(name, "pairlist") == 0) return LISTSXP;
   if (std::strcmp(name, "expression") == 0) return EXPRSXP;
   if (std::strcmp(name, "environment") == 0) return ENVSXP;
+  if (std::strcmp(name, "closure") == 0) return CLOSXP;
+  if (std::strcmp(name, "builtin") == 0) return BUILTINSXP;
+  if (std::strcmp(name, "special") == 0) return SPECIALSXP;
   if (std::strcmp(name, "object") == 0 || std::strcmp(name, "S4") == 0) {
     return OBJSXP;
   }
@@ -142,7 +145,8 @@ class Reader {
  public:
   explicit Reader(cpp11::list hooks)
       : revive_(cpp11::function(hooks["revive"])),
-        env_(cpp11::function(hooks["env"])) {}
+        env_(cpp11::function(hooks["env"])),
+        fun_(cpp11::function(hooks["fun"])) {}
 
   SEXP build(yyjson_val *v);
 
@@ -154,6 +158,7 @@ class Reader {
   SEXP build_tagged(yyjson_val *v);
   SEXP build_hooked(yyjson_val *v, const char *tag);
   SEXP build_env(yyjson_val *v);
+  SEXP build_fun(yyjson_val *v, const char *type);
   SEXP build_complex(yyjson_val *v);
   SEXP build_raw(yyjson_val *v);
   SEXP build_symbol(yyjson_val *v);
@@ -171,6 +176,7 @@ class Reader {
 
   cpp11::function revive_;
   cpp11::function env_;
+  cpp11::function fun_;
   std::vector<std::string> lossy_;
 };
 
@@ -502,6 +508,8 @@ SEXP Reader::build_tagged(yyjson_val *v) {
     out = build_nodes(payload, type);
   } else if (type == ENVSXP) {
     out = build_env(payload);
+  } else if (type == CLOSXP || type == BUILTINSXP || type == SPECIALSXP) {
+    out = build_fun(payload, type_name);
   } else {
     out = build(payload);
     if (type != kNoType) out = coerce(out, type);
@@ -512,6 +520,14 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   if (out == R_NilValue && attribs != nullptr) {
     UNPROTECT(1);
     cpp11::stop("a NULL value cannot carry attributes");
+  }
+
+  // R hands out the one object its primitive table holds, so an attribute
+  // set on it here would be set on every other reference to it.
+  if (attribs != nullptr &&
+      (TYPEOF(out) == BUILTINSXP || TYPEOF(out) == SPECIALSXP)) {
+    UNPROTECT(1);
+    cpp11::stop("a primitive cannot carry attributes");
   }
 
   if (attribs != nullptr) {
@@ -548,6 +564,13 @@ SEXP Reader::build_tagged(yyjson_val *v) {
 SEXP Reader::build_env(yyjson_val *v) {
   SEXP state = PROTECT(build(v));
   cpp11::sexp out = env_(state);
+  UNPROTECT(1);
+  return out;
+}
+
+SEXP Reader::build_fun(yyjson_val *v, const char *type) {
+  SEXP state = PROTECT(build(v));
+  cpp11::sexp out = fun_(state, cpp11::as_sexp(std::string(type)));
   UNPROTECT(1);
   return out;
 }

@@ -13,7 +13,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
 ## Where the default rule stops
 
-Most classes need nothing from this page. An S3, S4 or S7 object is a base type plus attributes, so `json_write()` records it without help and the value that comes back is the value that went in. That rule stops at values which are handles rather than data. Closures, language objects and external pointers all name something that exists only inside the running session, and none of them survives being written down. An environment is recorded — by name where a name finds it again, by its contents otherwise — but only as far as what it binds, so one holding any of the above is refused with it.
+Most classes need nothing from this page. An S3, S4 or S7 object is a base type plus attributes, so `json_write()` records it without help and the value that comes back is the value that went in. That rule stops at an external pointer, which names something that exists only inside the running session and does not survive being written down. An environment is recorded — by name where a name finds it again, by its contents otherwise — but only as far as what it binds, so one holding an external pointer is refused with it, as is one holding a promise or an active binding, since reading either would run code.
 
 A connection is the case worth walking through, because it does not look like a handle. It prints as a small integer, and an integer is data.
 

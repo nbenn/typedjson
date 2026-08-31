@@ -29,8 +29,33 @@ bool needs_type(SEXP x) {
   int type = TYPEOF(x);
   if (type == CPLXSXP || type == RAWSXP || type == OBJSXP) return true;
   if (is_node_list(x) || type == EXPRSXP || type == ENVSXP) return true;
+  if (Rf_isFunction(x)) return true;
 
   return XLENGTH(x) == 0 && type != VECSXP;
+}
+
+// The parser attaches these three to a function definition, to a `{` block
+// and to what parse() returns, and identical() ignores them by default, so a
+// document carries no source reference and stays diffable.
+bool carries_srcref(SEXP x) {
+  int type = TYPEOF(x);
+  return type == CLOSXP || type == LANGSXP || type == EXPRSXP;
+}
+
+bool is_srcref_tag(SEXP tag) {
+  const char *name = CHAR(PRINTNAME(tag));
+  return std::strcmp(name, "srcref") == 0 ||
+         std::strcmp(name, "srcfile") == 0 ||
+         std::strcmp(name, "wholeSrcref") == 0;
+}
+
+void drop_srcref(std::vector<Attrib> *attrs) {
+  size_t kept = 0;
+  for (size_t i = 0; i < attrs->size(); ++i) {
+    if (is_srcref_tag((*attrs)[i].tag)) continue;
+    (*attrs)[kept++] = (*attrs)[i];
+  }
+  attrs->resize(kept);
 }
 
 class Writer {
@@ -39,7 +64,8 @@ class Writer {
       : doc_(doc),
         kind_(cpp11::function(hooks["kind"])),
         state_(cpp11::function(hooks["state"])),
-        env_(cpp11::function(hooks["env"])) {}
+        env_(cpp11::function(hooks["env"])),
+        fun_(cpp11::function(hooks["fun"])) {}
 
   yyjson_mut_val *emit(SEXP x, bool boxed = false);
 
@@ -50,6 +76,7 @@ class Writer {
   yyjson_mut_val *emit_env(SEXP x, const std::vector<Attrib> &attrs);
   yyjson_mut_val *emit_env_named(SEXP named);
   yyjson_mut_val *emit_env_contents(SEXP x);
+  yyjson_mut_val *emit_fun(SEXP x);
   yyjson_mut_val *emit_plain(SEXP x, SEXP nms, bool boxed);
   yyjson_mut_val *emit_tagged(SEXP x, const std::vector<Attrib> &attrs,
                               SEXP nms);
@@ -81,6 +108,7 @@ class Writer {
   cpp11::function kind_;
   cpp11::function state_;
   cpp11::function env_;
+  cpp11::function fun_;
   std::unordered_map<std::string, bool> memo_;
   std::vector<Crumb> crumbs_;
   std::vector<std::pair<SEXP, std::string> > refs_;
@@ -240,6 +268,7 @@ yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
 
   std::vector<Attrib> attrs;
   attributes_of(x, &attrs);
+  if (carries_srcref(x)) drop_srcref(&attrs);
 
   SEXP klass = attrib_value(attrs, R_ClassSymbol);
   if (klass != R_NilValue && TYPEOF(klass) == STRSXP && needs_state(klass)) {
@@ -259,6 +288,9 @@ yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
     case LANGSXP:
     case LISTSXP:
     case EXPRSXP:
+    case CLOSXP:
+    case BUILTINSXP:
+    case SPECIALSXP:
       break;
     case ENVSXP:
       return emit_env(x, attrs);
@@ -410,6 +442,11 @@ yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
   return obj;
 }
 
+yyjson_mut_val *Writer::emit_fun(SEXP x) {
+  cpp11::sexp state = fun_(x);
+  return emit(state, false);
+}
+
 yyjson_mut_val *Writer::emit_scalar(SEXP x, R_xlen_t i) {
   switch (TYPEOF(x)) {
     case LGLSXP: {
@@ -541,6 +578,7 @@ yyjson_mut_val *Writer::emit_payload(SEXP x, SEXP nms) {
   if (TYPEOF(x) == CPLXSXP) return emit_complex(x);
   if (TYPEOF(x) == RAWSXP) return emit_raw(x);
   if (is_node_list(x)) return emit_nodes(x);
+  if (Rf_isFunction(x)) return emit_fun(x);
   if (TYPEOF(x) == ENVSXP) return emit_env_contents(x);
   return emit_plain(x, nms, false);
 }

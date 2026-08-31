@@ -46,20 +46,21 @@ json_write_str(json_read_str(doc)) == doc
 
 The first holds for every supported value: every atomic type, missing
 values of each type, the non-finite doubles, attributes of any shape,
-language objects, and objects built with S3, S4, S7 or \code{R6}. Two
-values need it stated differently. An environment recorded by its
+language objects, closures, and objects built with S3, S4, S7 or \code{R6}.
+Two values need it stated differently. An environment recorded by its
 contents comes back a new environment, which is the exception base R's
 own \code{serialize()} makes as well: what comes back binds the same names
 to the same values, locked the same way, under a parent that is itself
-equivalent. A string R has not declared an encoding for comes back
-declared UTF-8, so the property holds on its bytes rather than under
-\code{identical()}. The second holds for every document this package can
-write. Foreign documents are read under the same grammar and normalise
-on the first round trip, since a mixed-type array such as \verb{[1, "a"]}
-has to come back as a list. Two things are refused instead of
-normalised, both inside the namespace the \code{~} prefix reserves. A key
-beginning with a single \code{~} is a format tag, and one this reader does
-not know is an error rather than a name. A string beginning with \code{~}
+equivalent, and a closure over one is equivalent for that same reason.
+A string R has not declared an encoding for comes back declared UTF-8,
+so the property holds on its bytes rather than under \code{identical()}.
+The second holds for every document this package can write. Foreign
+documents are read under the same grammar and normalise on the first
+round trip, since a mixed-type array such as \verb{[1, "a"]} has to come
+back as a list. Two things are refused instead of normalised, both
+inside the namespace the \code{~} prefix reserves. A key beginning with a
+single \code{~} is a format tag, and one this reader does not know is an
+error rather than a name. A string beginning with \code{~}
 and a reserved discriminator, which is \code{z} for what JSON has no lexeme
 for and \code{:} for a symbol, is a tag as well, and an unknown one is an
 error rather than text; every other tilde-leading string stays a
@@ -106,14 +107,28 @@ as the string \verb{~:name}. Attributes ride the ordinary rule, which is
 what carries the \code{.Environment} of a formula, so \code{y ~ x} round-trips
 once an environment does.
 
-Values that are handles rather than data stay out: closures and
-external pointers are refused rather than silently written as
-something else, and an environment binding holding one is refused with
-them. So is a binding holding a promise, since forcing it on the
-writer's own initiative could run arbitrary code, and an active
-binding, since reading it would do the same and record the result as
-though it were a plain value. A class that owns such a handle can still
-be persisted by writing a \code{\link[=json_state]{json_state()}} method for it.
+A closure compares by its parts rather than by reference, so it is a
+value as well and round-trips as far as its environment does. Formals,
+body and environment are written under a \code{~t} of \code{closure}, and
+attributes ride the ordinary rule. A primitive closes over nothing and
+is recorded by the name that finds it again, which is what base R does
+with one. No source reference is recorded: the \code{srcref} a parser
+attaches to a function definition, to a \verb{\{} block and to what \code{parse()}
+returns is dropped, which keeps a document diffable and leaves the
+value equal under \code{identical()}, whose default ignores one. A
+byte-compiled closure is written from \code{body()}, which is the source
+tree it was compiled from.
+
+Values that are handles rather than data stay out: an external pointer
+is refused rather than silently written as something else, and an
+environment binding holding one is refused with it. So is a binding
+holding a promise, since forcing it on the writer's own initiative
+could run arbitrary code, and an active binding, since reading it would
+do the same and record the result as though it were a plain value. That
+reaches a closure through the frame it closes over, where an argument
+the function was called with stays a promise whether or not it has been
+forced. A class that owns such a handle can still be persisted by
+writing a \code{\link[=json_state]{json_state()}} method for it.
 }
 \examples{
 json_write_str(list(n = 1L, x = 2.5, missing = NA_character_))
@@ -121,6 +136,8 @@ json_write_str(list(n = 1L, x = 2.5, missing = NA_character_))
 json_write_str(as.Date("2026-01-01"))
 
 json_write_str(quote(mpg ~ wt))
+
+json_write_str(stats::median)
 
 x <- c(a = 1, b = Inf)
 identical(json_read_str(json_write_str(x)), x)

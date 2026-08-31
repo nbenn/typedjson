@@ -59,10 +59,10 @@ identical(json_write_str(json_read_str(doc)), doc)
 
 The second falls out of the first once foreign documents are read under the same grammar rather than a separate lossy mode. It holds for every document this package writes; a foreign one settles after a single round trip, since a mixed-type array such as `[1, "a"]` has to come back as a list.
 
-Two values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
+Two values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test — and a closure over such an environment is stated the same way, since it is that environment plus a formals and a body that do come back identical. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
 
 - **Exact.** The relation above, which every other value in scope meets, and which an environment recorded by name meets too. A string carrying no encoding declaration meets it on its bytes.
-- **Equivalent.** Same bindings by name and by value, same locked and active status, and a parent that is itself equivalent.
+- **Equivalent.** Same bindings by name and by value, same locked and active status, and a parent that is itself equivalent. A closure meets it where its formals and body are identical and the environment it closes over is equivalent.
 
 The second contract is untouched either way: a document written from a rebuilt environment writes the same bytes again.
 
@@ -249,12 +249,14 @@ The generator itself is an environment too, and is recorded the way an S7 one is
 
 Both halves have to be recoverable for the document to be readable, so a generator that names no class, or that was built inside a function, is refused where it is written. The same lookup runs on the way out as for an instance, which means it also catches a class vector no generator in that environment declares.
 
-Closures and external pointers stay out. What the writer refuses, it refuses loudly, naming the path it stopped at.
+An external pointer stays out. What the writer refuses, it refuses loudly, naming the path it stopped at.
 
 A non-portable R6 class is on the far side of that line too, one level up. With `portable = FALSE` the object environment is also the environment its methods close over, so it binds `self` and `private` beside the fields and the generator stops accounting for everything that is not state. An instance of one is refused where it is written, naming the class, since making the class portable or giving it a `json_state()` method is what changes the answer.
 
 ```{r, error = TRUE}
-json_write_str(list(a = 1, e = mean))
+Bound <- R6::R6Class("Bound", portable = FALSE, public = list(n = 1))
+
+json_write_str(list(a = 1, b = Bound$new()))
 ```
 
 ### Environments
@@ -286,9 +288,59 @@ lockEnvironment(counter, bindings = TRUE)
 json_write_str(counter)
 ```
 
-Two bindings are refused rather than recorded, and for the same reason: reading either one runs code. A promise would have to be forced, and an environment captured inside a function holds its arguments unforced, so forcing one on the writer's own initiative can error or do arbitrary work at write time. An active binding would have to be called, and recording what it returned would hand back a plain binding wearing its value. Base R writes both unevaluated; this format has no way to write a closure yet, so it says so instead.
+Two bindings are refused rather than recorded, and for the same reason: reading either one runs code. A promise would have to be forced, and an environment captured inside a function holds its arguments unforced, so forcing one on the writer's own initiative can error or do arbitrary work at write time. An active binding would have to be called, and recording what it returned would hand back a plain binding wearing its value. Base R writes both unevaluated; this format refuses them, and says where.
 
 A name that is not available on the way back is replaced by the global environment with a warning, which is what base R already does through `findPackageEnv()` and `..getNamespace()`. Substituting silently was never on the table.
+
+### Closures
+
+A closure compares by its parts rather than by reference, which is the fact this section rests on and is easy to assume the other way round.
+
+```{r}
+identical(function(x) x + 1, function(x) x + 1)
+```
+
+So there is nothing to weaken. Formals, body and environment are what a closure is; the first two are language objects and the third is an environment, which means a closure needs no machinery beyond the two sections above and inherits the environment ladder whole. It round-trips exactly wherever the environment it closes over is recorded by name, and up to equivalence wherever that environment is recorded by contents.
+
+```{r}
+show_documents(mean)
+```
+
+A closure over a frame of its own records that frame like any other environment, so the walk stops at the first rung it reaches rather than running to `emptyenv()` through the workspace.
+
+```{r}
+counter <- new.env(parent = globalenv())
+counter$i <- 1L
+
+json_write_str(local(function() i + 1, counter))
+```
+
+A primitive closes over nothing and has no body to write, so it is recorded by the name that finds it again. That is what base R does too, and note what it does *not* do: a closure that happens to be a package export is written by value like any other rather than as `stats::median`, because the environment rung already does the work a name lookup would.
+
+```{r}
+show_documents(sum, `if`)
+```
+
+No source reference is recorded. A parser attaches `srcref` to a function definition, to a `{` block and to what `parse()` returns, and `identical()` ignores all three by default, so dropping them costs nothing against the first contract and keeps a document diffable.
+
+```{r}
+formals(identical)$ignore.srcref
+```
+
+Keeping one would be worse than verbose. A `srcref` carries its `srcfile`, which is an environment holding the source text it came from, so a function parsed from a file would arrive with that file beside it. A byte-compiled closure is written from `body()`, which is the source tree it was compiled from, and left to the compiler to compile again; nothing here records bytecode.
+
+Two shapes stay refused, and neither is a closure's own doing. An argument the function was called with stays a promise in its frame whether or not it has been forced, so a closure over such a frame meets the promise rule above.
+
+```{r, error = TRUE}
+adder <- function(n) {
+  force(n)
+  function(x) x + n
+}
+
+json_write_str(adder(3))
+```
+
+And a closure a method stored back into the object it belongs to reaches that object again through the frame it closes over, which is a genuine cycle and is reported as one. Both are the environment rules holding rather than a limit on closures, and both are what the extension protocol below is for.
 
 ### References
 
@@ -343,26 +395,26 @@ json_state(x)              json_revive(class, state)     # extension protocol
 
 For classes the default does not fit — `initialize` opens a connection, a field holds a handle, a reference must be recorded as a key rather than a value — a pair of generics, modelled on the `__getstate__` and `__setstate__` methods of Python's pickle. A `json_state()` method returns a plain list of what to persist, and a `json_revive()` method turns that list back into the object.
 
-Anything holding a closure is a case in point, since a closure carries an environment and so cannot be written down.
+A class holding a closure built inside its own constructor is a case in point. The closure is writable, but the frame it closes over binds the constructor's argument, and an argument is a promise however far it has been forced.
 
 ```{r}
-adder <- function(n) {
-  structure(list(n = n, f = function(x) x + n), class = "adder")
+adder_class <- function(n) {
+  structure(list(n = n, f = function(x) x + n), class = "adder_class")
 }
 ```
 
 ```{r, error = TRUE}
-json_write_str(adder(3))
+json_write_str(adder_class(3))
 ```
 
 What identifies this object is `n`; the closure is derived from it, so the method records the one and drops the other.
 
 ```{r}
-json_state.adder <- function(x) list(n = x$n)
+json_state.adder_class <- function(x) list(n = x$n)
 
-json_revive.adder <- function(class, state) adder(state$n)
+json_revive.adder_class <- function(class, state) adder_class(state$n)
 
-doc <- json_write_str(adder(3))
+doc <- json_write_str(adder_class(3))
 doc
 
 json_read_str(doc)$f(4)
@@ -415,7 +467,7 @@ The cpp11 package unlocks nothing from any of these libraries; the customization
 
 One property over a corpus, and this is what decides whether the package is trustworthy.
 
-The corpus is every atomic type crossed with {empty, scalar, vector}, {no attributes, names, class} and {no NA, some NA, all NA}, plus the non-finites, the numeric extremes, the tag lookalikes, nesting, the language types, each object system, one entry per environment rung, and a random-value fuzzer. Where a value meets only the weaker contract the relation itself is the expectation, so equivalence is checked by one walk rather than spelled out at each call site. Every entry is checked in each position it can occupy, since a value written bare at the document root and the same value written as an array element take different paths. Real payloads on top: a board produced by `blockr.core::blockr_ser()`, a recorded set of LLM conversation turns, and a link input of `"Inf"` as a named regression.
+The corpus is every atomic type crossed with {empty, scalar, vector}, {no attributes, names, class} and {no NA, some NA, all NA}, plus the non-finites, the numeric extremes, the tag lookalikes, nesting, the language types, each object system, one entry per environment rung, a closure over each of those rungs and over a local frame, the primitives, and a random-value fuzzer. Where a value meets only the weaker contract the relation itself is the expectation, so equivalence is checked by one walk rather than spelled out at each call site. Every entry is checked in each position it can occupy, since a value written bare at the document root and the same value written as an array element take different paths. Real payloads on top: a board produced by `blockr.core::blockr_ser()`, a recorded set of LLM conversation turns, and a link input of `"Inf"` as a named regression.
 
 ## Prior art
 
