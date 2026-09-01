@@ -62,7 +62,7 @@ identical(json_write_str(json_read_str(doc)), doc)
 
 The second falls out of the first once foreign documents are read under the same grammar rather than a separate lossy mode. It holds for every document this package writes; a foreign one settles after a single round trip, since a mixed-type array such as `[1, "a"]` has to come back as a list.
 
-Two values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test — and a closure over such an environment is stated the same way, since it is that environment plus a formals and a body that do come back identical. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
+Three values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test — and a closure over such an environment is stated the same way, since it is that environment plus a formals and a body that do come back identical. An S7 class a document carries the definition of is the first case reached through a class rather than through an environment written on its own: S7 builds the constructor of a class that has a parent in an environment of its own, that environment is recorded by its contents like any other, and so no by-value scheme can hand back the object that was written. Base R does not manage it either, `identical(unserialize(serialize(x, NULL)), x)` being `FALSE` for an S7 object in the same session. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
 
 - **Exact.** The relation above, which every other value in scope meets, and which an environment recorded by name meets too. A string carrying no encoding declaration meets it on its bytes.
 - **Equivalent.** Same bindings by name and by value, same locked and active status, and a parent that is itself equivalent. A closure meets it where its formals and body are identical and the environment it closes over is equivalent.
@@ -288,13 +288,41 @@ S3 falls out with no special case at all: an S3 object is a base type plus a `cl
 
 S4 falls out too, since slots are attributes, with two riders — the S4 bit is recorded separately because `typeof()` reports `S4` rather than the data type, and the reader can only rebuild if the class definition is loadable.
 
-S7 needs exactly one special case. Properties are stored as attributes and come through the ordinary rule, but the `S7_class` attribute holds the class generator, which contains constructor closures. So the class name and package are recorded and looked up on read, rather than the class object being serialized. With that in place an S7 object round-trips directly, which removes the need for a hand-written record layer above it.
+S7 needs exactly one special case. Properties are stored as attributes and come through the ordinary rule, but the `S7_class` attribute holds the class generator, and a walk into one lands in S7's own machinery rather than in anything the class declares — a base class holds a validator closing over the promise that built it. So a class is recorded by what identifies it rather than by its contents. With that in place an S7 object round-trips directly, which removes the need for a hand-written record layer above it.
+
+Which of the two forms a class takes is decided by `package`, which S7 sets for a class defined in a package and leaves `NULL` for every class defined outside one. That is the same question as whether a name finds the class again in another session, so a package-scoped class is recorded as the class and package it names, and a class with no package carries its definition.
+
+```json
+{"~s7": {"class": "Point", "package": "somepkg"}}
+```
+
+```json
+{"~s7": {"class": "Point", "parent": {"~s7": "S7_object"}, "properties": {}, "abstract": false, "constructor": {"~t": "closure", "~v": {}}, "validator": null}}
+```
+
+Reading `NULL` as the global environment is what the second form retires. A class defined at top level passed that lookup in the session that wrote it and failed in every other, so findability at write time said nothing about findability at read time — and refusing such a class where it is written, which is what the `R6` side does, would have separated unfixable documents from fixable ones rather than predicting the read.
+
+Each class the definition names is recorded the same way, by what identifies it rather than by walking in. A class S7 itself binds is recorded by the name it holds in that namespace, which covers `class_character`, `class_numeric` and `S7_object` alike; an S3 class by its class vector, since the wrapper `new_S3_class()` puts around one is built on demand and bound nowhere; a union by its members; and a class of your own by the two forms above, recursively.
+
+```json
+{"~s7": "class_character"}
+```
+
+```json
+{"~s7": {"s3": ["factor"]}}
+```
+
+```json
+{"~s7": {"union": [{"~s7": "class_double"}, {"~s7": "class_character"}]}}
+```
+
+The class vector is an ordinary attribute and the `S7_class` record resolves without reading it, so the two can disagree in a document that has been edited. They are compared where the object is rebuilt, since dispatch would otherwise follow the one while the properties came from the other.
 
 Both of those rebuild the object from the document rather than construct one, which reaches past the point where the class would have decided whether to produce it at all: an S4 object arrives without its `initialize` method having run, and an S7 object without its `constructor`. The check the class does supply is therefore run where the object is rebuilt — `methods::validObject()` on the S4 side and `S7::validate()` on the S7 side — which is what stands between a hand-edited document and a value the class itself rejects. Neither disturbs a good round trip, a document written from a valid object describing a valid one, and the S7 call earns its keep twice over, since it checks property types as well and so catches a property the document omits or spells as something else. The lookup that finds the class is allowed to find one and not to fetch one, so a document naming a package this session has not loaded reads the way it did before the check existed rather than stopping at it.
 
 What neither call replaces is the construction it reached past. A slot or property that an `initialize` method or a `constructor` would have derived comes back as the document spells it, so a class computing `label` from `celsius` revives with the two out of step wherever a document has them that way, and only a validator comparing them will say so.
 
-An R6 generator is a name, and is recorded the way an S7 one is: by the class it declares rather than by its contents.
+An R6 generator is a name, and is recorded the way a package-scoped S7 class is: by the class it declares rather than by its contents. Nothing here embeds, since the environment a generator declares its class in is the one it is looked up in, and a generator that environment does not find again is refused where it is written.
 
 ```json
 {"~r6class": {"class": ["Derived", "Base", "R6"], "package": "somepkg"}}

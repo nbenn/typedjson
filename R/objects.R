@@ -61,13 +61,6 @@ json_state.refObjectGenerator <- function(x) {
   )
 }
 
-#' @export
-json_state.S7_class <- function(x) {
-  tagged_state(
-    tag_s7, list(class = attr(x, "name"), package = attr(x, "package"))
-  )
-}
-
 #' Record an `R6` instance as the bindings it holds
 #'
 #' An `R6` instance has no [json_state()] method of its own, because what
@@ -426,28 +419,6 @@ fill_env <- function(env, values) {
   invisible(NULL)
 }
 
-s7_revive <- function(state) {
-
-  package <- state[["package"]]
-
-  if (is.null(package)) {
-    package <- "R_GlobalEnv"
-  }
-
-  gen <- find_generator(
-    env_by_name(package), state[["class"]], is_s7_generator
-  )
-
-  if (is.null(gen)) {
-    stop(
-      "no S7 class generator for class `", state[["class"]], "` in ", package,
-      call. = FALSE
-    )
-  }
-
-  gen
-}
-
 # Slots and properties are attributes, so an S4 or S7 object is rebuilt from
 # the document rather than constructed, which reaches past every check the
 # class puts between a value and an instance of itself. The check the class
@@ -480,21 +451,6 @@ validate_s4 <- function(x) {
   }
 
   methods::validObject(x)
-}
-
-validate_s7 <- function(x) {
-
-  # A foreign document is free to spell the attribute as anything it likes,
-  # and only a generator declares the properties to check an object against.
-  if (!is_s7_object(x) || !requireNamespace("S7", quietly = TRUE)) {
-    return(invisible(NULL))
-  }
-
-  S7::validate(x)
-}
-
-is_s7_object <- function(x) {
-  inherits(attr(x, "S7_class"), "S7_class") && inherits(x, "S7_object")
 }
 
 find_generator <- function(env, class, test) {
@@ -595,8 +551,4 @@ is_one_string <- function(x) {
 
 is_r6_generator <- function(x, class) {
   inherits(x, "R6ClassGenerator") && identical(x$classname, class)
-}
-
-is_s7_generator <- function(x, class) {
-  inherits(x, "S7_class") && identical(attr(x, "name"), class)
 }

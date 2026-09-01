@@ -15,13 +15,16 @@
 #' The first holds for every supported value: every atomic type, missing
 #' values of each type, the non-finite doubles, attributes of any shape,
 #' language objects, closures, and objects built with S3, S4 or S7.
-#' Two values need it stated differently. An environment recorded by its
+#' Three values need it stated differently. An environment recorded by its
 #' contents comes back a new environment, which is the exception base R's
 #' own `serialize()` makes as well: what comes back binds the same names
 #' to the same values, locked the same way, under a parent that is itself
 #' equivalent, and a closure over one is equivalent for that same reason.
-#' A string R has not declared an encoding for comes back declared UTF-8,
-#' so the property holds on its bytes rather than under `identical()`.
+#' An S7 class a document carries the definition of is equivalent for that
+#' same reason wherever a part of it closes over such an environment, which
+#' S7 builds for the constructor of every class that has a parent. A string
+#' R has not declared an encoding for comes back declared UTF-8, so the
+#' property holds on its bytes rather than under `identical()`.
 #' The second holds for every document this package can write. Foreign
 #' documents are read under the same grammar and normalise on the first
 #' round trip, since a mixed-type array such as `[1, "a"]` has to come
@@ -174,6 +177,23 @@
 #' have derived comes back as the document spells it. A class this session
 #' does not hold leaves nothing to check against, and a document naming one
 #' reads as it always has.
+#'
+#' An S7 class is recorded by the name that finds it again wherever one
+#' does, and by its definition wherever none does. S7 sets `package` for a
+#' class defined in a package and leaves it `NULL` for every class defined
+#' outside one, which is the same question, so that attribute is what
+#' decides: a package-scoped class is recorded as the class and package it
+#' names, and a class with no package carries its parent, properties,
+#' constructor and validator instead, so a document written from it reads
+#' in a session where no such class exists. Every class those parts name is
+#' recorded by what identifies it rather than walked into — one S7 itself
+#' binds by the name it holds there, an S3 class by its class vector, a
+#' union by its members, and a class of your own by the two forms above —
+#' since every refusal a walk into one hits is inside S7's own machinery
+#' rather than in the class you wrote. The class vector an object records
+#' is checked against the class it resolves to, so a document where the two
+#' disagree is refused rather than dispatching on the one and taking its
+#' properties from the other.
 #'
 #' An `R6` instance is refused as well, for a reason one level up. What an
 #' `R6` class guarantees is what its methods say rather than what its

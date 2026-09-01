@@ -185,46 +185,107 @@ assign(
   envir = global
 )
 
+# S7 builds a class's constructor in the frame `new_class()` is called in,
+# the way an `R6` generator takes the `parent_env` it is given, so the classes
+# below are built in the global environment rather than in this file's frame.
+# A class with no package carries that constructor into every document an
+# instance of it is written to, and the frame this file runs in holds the
+# whole corpus.
 assign(
   "CorpusS7",
-  S7::new_class(
-    "CorpusS7",
-    properties = list(x = S7::class_numeric, y = S7::class_character),
-    package = NULL
+  local(
+    S7::new_class(
+      "CorpusS7",
+      properties = list(x = S7::class_numeric, y = S7::class_character),
+      package = NULL
+    ),
+    envir = global
   ),
   envir = global
 )
 
 assign(
   "CorpusS7Valid",
-  S7::new_class(
-    "CorpusS7Valid",
-    properties = list(x = S7::class_double),
-    validator = function(self) if (self@x < 0) "@x must be non-negative",
-    package = NULL
+  local(
+    S7::new_class(
+      "CorpusS7Valid",
+      properties = list(x = S7::class_double),
+      validator = function(self) if (self@x < 0) "@x must be non-negative",
+      package = NULL
+    ),
+    envir = global
   ),
   envir = global
 )
 
 assign(
   "CorpusS7Made",
-  S7::new_class(
-    "CorpusS7Made",
-    properties = list(
-      celsius = S7::class_double, label = S7::class_character
+  local(
+    S7::new_class(
+      "CorpusS7Made",
+      properties = list(
+        celsius = S7::class_double, label = S7::class_character
+      ),
+      constructor = function(celsius) {
+        S7::new_object(
+          S7::S7_object(), celsius = celsius,
+          label = paste0(celsius, " degC")
+        )
+      },
+      package = NULL
     ),
-    constructor = function(celsius) {
-      S7::new_object(
-        S7::S7_object(), celsius = celsius,
-        label = paste0(celsius, " degC")
-      )
-    },
-    package = NULL
+    envir = global
   ),
   envir = global
 )
 
-corpus <- c(corpus, list("r6/generator" = get("CorpusR6", envir = global)))
+# A class defined in a package is the other half of the discriminator, and
+# `package` names an environment the reader resolves the way the environment
+# rule does, so a class the global environment holds tests the reference form
+# without a package to install.
+assign(
+  "CorpusS7Named",
+  local(
+    S7::new_class(
+      "CorpusS7Named",
+      properties = list(x = S7::class_double),
+      package = "R_GlobalEnv"
+    ),
+    envir = global
+  ),
+  envir = global
+)
+
+assign(
+  "CorpusS7Sub",
+  local(
+    S7::new_class(
+      "CorpusS7Sub",
+      parent = get("CorpusS7", envir = globalenv()),
+      properties = list(z = S7::class_logical),
+      package = NULL
+    ),
+    envir = global
+  ),
+  envir = global
+)
+
+corpus <- c(
+  corpus,
+  list(
+    "r6/generator" = get("CorpusR6", envir = global),
+    "s7/generator" = get("CorpusS7", envir = global),
+    "s7/generator-validator" = get("CorpusS7Valid", envir = global),
+    "s7/generator-constructor" = get("CorpusS7Made", envir = global),
+    "s7/generator-package" = get("CorpusS7Named", envir = global),
+    "s7/class-base" = S7::class_double,
+    "s7/class-union" = S7::class_numeric,
+    "s7/class-s3" = S7::class_factor,
+    "s7/class-object" = S7::S7_object,
+    "s7/class-any" = S7::class_any,
+    "s7/union" = S7::new_union(S7::class_double, S7::class_character)
+  )
+)
 
 # An instance has no method of its own, so every corpus class that is meant
 # to be written opts in to `r6_state()` the way a class author would. The
@@ -253,6 +314,7 @@ withr::defer(
         "CorpusR6PrivateHook", "CorpusR6Holder", "CorpusR6Bound",
         "CorpusR6BoundBare", "CorpusR6Mute", "CorpusR6Anon", "CorpusR6Amb1",
         "CorpusR6Amb2", "CorpusS7", "CorpusS7Valid", "CorpusS7Made",
+        "CorpusS7Named", "CorpusS7Sub",
         "CorpusRefClass", "CorpusRefDerived"
       ),
       envir = global

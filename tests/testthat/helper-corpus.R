@@ -447,7 +447,33 @@ corpus_refused <- function() {
     "refclass/generator" = list(
       value = corpus_generator("CorpusRefClass"),
       message = no_ref_generator("CorpusRefClass"), path = "x"
+    ),
+    # Both of these are the walk inside S7's own machinery, which is what
+    # recording a class by what identifies it keeps it out of. The first is
+    # that machinery reached through a class stripped of the attribute that
+    # made it one, and the second through the constructor S7 builds for an
+    # S3 class that has none, which it inlines as a property's default.
+    "s7/unclassed-base" = list(
+      value = structure(S7::class_double, class = "corpus_wrapper"),
+      type = "promise",
+      path = "x$validator$environment$bindings$constructor_name"
+    ),
+    "s7/s3-property-default" = list(
+      value = corpus_s7_s3_property(), type = "promise",
+      path = "x$constructor$formals$f[[1]]$environment$bindings$class"
     )
+  )
+}
+
+s7_class_kinds <- c(
+  "S7_class", "S7_base_class", "S7_S3_class", "S7_union", "S7_any",
+  "S7_missing"
+)
+
+corpus_s7_s3_property <- function() {
+  S7::new_class(
+    "CorpusS7S3", properties = list(f = S7::new_S3_class("CorpusS3Fac")),
+    package = NULL
   )
 }
 
@@ -1011,8 +1037,12 @@ corpus_positions <- function(x) {
   # A class attribute on a reference value would land on the corpus entry
   # itself rather than on a copy, a symbol takes no attribute at all, and a
   # primitive is the one object every other reference to it shares, so that
-  # position exists only for a value that can carry one.
-  if (!is.environment(x) && !is.symbol(x) && !is.primitive(x)) {
+  # position exists only for a value that can carry one. An S7 class carries
+  # one already and is that attribute, so the wrapper would replace the value
+  # rather than dress it; `corpus_refused()` covers what it turns into.
+  wrappable <- !is.environment(x) && !is.symbol(x) && !is.primitive(x)
+
+  if (wrappable && !inherits(x, s7_class_kinds)) {
     out[["tagged_payload"]] <- structure(x, class = "corpus_wrapper")
   }
 
