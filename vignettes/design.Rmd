@@ -334,7 +334,7 @@ The class has to be recoverable for the document to be readable, so a generator 
 
 An R6 instance is a different question, and the answer is that this package does not have one to give. Every other type in scope has a value its own type system supplies: a vector is its data, an S3 object is a base type plus attributes, and an S4 object is its slots exactly as an S7 object is its properties, which is why `new("Pt", x = 1, y = 2)` is a complete description of one. An R6 object is defined instead by what its methods guarantee, and its private fields are private precisely because they are not part of that. Recording an instance as the bindings it happens to hold is therefore an assertion about the class that only the class can make, so writing one is refused, naming the class and the method that would settle it.
 
-```{r, error = TRUE}
+```{r, error = TRUE, eval = requireNamespace("R6", quietly = TRUE)}
 Counter <- R6::R6Class("Counter", public = list(n = 0))
 
 json_write_str(list(a = 1, b = Counter$new()))
@@ -365,7 +365,7 @@ An external pointer stays out. What the writer refuses, it refuses loudly, namin
 
 A non-portable R6 class is on the far side of that line even for an author who has opted in. With `portable = FALSE` the object environment is also the environment its methods close over, so it binds `self` and `private` beside the fields and the generator stops accounting for everything that is not state. An instance of one is refused where it is written, naming the class, since making the class portable is what changes the answer.
 
-```{r, error = TRUE}
+```{r, error = TRUE, eval = requireNamespace("R6", quietly = TRUE)}
 Bound <- R6::R6Class("Bound", portable = FALSE, public = list(n = 1))
 
 json_state.Bound <- function(x) r6_state(x)

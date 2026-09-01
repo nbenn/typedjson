@@ -36,7 +36,7 @@ Suggests:
     S7,
     testthat (>= 3.0.0),
     withr
-VignetteBuilder: knitr
+VignetteBuilder: knitr, rmarkdown
 Config/testthat/edition: 3
 URL: https://nbenn.github.io/typedjson/
 BugReports: https://github.com/nbenn/typedjson/issues

@@ -32,6 +32,7 @@ test_that("an S4 object extending a basic type keeps its data part", {
 })
 
 test_that("an S7 object comes back through its generator", {
+  skip_if_not_installed("S7")
 
   obj <- CorpusS7(x = c(1, 2), y = "a")
   doc <- json_write_str(obj)
@@ -56,6 +57,7 @@ test_that("an edited S4 object is refused by the class's own validity", {
 })
 
 test_that("an edited S7 object is refused by the class's own validator", {
+  skip_if_not_installed("S7")
 
   obj <- CorpusS7Valid(x = 3)
   doc <- json_write_str(obj)
@@ -68,6 +70,7 @@ test_that("an edited S7 object is refused by the class's own validator", {
 })
 
 test_that("an S7 property the document leaves out is caught as its type", {
+  skip_if_not_installed("S7")
 
   expect_error(
     json_read_str(
@@ -82,6 +85,7 @@ test_that("an S7 property the document leaves out is caught as its type", {
 })
 
 test_that("an S7 constructor is reached past rather than run", {
+  skip_if_not_installed("S7")
 
   obj <- CorpusS7Made(celsius = 21)
   doc <- json_write_str(obj)
@@ -122,6 +126,7 @@ test_that("an attribute spelling a generator is not taken for one", {
 })
 
 test_that("an S7 class a package scopes is recorded by that name", {
+  skip_if_not_installed("S7")
 
   doc <- json_write_str(CorpusS7Named)
 
@@ -133,6 +138,7 @@ test_that("an S7 class a package scopes is recorded by that name", {
 })
 
 test_that("an S7 class no package scopes carries its definition", {
+  skip_if_not_installed("S7")
 
   doc <- json_write_str(CorpusS7)
 
@@ -144,6 +150,7 @@ test_that("an S7 class no package scopes carries its definition", {
 })
 
 test_that("an S7 object reads where no name finds its class again", {
+  skip_if_not_installed("S7")
 
   # The class is built where a top-level one is, so its constructor closes
   # over an environment a name finds again, and nothing binds the class
@@ -161,6 +168,7 @@ test_that("an S7 object reads where no name finds its class again", {
 })
 
 test_that("a class defined inside a function is embedded rather than refused", {
+  skip_if_not_installed("S7")
 
   # The `R6` side refuses one of these where it is written, which is the
   # answer #54 proposed for S7 as well; carrying the definition is what
@@ -183,6 +191,7 @@ test_that("a class defined inside a function is embedded rather than refused", {
 })
 
 test_that("an S7 reference without a package is refused rather than guessed", {
+  skip_if_not_installed("S7")
 
   expect_error(
     json_read_str('{"~s7":{"class":"CorpusS7","package":null}}'),
@@ -192,6 +201,7 @@ test_that("an S7 reference without a package is refused rather than guessed", {
 })
 
 test_that("an S7 class the S7 package binds is recorded by that name", {
+  skip_if_not_installed("S7")
 
   expect_identical(json_write_str(S7::class_double), '{"~s7":"class_double"}')
   expect_identical(json_write_str(S7::S7_object), '{"~s7":"S7_object"}')
@@ -211,6 +221,7 @@ test_that("an S7 class the S7 package binds is recorded by that name", {
 })
 
 test_that("a name the S7 package binds to no class is not taken for one", {
+  skip_if_not_installed("S7")
 
   expect_error(
     json_read_str('{"~s7":"new_class"}'),
@@ -223,6 +234,7 @@ test_that("a name the S7 package binds to no class is not taken for one", {
 })
 
 test_that("a class S7 does not bind is recorded by what identifies it", {
+  skip_if_not_installed("S7")
 
   union <- S7::new_union(S7::class_double, S7::class_character)
 
@@ -243,6 +255,7 @@ test_that("a class S7 does not bind is recorded by what identifies it", {
 })
 
 test_that("an embedded class comes back equivalent where a name does not", {
+  skip_if_not_installed("S7")
 
   # S7 builds the constructor of a class with a parent in an environment of
   # its own, which is recorded by its contents and so comes back a different
@@ -259,6 +272,7 @@ test_that("an embedded class comes back equivalent where a name does not", {
 })
 
 test_that("a document carrying a class definition writes back to itself", {
+  skip_if_not_installed("S7")
 
   for (nm in c("CorpusS7", "CorpusS7Valid", "CorpusS7Made", "CorpusS7Sub")) {
 
@@ -269,6 +283,7 @@ test_that("a document carrying a class definition writes back to itself", {
 })
 
 test_that("a class vector naming another class is refused on the read", {
+  skip_if_not_installed("S7")
 
   doc <- json_write_str(CorpusS7Named(x = 1))
   edited <- sub(
