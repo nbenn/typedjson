@@ -1,6 +1,6 @@
 test_that("the flag carries a definition where a name would have found one", {
 
-  doc <- json_write_str(CorpusS7Named, embed = TRUE)
+  doc <- json_write_str(CorpusS7Named, self_contained = TRUE)
 
   expect_match(doc, '"class":"CorpusS7Named"', fixed = TRUE)
   expect_match(doc, '"constructor"', fixed = TRUE)
@@ -18,7 +18,7 @@ test_that("a definition keeps the package that qualifies the class name", {
   # read checks the two against each other, so a definition that dropped it
   # would rebuild a class the object no longer belongs to.
   obj <- CorpusS7Named(x = 1)
-  doc <- json_write_str(obj, embed = TRUE)
+  doc <- json_write_str(obj, self_contained = TRUE)
 
   expect_match(
     doc, '"class":["R_GlobalEnv::CorpusS7Named","S7_object"]', fixed = TRUE
@@ -41,7 +41,7 @@ test_that("an embedded class reads where the name finds nothing again", {
   )
 
   obj <- gone(a = 1)
-  embedded <- json_write_str(obj, embed = TRUE)
+  embedded <- json_write_str(obj, self_contained = TRUE)
   referenced <- json_write_str(obj)
 
   expect_null(get0("CorpusS7NamedGone", envir = globalenv(),
@@ -63,7 +63,7 @@ test_that("the flag reaches a class the definition it writes names", {
     envir = globalenv()
   )
 
-  doc <- json_write_str(parented, embed = TRUE)
+  doc <- json_write_str(parented, self_contained = TRUE)
 
   expect_no_match(
     doc, '"parent":{"~s7":{"class":"CorpusS7Named","package":"R_GlobalEnv"}}',
@@ -79,7 +79,9 @@ test_that("a class no package scopes writes what it always wrote", {
 
     cls <- get(nm, envir = globalenv())
 
-    expect_identical(json_write_str(cls, embed = TRUE), json_write_str(cls))
+    expect_identical(
+      json_write_str(cls, self_contained = TRUE), json_write_str(cls)
+    )
   }
 })
 
@@ -113,7 +115,7 @@ test_that("the flag leaves every other name where it is", {
 
   for (nm in names(values)) {
     expect_identical(
-      json_write_str(values[[nm]], embed = TRUE),
+      json_write_str(values[[nm]], self_contained = TRUE),
       json_write_str(values[[nm]]), info = nm
     )
   }
@@ -128,9 +130,11 @@ test_that("a generator the flag has no definition for keeps its reference", {
   s4 <- methods::new("CorpusS4", a = 1, b = "x")
 
   expect_identical(
-    json_write_str(CorpusR6, embed = TRUE), json_write_str(CorpusR6)
+    json_write_str(CorpusR6, self_contained = TRUE), json_write_str(CorpusR6)
   )
-  expect_identical(json_write_str(s4, embed = TRUE), json_write_str(s4))
+  expect_identical(
+    json_write_str(s4, self_contained = TRUE), json_write_str(s4)
+  )
 })
 
 test_that("a document the flag wrote writes back to itself", {
@@ -142,9 +146,11 @@ test_that("a document the flag wrote writes back to itself", {
 
   for (value in values) {
 
-    doc <- json_write_str(value, embed = TRUE)
+    doc <- json_write_str(value, self_contained = TRUE)
 
-    expect_identical(json_write_str(json_read_str(doc), embed = TRUE), doc)
+    expect_identical(
+      json_write_str(json_read_str(doc), self_contained = TRUE), doc
+    )
   }
 })
 
@@ -154,9 +160,11 @@ test_that("every corpus document the flag wrote holds its bytes", {
 
   for (nm in names(corpus)) {
 
-    doc <- json_write_str(corpus[[nm]], embed = TRUE)
+    doc <- json_write_str(corpus[[nm]], self_contained = TRUE)
 
-    if (!identical(json_write_str(json_read_str(doc), embed = TRUE), doc)) {
+    again <- json_write_str(json_read_str(doc), self_contained = TRUE)
+
+    if (!identical(again, doc)) {
       drifting <- c(drifting, nm)
     }
   }
@@ -168,7 +176,7 @@ test_that("a file takes the flag the way a string does", {
 
   path <- withr::local_tempfile(fileext = ".json")
 
-  expect_identical(json_write(CorpusS7Named, path, embed = TRUE), path)
+  expect_identical(json_write(CorpusS7Named, path, self_contained = TRUE), path)
 
   doc <- paste0(readLines(path, warn = FALSE), collapse = "")
 
@@ -179,25 +187,27 @@ test_that("a file takes the flag the way a string does", {
 test_that("plain mode and the flag cannot both be asked for", {
 
   expect_error(
-    json_write_str(1, typed = FALSE, embed = TRUE),
-    "plain mode records no class to embed one in place of", fixed = TRUE
+    json_write_str(1, typed = FALSE, self_contained = TRUE),
+    "plain mode records no class to carry a definition in place of",
+    fixed = TRUE
   )
   expect_error(
-    json_write(1, tempfile(), typed = FALSE, embed = TRUE),
-    "plain mode records no class to embed one in place of", fixed = TRUE
+    json_write(1, tempfile(), typed = FALSE, self_contained = TRUE),
+    "plain mode records no class to carry a definition in place of",
+    fixed = TRUE
   )
 })
 
 test_that("the flag has to be one logical that is not missing", {
 
   for (bad in list(NA, "yes", 1L, c(TRUE, TRUE), NULL)) {
-    expect_error(json_write_str(1, embed = bad))
+    expect_error(json_write_str(1, self_contained = bad))
   }
 })
 
 test_that("a definition a document spells wrongly is refused", {
 
-  doc <- json_write_str(CorpusS7Named, embed = TRUE)
+  doc <- json_write_str(CorpusS7Named, self_contained = TRUE)
   edited <- sub(
     '"package":"R_GlobalEnv"', '"package":[1.0,2.0]', doc, fixed = TRUE
   )
@@ -216,7 +226,9 @@ test_that("a definition a document spells wrongly is refused", {
 })
 
 test_that("every corpus value survives the trip with the flag set", {
-  expect_identical(round_trip_failures(corpus, embed = TRUE), character())
+  expect_identical(
+    round_trip_failures(corpus, self_contained = TRUE), character()
+  )
 })
 
 test_that("the reference form still reads where the flag never ran", {

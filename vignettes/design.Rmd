@@ -60,7 +60,7 @@ doc <- json_write_str(x)
 identical(json_write_str(json_read_str(doc)), doc)
 ```
 
-The second falls out of the first once foreign documents are read under the same grammar rather than a separate lossy mode. It holds for every document this package writes; a foreign one settles after a single round trip, since a mixed-type array such as `[1, "a"]` has to come back as a list. A writer flag is what qualifies it, since a document holds its bytes where it is read and written the same way: `embed` below is the case that matters, a carried definition being recorded as a name again by a writer that was not asked for one.
+The second falls out of the first once foreign documents are read under the same grammar rather than a separate lossy mode. It holds for every document this package writes; a foreign one settles after a single round trip, since a mixed-type array such as `[1, "a"]` has to come back as a list. A writer flag is what qualifies it, since a document holds its bytes where it is read and written the same way: the `self_contained` flag below is the case that matters, a carried definition being recorded as a name again by a writer that was not asked for one.
 
 Three values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test — and a closure over such an environment is stated the same way, since it is that environment plus a formals and a body that do come back identical. An S7 class a document carries the definition of is the first case reached through a class rather than through an environment written on its own: S7 builds the constructor of a class that has a parent in an environment of its own, that environment is recorded by its contents like any other, and so no by-value scheme can hand back the object that was written. Base R does not manage it either, `identical(unserialize(serialize(x, NULL)), x)` being `FALSE` for an S7 object in the same session. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
 
@@ -504,7 +504,7 @@ identical(parent.env(back)$inner, back)
 
 ### Self-contained documents
 
-Everything above records a class by the name that finds it again wherever one does, and a reference resolves against the reader's session rather than the writer's. A writer may want the other answer, because the document is an archive rather than a wire format, and the `embed` flag on both writers is where that is asked for.
+Everything above records a class by the name that finds it again wherever one does, and a reference resolves against the reader's session rather than the writer's. A writer may want the other answer, because the document is an archive rather than a wire format, and the `self_contained` flag on both writers is where that is asked for.
 
 ```{r}
 Archived <- local(

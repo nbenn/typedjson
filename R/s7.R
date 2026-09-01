@@ -38,7 +38,7 @@ s7_record <- function(x) {
 
     package <- attr(x, "package")
 
-    if (!is.null(package) && !writer_embed$on()) {
+    if (!is.null(package) && !writer_self_contained$on()) {
       return(list(class = attr(x, "name"), package = package))
     }
   }

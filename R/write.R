@@ -195,16 +195,16 @@
 #' disagree is refused rather than dispatching on the one and taking its
 #' properties from the other.
 #'
-#' Which of the two a class gets is a default rather than a rule, and the
-#' `embed` flag overrides it. A document written with that flag set carries
-#' the definition of every S7 class in it, package-scoped or not, because a
-#' reference resolves against the reader's session rather than the writer's:
-#' the package may not be installed where the document is read, may have been
-#' renamed since, or may have drifted in a way that still validates. That is
-#' the answer an archive wants where a wire format wants the reference. The
-#' definition carries the package the class was scoped by, so the qualified
-#' class vector an instance records still names the class the document
-#' rebuilds.
+#' Which of the two a class gets is a default rather than a rule, and it is
+#' the `self_contained` flag that overrides it. A document written with that
+#' flag set carries the definition of every S7 class in it, package-scoped
+#' or not, because a reference resolves against the reader's session rather
+#' than the writer's: the package may not be installed where the document is
+#' read, may have been renamed since, or may have drifted in a way that
+#' still validates. That is the answer an archive wants where a wire format
+#' wants the reference. The definition carries the package the class was
+#' scoped by, so the qualified class vector an instance records still names
+#' the class the document rebuilds.
 #'
 #' What the flag does not reach is the rest of what this format records by
 #' name, and the reason differs across that set rather than falling out of
@@ -255,8 +255,8 @@
 #'   writes the annotated form this package reads back unchanged; `FALSE`
 #'   writes plain JSON for a consumer that brings its own schema.
 #'
-#' @param embed Whether to carry a class definition the document would
-#'   otherwise record by name. The default records the name wherever one
+#' @param self_contained Whether to carry a class definition the document
+#'   would otherwise record by name. The default records the name wherever one
 #'   finds the class again, which is what a wire format wants; `TRUE` carries
 #'   the definition instead, which is what an archive wants. Only an S7 class
 #'   is reached, with `vignette("design")` setting out which names are left
@@ -293,16 +293,17 @@
 #'
 #' json_write_str(Archived(n = 1))
 #'
-#' json_write_str(Archived(n = 1), embed = TRUE)
+#' json_write_str(Archived(n = 1), self_contained = TRUE)
 #'
 #' @export
-json_write <- function(x, path, pretty = TRUE, typed = TRUE, embed = FALSE) {
+json_write <- function(x, path, pretty = TRUE, typed = TRUE,
+                       self_contained = FALSE) {
 
   stopifnot(is.character(path), length(path) == 1L, !is.na(path))
-  check_flags(pretty, typed, embed)
+  check_flags(pretty, typed, self_contained)
 
-  writer_embed$scope(
-    embed,
+  writer_self_contained$scope(
+    self_contained,
     generator_cache$scope(
       typedjson_write_file_(x, path, pretty, typed, writer_hooks())
     )
@@ -313,32 +314,35 @@ json_write <- function(x, path, pretty = TRUE, typed = TRUE, embed = FALSE) {
 
 #' @rdname json_write
 #' @export
-json_write_str <- function(x, pretty = FALSE, typed = TRUE, embed = FALSE) {
+json_write_str <- function(x, pretty = FALSE, typed = TRUE,
+                           self_contained = FALSE) {
 
-  check_flags(pretty, typed, embed)
+  check_flags(pretty, typed, self_contained)
 
-  writer_embed$scope(
-    embed,
+  writer_self_contained$scope(
+    self_contained,
     generator_cache$scope(
       typedjson_write_(x, pretty, typed, writer_hooks())
     )
   )
 }
 
-check_flags <- function(pretty, typed, embed) {
+check_flags <- function(pretty, typed, self_contained) {
 
   stopifnot(
     is.logical(pretty), length(pretty) == 1L, !is.na(pretty),
     is.logical(typed), length(typed) == 1L, !is.na(typed),
-    is.logical(embed), length(embed) == 1L, !is.na(embed)
+    is.logical(self_contained), length(self_contained) == 1L,
+    !is.na(self_contained)
   )
 
   # Plain mode writes no class at all, by name or otherwise, so the two
   # flags together spell a document neither of them describes.
-  if (embed && !typed) {
+  if (self_contained && !typed) {
     stop(
-      "plain mode records no class to embed one in place of, so `embed` ",
-      "and `typed = FALSE` cannot both be asked for", call. = FALSE
+      "plain mode records no class to carry a definition in place of, so ",
+      "`self_contained` and `typed = FALSE` cannot both be asked for",
+      call. = FALSE
     )
   }
 
@@ -348,22 +352,22 @@ check_flags <- function(pretty, typed, embed) {
 # The flag reaches the S7 method through a scope rather than an argument,
 # because `json_state()` is a generic class authors write methods against and
 # its signature is theirs rather than this package's to extend.
-writer_embed <- local({
+writer_self_contained <- local({
 
-  embedding <- FALSE
+  self_contained <- FALSE
 
   list(
     scope = function(flag, expr) {
 
-      outer <- embedding
-      embedding <<- flag
+      outer <- self_contained
+      self_contained <<- flag
 
-      on.exit(embedding <<- outer)
+      on.exit(self_contained <<- outer)
 
       expr
     },
     on = function() {
-      embedding
+      self_contained
     }
   )
 })

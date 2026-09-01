@@ -11,9 +11,9 @@ json_read(path)
 
 json_read_str(txt)
 
-json_write(x, path, pretty = TRUE, typed = TRUE, embed = FALSE)
+json_write(x, path, pretty = TRUE, typed = TRUE, self_contained = FALSE)
 
-json_write_str(x, pretty = FALSE, typed = TRUE, embed = FALSE)
+json_write_str(x, pretty = FALSE, typed = TRUE, self_contained = FALSE)
 }
 \arguments{
 \item{path}{Path to write to or read from.}
@@ -30,8 +30,8 @@ compact.}
 writes the annotated form this package reads back unchanged; \code{FALSE}
 writes plain JSON for a consumer that brings its own schema.}
 
-\item{embed}{Whether to carry a class definition the document would
-otherwise record by name. The default records the name wherever one
+\item{self_contained}{Whether to carry a class definition the document
+would otherwise record by name. The default records the name wherever one
 finds the class again, which is what a wire format wants; \code{TRUE} carries
 the definition instead, which is what an archive wants. Only an S7 class
 is reached, with \code{vignette("design")} setting out which names are left
@@ -238,16 +238,16 @@ is checked against the class it resolves to, so a document where the two
 disagree is refused rather than dispatching on the one and taking its
 properties from the other.
 
-Which of the two a class gets is a default rather than a rule, and the
-\code{embed} flag overrides it. A document written with that flag set carries
-the definition of every S7 class in it, package-scoped or not, because a
-reference resolves against the reader's session rather than the writer's:
-the package may not be installed where the document is read, may have been
-renamed since, or may have drifted in a way that still validates. That is
-the answer an archive wants where a wire format wants the reference. The
-definition carries the package the class was scoped by, so the qualified
-class vector an instance records still names the class the document
-rebuilds.
+Which of the two a class gets is a default rather than a rule, and it is
+the \code{self_contained} flag that overrides it. A document written with that
+flag set carries the definition of every S7 class in it, package-scoped
+or not, because a reference resolves against the reader's session rather
+than the writer's: the package may not be installed where the document is
+read, may have been renamed since, or may have drifted in a way that
+still validates. That is the answer an archive wants where a wire format
+wants the reference. The definition carries the package the class was
+scoped by, so the qualified class vector an instance records still names
+the class the document rebuilds.
 
 What the flag does not reach is the rest of what this format records by
 name, and the reason differs across that set rather than falling out of
@@ -316,6 +316,6 @@ Archived <- local(
 
 json_write_str(Archived(n = 1))
 
-json_write_str(Archived(n = 1), embed = TRUE)
+json_write_str(Archived(n = 1), self_contained = TRUE)
 
 }
