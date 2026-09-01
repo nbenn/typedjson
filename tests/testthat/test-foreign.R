@@ -39,6 +39,29 @@ test_that("a number R cannot hold exactly is read as a double and reported", {
   expect_identical(y, 1.2345678901234568e23)
 })
 
+test_that("a reported number survives a handler that runs R code", {
+
+  # The result used to lose its protection before the warning fired, so a
+  # calling handler that collected in between returned whatever landed in the
+  # freed slot -- a character vector carrying the warning text or the restart
+  # name, in place of the number. Torture makes the collection deterministic
+  # rather than a race.
+  withr::defer(gctorture(FALSE))
+  gctorture(TRUE)
+
+  x <- withCallingHandlers(
+    json_read_str("[9007199254740993]"),
+    warning = function(w) {
+      force(paste0("x", seq_len(50)))
+      invokeRestart("muffleWarning")
+    }
+  )
+
+  gctorture(FALSE)
+
+  expect_identical(x, 9007199254740992)
+})
+
 test_that("shape decides vector or list", {
   expect_identical(json_read_str("[1,2,3]"), c(1L, 2L, 3L))
   expect_identical(json_read_str("[true,false]"), c(TRUE, FALSE))
