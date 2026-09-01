@@ -411,7 +411,9 @@ yyjson_mut_val *Writer::emit_state(SEXP x) {
   std::string at = path();
   cpp11::sexp where(
       Rf_ScalarString(Rf_mkCharLenCE(at.data(), at.size(), CE_UTF8)));
-  cpp11::sexp state = state_(x, where);
+  SEXP value = PROTECT(quoted(x));
+  cpp11::sexp state = state_(value, where);
+  UNPROTECT(1);
   if (state == R_NilValue) return nullptr;
 
   if (TYPEOF(state) != VECSXP || XLENGTH(state) != 2 ||

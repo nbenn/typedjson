@@ -786,6 +786,43 @@ test_that("a state without a revive method says so", {
 
   expect_error(json_read_str(doc), "json_revive")
 })
+
+test_that("a classed call reaches its json_state() method unevaluated", {
+
+  side <- new.env()
+  local_global_binding(
+    "mark", function() {
+      side$hit <- TRUE
+      42
+    }, environment()
+  )
+
+  seen <- NULL
+
+  local_state_method(
+    "corpus_call",
+    function(x) {
+      seen <<- x
+      list(call = unclass(x))
+    },
+    function(class, state) structure(state[["call"]], class = "corpus_call")
+  )
+
+  obj <- structure(quote(mark()), class = "corpus_call")
+  doc <- json_write_str(obj)
+
+  expect_identical(seen, obj)
+  expect_identical(
+    doc,
+    paste0(
+      '{"~x":{"class":"corpus_call","state":',
+      '{"call":{"~t":"language","~v":["~:mark"]}}}}'
+    )
+  )
+  expect_identical(json_read_str(doc), obj)
+  expect_null(side$hit)
+})
+
 test_that("every R6 class shape settles or names its refusal", {
 
   grid <- r6_shape_grid()
