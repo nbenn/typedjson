@@ -91,6 +91,16 @@ corpus_edges <- function() {
       1:4, dim = c(2L, 2L), dimnames = list(c("r1", "r2"), c("c1", "c2")),
       extra = "e", class = "corpus_class"
     ),
+    "attributes/class-first" = structure(
+      1L, class = "corpus_class", extra = "e"
+    ),
+    "attributes/names-last" = structure(
+      1:2, extra = "e", names = c("a", "b")
+    ),
+    "attributes/dimnames-last" = structure(
+      1:4, dim = c(2L, 2L), names = c("a", "b", "c", "d"),
+      dimnames = list(c("r1", "r2"), c("c1", "c2"))
+    ),
     "attributes/tilde-named" = structure(1:2, `~t` = "x", `~zInf` = 1),
     "attributes/nested" = structure(
       1:2, meta = structure(c(x = 1), class = "corpus_class")
