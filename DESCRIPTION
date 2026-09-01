@@ -22,6 +22,8 @@ Copyright: The bundled 'yyjson' code in src/ is Copyright (c) 2020
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
+Depends:
+    R (>= 4.3)
 LinkingTo: cpp11
 Imports:
     methods
