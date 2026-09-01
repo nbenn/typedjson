@@ -27,7 +27,7 @@ plus attributes, so \code{\link[=json_write]{json_write()}} records it without h
 whose instances hold something outside that model — a connection opened
 by \code{initialize}, a handle to a running process, a reference that has to
 be recorded as a key rather than a value — supplies a method for this
-pair instead, modelled on the \verb{__getstate__} and \verb{__setstate__} protocol
+pair instead, modeled on the \verb{__getstate__} and \verb{__setstate__} protocol
 of Python's pickle.
 }
 \details{

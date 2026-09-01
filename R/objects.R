@@ -72,7 +72,7 @@ json_state.refObjectGenerator <- function(x) {
 #' A class author is the party who knows whether a field is stored or
 #' derived, whether `initialize` establishes an invariant, and whether a
 #' reference should be recorded as a key rather than a value. One who has
-#' made that judgement and wants the instance recorded as its bindings
+#' made that judgment and wants the instance recorded as its bindings
 #' anyway opts in with one method each way:
 #'
 #' ```r

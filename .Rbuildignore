@@ -1,5 +1,4 @@
 ^LICENSE\.md$
-^LICENSE\.note$
 ^\.github$
 ^.*\.Rproj$
 ^\.Rproj\.user$
@@ -8,3 +7,5 @@
 ^docs$
 ^pkgdown$
 ^\.covrignore$
+^cran-comments\.md$
+^CRAN-SUBMISSION$

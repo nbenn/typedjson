@@ -26,9 +26,9 @@
 #' R has not declared an encoding for comes back declared UTF-8, so the
 #' property holds on its bytes rather than under `identical()`.
 #' The second holds for every document this package can write. Foreign
-#' documents are read under the same grammar and normalise on the first
+#' documents are read under the same grammar and normalize on the first
 #' round trip, since a mixed-type array such as `[1, "a"]` has to come
-#' back as a list. Two things are refused instead of normalised, both
+#' back as a list. Two things are refused instead of normalized, both
 #' inside the namespace the `~` prefix reserves. A key beginning with a
 #' single `~` is a format tag, and one this reader does not know is an
 #' error rather than a name. A string beginning with `~`

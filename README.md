@@ -2,7 +2,7 @@
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/nbenn/typedjson/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/nbenn/typedjson/actions/workflows/R-CMD-check.yaml)
-[![codecov](https://codecov.io/gh/nbenn/typedjson/graph/badge.svg?token=S92ZXN953A)](https://codecov.io/gh/nbenn/typedjson)
+[![codecov](https://codecov.io/gh/nbenn/typedjson/graph/badge.svg?token=S92ZXN953A)](https://app.codecov.io/gh/nbenn/typedjson)
 <!-- badges: end -->
 
 The typedjson package writes an R value as JSON a human can read, and reads it back unchanged.
@@ -12,6 +12,12 @@ R already has fast JSON, queryable JSON, and faithful-but-verbose JSON. Nothing 
 This package keeps ordinary JSON for ordinary values and annotates only what JSON cannot express: the integer-versus-double distinction, typed missing values, the non-finite doubles, attributes, language objects, and objects from the S3, S4 and S7 systems.
 
 ## Installation
+
+```r
+install.packages("typedjson")
+```
+
+Or the development version from GitHub:
 
 ```r
 # install.packages("pak")
@@ -180,7 +186,7 @@ The writer doubles the prefix on a string of your own, which is what makes the n
 
 ## Persisting a class the default rule does not fit
 
-A class whose instances hold something outside the base-type-plus-attributes model supplies a pair of methods, modelled on the `__getstate__` and `__setstate__` protocol of Python's pickle.
+A class whose instances hold something outside the base-type-plus-attributes model supplies a pair of methods, modeled on the `__getstate__` and `__setstate__` protocol of Python's pickle.
 
 ```r
 json_state.file_handle <- function(x) list(path = x$path)
