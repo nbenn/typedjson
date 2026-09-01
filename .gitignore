@@ -7,3 +7,4 @@ src/*.dll
 vignettes/*.R
 vignettes/*.html
 docs
+CRAN-SUBMISSION

@@ -228,7 +228,7 @@ show_documents(c(a = 1), c(a = 1)[0])
 
 That is stable under ordinary edits and never depends on a sibling. It does leave the hand editor unguarded, since deleting a `.0` turns a double into an integer with nothing to catch it — but that was already true of every vector that does not escalate, which is what would have made the tag an inconsistent guard rather than a protective one.
 
-A reader recognises the tagged form by any of `~t`, `~a` and `~v` at key position, which under the reservation rule above is the same test rather than a new one, since a single `~` at key position is a format tag either way. A `~t` that repeats what its payload says is still honoured on the way in and dropped on the way out, so a document written by hand against the older shape reads, and then settles.
+A reader recognizes the tagged form by any of `~t`, `~a` and `~v` at key position, which under the reservation rule above is the same test rather than a new one, since a single `~` at key position is a format tag either way. A `~t` that repeats what its payload says is still honored on the way in and dropped on the way out, so a document written by hand against the older shape reads, and then settles.
 
 ### Types with no lexeme
 
@@ -359,7 +359,7 @@ The lock therefore comes from the generator rather than from the instance the do
 
 The generator settles the shape too. Where it locks its instances, recorded state it no longer declares has nowhere to go, so that state is dropped with a warning naming it rather than bound into an object no constructor could produce. The mirror case needs nothing, since a field the generator has gained since the document was written arrives at its default. Where instances take new bindings the recorded state is restored whole, because a field assigned to one by hand is state like any other.
 
-Which is the argument for making this the author's call rather than the default, made from the inside: three paragraphs of behaviour that only the class knows the right answer to, and `vignette("r6")` walks through deciding it.
+Which is the argument for making this the author's call rather than the default, made from the inside: three paragraphs of behavior that only the class knows the right answer to, and `vignette("r6")` walks through deciding it.
 
 An external pointer stays out. What the writer refuses, it refuses loudly, naming the path it stopped at.
 
@@ -379,7 +379,7 @@ The refusal follows the label rather than the shape, which is worth stating outr
 
 ### Environments
 
-An environment is written on a ladder, and only the bottom rung writes contents. The rungs are the ones base R's `serialize()` already recognises — the global, base and empty environments, a namespace, and a package environment — plus the imports environment of a namespace, which constructive names and base R does not. Each is written as the name that finds it again, in the spelling R itself prints: `namespace:stats` beside `package:stats` and `imports:stats`.
+An environment is written on a ladder, and only the bottom rung writes contents. The rungs are the ones base R's `serialize()` already recognizes — the global, base and empty environments, a namespace, and a package environment — plus the imports environment of a namespace, which constructive names and base R does not. Each is written as the name that finds it again, in the spelling R itself prints: `namespace:stats` beside `package:stats` and `imports:stats`.
 
 ```{r, echo = FALSE}
 show_documents(globalenv(), baseenv(), as.environment("package:stats"))
@@ -546,7 +546,7 @@ Both writers take `pretty`, which indents, and `typed`, which at `FALSE` drops t
 
 ## Extension protocol
 
-For classes the default does not fit — `initialize` opens a connection, a field holds a handle, a reference must be recorded as a key rather than a value — a pair of generics, modelled on the `__getstate__` and `__setstate__` methods of Python's pickle. A `json_state()` method returns a plain list of what to persist, and a `json_revive()` method turns that list back into the object.
+For classes the default does not fit — `initialize` opens a connection, a field holds a handle, a reference must be recorded as a key rather than a value — a pair of generics, modeled on the `__getstate__` and `__setstate__` methods of Python's pickle. A `json_state()` method returns a plain list of what to persist, and a `json_revive()` method turns that list back into the object.
 
 A class holding a closure built inside its own constructor is a case in point. The closure is writable, but the frame it closes over binds the constructor's argument, and an argument is a promise however far it has been forced.
 
@@ -591,7 +591,7 @@ The reason this is worth a package rather than a workaround is that the losses o
 
 Vendor yyjson, write the glue with cpp11.
 
-| | lang | licence | maintained | int vs real on parse | shortest-RT doubles |
+| | lang | license | maintained | int vs real on parse | shortest-RT doubles |
 | --- | --- | --- | --- | --- | --- |
 | **yyjson** | C | MIT | 2026-08-26, v0.12.0 | native `UINT` / `SINT` / `REAL` | yes |
 | simdjson | C++17 | Apache-2.0 | very active, v4.6.9 | yes | parser-first; its R binding exports no writer |
@@ -624,7 +624,7 @@ The corpus is every atomic type crossed with {empty, scalar, vector}, {no attrib
 
 ## Prior art
 
-Borrowed: the escaped prefix token from Transit, and the identity-plus-state model from Python's pickle, which records a class and its `__dict__` and reconstructs by lookup rather than serializing behaviour.
+Borrowed: the escaped prefix token from Transit, and the identity-plus-state model from Python's pickle, which records a class and its `__dict__` and reconstructs by lookup rather than serializing behavior.
 
 Considered and not taken: the sidecar of superjson, which keys type metadata by path at the document root, is elegant and keeps the payload untouched, but its dot paths break on keys containing dots and our payloads are full of them. MongoDB Extended JSON ships canonical and relaxed modes; we avoid needing two by annotating only what cannot be expressed plainly.
 

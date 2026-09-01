@@ -32,7 +32,7 @@ naming the class and the method it wants.
 A class author is the party who knows whether a field is stored or
 derived, whether \code{initialize} establishes an invariant, and whether a
 reference should be recorded as a key rather than a value. One who has
-made that judgement and wants the instance recorded as its bindings
+made that judgment and wants the instance recorded as its bindings
 anyway opts in with one method each way:
 
 \if{html}{\out{<div class="sourceCode r">}}\preformatted{json_state.MyClass <- function(x) r6_state(x)

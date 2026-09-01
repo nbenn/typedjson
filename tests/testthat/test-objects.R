@@ -283,7 +283,7 @@ test_that("a class vector naming another class is refused on the read", {
   )
 })
 
-test_that("an R6 class generator is recorded by name rather than serialised", {
+test_that("an R6 class generator is recorded by name rather than serialized", {
 
   doc <- json_write_str(CorpusR6)
 
@@ -366,7 +366,7 @@ test_that("an R6 object comes back with fields, methods and bindings", {
   expect_identical(back$doubled, 10)
 })
 
-test_that("an R6 document records identity and state, not behaviour", {
+test_that("an R6 document records identity and state, not behavior", {
 
   doc <- json_write_str(CorpusR6$new(1, "t"))
 

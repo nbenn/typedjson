@@ -62,9 +62,9 @@ S7 builds for the constructor of every class that has a parent. A string
 R has not declared an encoding for comes back declared UTF-8, so the
 property holds on its bytes rather than under \code{identical()}.
 The second holds for every document this package can write. Foreign
-documents are read under the same grammar and normalise on the first
+documents are read under the same grammar and normalize on the first
 round trip, since a mixed-type array such as \verb{[1, "a"]} has to come
-back as a list. Two things are refused instead of normalised, both
+back as a list. Two things are refused instead of normalized, both
 inside the namespace the \code{~} prefix reserves. A key beginning with a
 single \code{~} is a format tag, and one this reader does not know is an
 error rather than a name. A string beginning with \code{~}

@@ -90,7 +90,7 @@ The `writes` counter is the interesting one, and it is genuinely the author's ca
 
 ## Writing the pair
 
-Two methods settle it, modelled on the `__getstate__` and `__setstate__` protocol of Python's pickle. The first returns a plain list of what to persist.
+Two methods settle it, modeled on the `__getstate__` and `__setstate__` protocol of Python's pickle. The first returns a plain list of what to persist.
 
 ```{r}
 json_state.Store <- function(x) {
