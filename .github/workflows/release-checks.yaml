@@ -82,3 +82,43 @@ jobs:
       - uses: r-hub/actions/run-check@v1
         with:
           job-config: ${{ matrix.config.job-config }}
+
+      # The run-check action gates the rchk leg on the bcheck output but exits
+      # without printing what it matched, and rchk writes no check/ directory,
+      # so its own artifact upload finds nothing. A failed rchk job therefore
+      # reports only an exit code, with the findings buried in the raw log.
+      # These two steps surface them; they never fail on their own.
+      - name: Surface rchk findings
+        if: ${{ always() && matrix.config.label == 'rchk' }}
+        shell: bash
+        run: |
+          pkg=$(sed -n 's/^Package:[[:space:]]*//p' DESCRIPTION)
+          bcheck="/opt/R/devel-rchk/packages/lib/${pkg}/libs/${pkg}.so.bcheck"
+          if [ ! -f "$bcheck" ]; then
+            echo "No bcheck output at ${bcheck}" >&2
+            exit 0
+          fi
+          mkdir -p rchk-findings
+          cp "$bcheck" rchk-findings/
+          # The same filter run-check gates on: tagged lines, less the two
+          # patterns CRAN is known to tolerate.
+          grep -E '^  \[[A-Z][A-Z]\] ' "$bcheck" \
+            | grep -vF 'unsupported form of unprotect' \
+            | grep -vF 'has address taken, results will be incomplete' \
+            > rchk-findings/findings.txt || true
+          n=$(wc -l < rchk-findings/findings.txt)
+          {
+            echo "### rchk: ${n} finding(s) after filtering"
+            echo '```'
+            cat rchk-findings/findings.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "-- rchk findings (${n}) --"
+          cat rchk-findings/findings.txt
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && matrix.config.label == 'rchk' }}
+        with:
+          name: rchk-findings
+          path: rchk-findings
+          if-no-files-found: ignore
