@@ -36,6 +36,8 @@ First release, carrying the format and the two round-trip contracts described in
 
 * Files written straight from the document, which keeps it out of R altogether. The `json_write()` function hands the document to a `FILE*` through yyjson's own writer, where it used to render into a `std::string`, hand that to R as a character vector and write it through a connection. Both of those copies are proportional to the document and a file is the case documents are large for, so peak memory is now the DOM and the single buffer yyjson renders into: writing `list(xs = strrep("a", 92e6))` peaks 88 MB above the value it came from where it used to peak 176 MB above it. The bytes are unchanged, trailing newline included, since the yyjson writers end on the last token and the byte `writeLines()` used to add is added explicitly. A refusal still leaves the file alone, by construction rather than by accident: the walk is where one fires and it runs to completion before the path is opened, so a document already sitting at that path outlives a write that is refused. What this is not is streaming, which `vignette("design")` records under Deferred.
 
+* Building on R 4.3 and R 4.4, where the `ANY_ATTRIB()` accessor the writer reaches for to skip an attribute-free value does not exist yet, having arrived in R 4.5.0, and the head of the attribute pairlist answers the same question. The floor is stated as `Depends: R (>= 4.3)` rather than left to the compiler, so an older R is refused while the install is being resolved rather than part way through compiling `read.cpp`, and the check matrix runs `oldrel-2` and `oldrel-3` so that the claim keeps being tested.
+
 ## Format
 
 Breaking changes to the document shape, settled before any documents exist in the wild.

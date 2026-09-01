@@ -16,6 +16,16 @@
 #define OBJSXP S4SXP
 #endif
 
+// The ANY_ATTRIB() accessor arrived in R 4.5.0, and the head of the attribute
+// pairlist answers the same question on every release before it. Keying this
+// off #ifndef the way the OBJSXP shim above does would be wrong: R declares
+// ANY_ATTRIB() as a function rather than a macro, so the test passes on every
+// release that carries it and would put ATTRIB() back on the R 4.6 and newer
+// releases that no longer declare one.
+#if defined(R_VERSION) && R_VERSION < R_Version(4, 5, 0)
+#define ANY_ATTRIB(x) (ATTRIB(x) != R_NilValue)
+#endif
+
 namespace typedjson {
 
 const char kEscape = '~';
