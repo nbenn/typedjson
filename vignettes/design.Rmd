@@ -206,6 +206,8 @@ show_documents(as.Date("2026-01-01"), c(a = 1, b = 2), character())
 
 This single rule covers `Date`, `POSIXct`, factors, named vectors, matrices, data frames and classed lists, because in R every one of them is a base type plus attributes. Empty typed vectors escalate for the same reason — `[]` has no element in which to carry a type.
 
+Attributes install in the order the document records them, which is what makes the second contract hold for a value carrying more than one. The `dim` attribute is the one exception: setting it drops both `names` and `dimnames`, and `dimnames` is refused without a `dim` to check it against, so the reader sets it first. R stores `dim` first itself, so a document this package writes already leads with it and the exception costs document order nothing.
+
 Names ride in the payload rather than in the attribute object wherever the payload is an object, which is why a data frame shows its columns keyed by name.
 
 The type rides in the payload too, wherever the payload can state it. The decimal points in `[1.0,2.0]` are what make that a double vector under the rules above, so a `~t` naming the type would only repeat them, and the key is emitted exactly where it is not a repetition: where reading the payload on its own would escalate it in turn.

@@ -22,7 +22,7 @@ test_that("a document this package writes reads and writes back to itself", {
       reshaped <- c(reshaped, nm)
     }
 
-    if (!identical(json_write_str(json_read_str(again)), again)) {
+    if (!identical(again, doc)) {
       drifting <- c(drifting, nm)
     }
   }
