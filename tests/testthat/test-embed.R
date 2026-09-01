@@ -135,12 +135,33 @@ test_that("a generator the flag has no definition for keeps its reference", {
 
 test_that("a document the flag wrote writes back to itself", {
 
-  for (cls in list(CorpusS7Named, CorpusS7, CorpusS7Made)) {
+  values <- list(
+    CorpusS7Named, CorpusS7, CorpusS7Made, CorpusS7Named(x = 1),
+    CorpusS7(x = 1, y = "a")
+  )
 
-    doc <- json_write_str(cls, embed = TRUE)
+  for (value in values) {
+
+    doc <- json_write_str(value, embed = TRUE)
 
     expect_identical(json_write_str(json_read_str(doc), embed = TRUE), doc)
   }
+})
+
+test_that("every corpus document the flag wrote holds its bytes", {
+
+  drifting <- character()
+
+  for (nm in names(corpus)) {
+
+    doc <- json_write_str(corpus[[nm]], embed = TRUE)
+
+    if (!identical(json_write_str(json_read_str(doc), embed = TRUE), doc)) {
+      drifting <- c(drifting, nm)
+    }
+  }
+
+  expect_identical(drifting, character())
 })
 
 test_that("a file takes the flag the way a string does", {
