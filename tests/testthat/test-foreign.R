@@ -333,7 +333,7 @@ test_that("a hook is handed what a document holds rather than what it yields", {
   cases <- list(
     list(paste0('{"~x":', call, "}"), "a recorded state needs a class"),
     list(paste0('{"~r6class":', call, "}"), "payload has to be an object"),
-    list(paste0('{"~s7":', call, "}"), "a recorded generator needs a class"),
+    list(paste0('{"~s7":', call, "}"), "payload has to be a name or an object"),
     list(
       paste0('{"~t":"environment","~v":', call, "}"),
       "a recorded environment has to be an object"

@@ -72,8 +72,9 @@ test_that("an S7 property the document leaves out is caught as its type", {
   expect_error(
     json_read_str(
       paste0(
-        '{"~t":"object","~a":{"class":["CorpusS7Valid","S7_object"],',
-        '"S7_class":{"~s7":{"class":"CorpusS7Valid","package":null}}}}'
+        '{"~t":"object","~a":{"class":["R_GlobalEnv::CorpusS7Named",',
+        '"S7_object"],"S7_class":{"~s7":{"class":"CorpusS7Named",',
+        '"package":"R_GlobalEnv"}}}}'
       )
     ),
     "@x must be <double>, not <NULL>", fixed = TRUE
@@ -120,14 +121,166 @@ test_that("an attribute spelling a generator is not taken for one", {
   expect_identical(attr(obj, "S7_class"), "not a generator")
 })
 
-test_that("an S7 class generator is recorded by name rather than serialised", {
+test_that("an S7 class a package scopes is recorded by that name", {
+
+  doc <- json_write_str(CorpusS7Named)
+
+  expect_identical(
+    doc, '{"~s7":{"class":"CorpusS7Named","package":"R_GlobalEnv"}}'
+  )
+  expect_identical(json_read_str(doc), CorpusS7Named)
+  expect_no_match(doc, "function", fixed = TRUE)
+})
+
+test_that("an S7 class no package scopes carries its definition", {
 
   doc <- json_write_str(CorpusS7)
 
-  expect_identical(
-    doc, '{"~s7":{"class":"CorpusS7","package":null}}'
-  )
+  expect_no_match(doc, '"package"', fixed = TRUE)
+  expect_match(doc, '"class":"CorpusS7"', fixed = TRUE)
+  expect_match(doc, '"parent":{"~s7":"S7_object"}', fixed = TRUE)
+  expect_match(doc, '"class":{"~s7":"class_numeric"}', fixed = TRUE)
   expect_identical(json_read_str(doc), CorpusS7)
+})
+
+test_that("an S7 object reads where no name finds its class again", {
+
+  # The class is built where a top-level one is, so its constructor closes
+  # over an environment a name finds again, and nothing binds the class
+  # itself in the environment `package = NULL` used to be read as.
+  gone <- local(
+    S7::new_class("CorpusS7Gone", properties = list(a = S7::class_double)),
+    envir = globalenv()
+  )
+
+  doc <- json_write_str(gone(a = 1))
+
+  expect_null(get0("CorpusS7Gone", envir = globalenv(), inherits = FALSE))
+  expect_identical(json_read_str(doc), gone(a = 1))
+  expect_identical(json_read_str(json_write_str(gone)), gone)
+})
+
+test_that("a class defined inside a function is embedded rather than refused", {
+
+  # The `R6` side refuses one of these where it is written, which is the
+  # answer #54 proposed for S7 as well; carrying the definition is what
+  # replaces it.
+  # Defining it where a user would leaves `package` NULL, which is what a
+  # class defined outside a package carries.
+  local_class <- local(
+    (function() {
+      S7::new_class("CorpusS7Local", properties = list(v = S7::class_double))
+    })(),
+    envir = globalenv()
+  )
+
+  obj <- local_class(v = 1)
+  back <- json_read_str(json_write_str(obj))
+
+  expect_env_equivalent(back, obj)
+  expect_identical(class(back), c("CorpusS7Local", "S7_object"))
+  expect_identical(S7::prop(back, "v"), 1)
+})
+
+test_that("an S7 reference without a package is refused rather than guessed", {
+
+  expect_error(
+    json_read_str('{"~s7":{"class":"CorpusS7","package":null}}'),
+    "needs a `package` to find it in or a `constructor` to rebuild it from",
+    fixed = TRUE
+  )
+})
+
+test_that("an S7 class the S7 package binds is recorded by that name", {
+
+  expect_identical(json_write_str(S7::class_double), '{"~s7":"class_double"}')
+  expect_identical(json_write_str(S7::S7_object), '{"~s7":"S7_object"}')
+  expect_identical(
+    json_write_str(S7::class_numeric), '{"~s7":"class_numeric"}'
+  )
+  expect_identical(json_write_str(S7::class_factor), '{"~s7":"class_factor"}')
+
+  builtin <- list(
+    S7::class_double, S7::S7_object, S7::class_numeric, S7::class_factor,
+    S7::class_any, S7::class_missing
+  )
+
+  for (cls in builtin) {
+    expect_identical(json_read_str(json_write_str(cls)), cls)
+  }
+})
+
+test_that("a name the S7 package binds to no class is not taken for one", {
+
+  expect_error(
+    json_read_str('{"~s7":"new_class"}'),
+    "the S7 package binds no class to `new_class`", fixed = TRUE
+  )
+  expect_error(
+    json_read_str('{"~s7":"CorpusS7"}'),
+    "the S7 package binds no class to `CorpusS7`", fixed = TRUE
+  )
+})
+
+test_that("a class S7 does not bind is recorded by what identifies it", {
+
+  union <- S7::new_union(S7::class_double, S7::class_character)
+
+  expect_identical(
+    json_write_str(union),
+    '{"~s7":{"union":[{"~s7":"class_double"},{"~s7":"class_character"}]}}'
+  )
+  expect_identical(json_read_str(json_write_str(union)), union)
+
+  s3 <- S7::new_S3_class(c("CorpusS3Fac", "factor"))
+
+  expect_identical(
+    json_write_str(s3), '{"~s7":{"s3":["CorpusS3Fac","factor"]}}'
+  )
+  expect_identical(
+    json_read_str(json_write_str(s3))[["class"]], c("CorpusS3Fac", "factor")
+  )
+})
+
+test_that("an embedded class comes back equivalent where a name does not", {
+
+  # S7 builds the constructor of a class with a parent in an environment of
+  # its own, which is recorded by its contents and so comes back a different
+  # environment, the way every other environment recorded that way does.
+  back <- json_read_str(json_write_str(CorpusS7Sub))
+
+  expect_false(identical(back, CorpusS7Sub))
+  expect_env_equivalent(back, CorpusS7Sub)
+
+  obj <- CorpusS7Sub(x = 1, y = "a", z = TRUE)
+
+  expect_false(identical(json_read_str(json_write_str(obj)), obj))
+  expect_env_equivalent(json_read_str(json_write_str(obj)), obj)
+})
+
+test_that("a document carrying a class definition writes back to itself", {
+
+  for (nm in c("CorpusS7", "CorpusS7Valid", "CorpusS7Made", "CorpusS7Sub")) {
+
+    doc <- json_write_str(get(nm, envir = globalenv()))
+
+    expect_identical(json_write_str(json_read_str(doc)), doc)
+  }
+})
+
+test_that("a class vector naming another class is refused on the read", {
+
+  doc <- json_write_str(CorpusS7Named(x = 1))
+  edited <- sub(
+    '["R_GlobalEnv::CorpusS7Named","S7_object"]', '["CorpusS7","S7_object"]',
+    doc, fixed = TRUE
+  )
+
+  expect_false(identical(edited, doc))
+  expect_error(
+    json_read_str(edited),
+    "does not name the S7 class `CorpusS7Named`", fixed = TRUE
+  )
 })
 
 test_that("an R6 class generator is recorded by name rather than serialised", {
