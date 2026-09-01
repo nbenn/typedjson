@@ -134,14 +134,6 @@ int nibble(char c) {
   return -1;
 }
 
-int attrib_rank(SEXP sym) {
-  if (sym == R_DimSymbol) return 0;
-  if (sym == R_DimNamesSymbol) return 1;
-  if (sym == R_NamesSymbol) return 2;
-  if (sym == R_ClassSymbol) return 4;
-  return 3;
-}
-
 class Reader {
  public:
   explicit Reader(cpp11::list hooks)
@@ -646,18 +638,31 @@ SEXP Reader::build_attribs(yyjson_val *v) {
   return out;
 }
 
+// Attributes install in the order the document records them, so that a
+// document this package writes writes back to itself byte for byte. The one
+// order R forces is `dim` first: setting it drops both `names` and
+// `dimnames`, and `dimnames` is refused outright without a `dim` to check it
+// against. That costs document order nothing, since R stores `dim` first
+// itself and so a document this package writes already leads with it; the
+// separate pass is what keeps a foreign document that does not from losing an
+// attribute or being refused.
 void Reader::set_attribs(SEXP x, SEXP attrs) {
 
   if (attrs == R_NilValue) return;
 
   SEXP nms = Rf_getAttrib(attrs, R_NamesSymbol);
 
-  for (int rank = 0; rank <= 4; ++rank) {
-    for (R_xlen_t i = 0; i < XLENGTH(attrs); ++i) {
-      SEXP sym = Rf_installChar(STRING_ELT(nms, i));
-      if (attrib_rank(sym) == rank) {
-        Rf_setAttrib(x, sym, VECTOR_ELT(attrs, i));
-      }
+  for (R_xlen_t i = 0; i < XLENGTH(attrs); ++i) {
+    SEXP sym = Rf_installChar(STRING_ELT(nms, i));
+    if (sym == R_DimSymbol) {
+      Rf_setAttrib(x, sym, VECTOR_ELT(attrs, i));
+    }
+  }
+
+  for (R_xlen_t i = 0; i < XLENGTH(attrs); ++i) {
+    SEXP sym = Rf_installChar(STRING_ELT(nms, i));
+    if (sym != R_DimSymbol) {
+      Rf_setAttrib(x, sym, VECTOR_ELT(attrs, i));
     }
   }
 }
