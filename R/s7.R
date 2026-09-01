@@ -38,7 +38,7 @@ s7_record <- function(x) {
 
     package <- attr(x, "package")
 
-    if (!is.null(package)) {
+    if (!is.null(package) && !writer_embed$on()) {
       return(list(class = attr(x, "name"), package = package))
     }
   }
@@ -69,14 +69,30 @@ s7_record <- function(x) {
   )
 }
 
+# The package a class was scoped by travels with its definition, since the
+# class vector an instance records is qualified by it and the check on the way
+# back compares the two. Dropping it would rebuild a class of the same name
+# that the object recording `pkg::Cls` no longer belongs to. A class with no
+# package leaves the key out rather than spelling it `null`, so the document
+# such a class has always written is unchanged.
 s7_definition <- function(x) {
-  list(
-    class = attr(x, "name"),
-    parent = attr(x, "parent"),
-    properties = attr(x, "properties"),
-    abstract = attr(x, "abstract"),
-    constructor = attr(x, "constructor"),
-    validator = attr(x, "validator")
+
+  named <- list(class = attr(x, "name"))
+  package <- attr(x, "package")
+
+  if (!is.null(package)) {
+    named[["package"]] <- package
+  }
+
+  c(
+    named,
+    list(
+      parent = attr(x, "parent"),
+      properties = attr(x, "properties"),
+      abstract = attr(x, "abstract"),
+      constructor = attr(x, "constructor"),
+      validator = attr(x, "validator")
+    )
   )
 }
 
@@ -152,6 +168,15 @@ s7_revive <- function(state) {
     stop(
       "a `", tag_s7, "` payload has to be a name or an object", call. = FALSE
     )
+  }
+
+  # A definition carries a constructor and a reference does not, so the
+  # constructor is what tells the two apart. That leaves `package` meaning
+  # what it means everywhere else — the package the class belongs to —
+  # rather than doubling as the marker of which form this is, which is what
+  # lets an embedded definition keep the package that qualifies its name.
+  if (!is.null(state[["constructor"]])) {
+    return(s7_class(state))
   }
 
   if (!is.null(state[["package"]])) {
@@ -235,10 +260,26 @@ s7_class <- function(state) {
   # Building one without a constructor would close the one S7 makes over this
   # frame, so the document supplies it or names a package to look the class
   # up in instead.
-  if (!is.function(state[["constructor"]])) {
+  if (is.null(state[["constructor"]])) {
     stop(
       "a recorded S7 class needs a `package` to find it in or a ",
       "`constructor` to rebuild it from", call. = FALSE
+    )
+  }
+
+  if (!is.function(state[["constructor"]])) {
+    stop(
+      "the `constructor` of a recorded S7 class has to be a function",
+      call. = FALSE
+    )
+  }
+
+  package <- state[["package"]]
+
+  if (!is.null(package) && (!is_one_string(package) || !nzchar(package))) {
+    stop(
+      "the `package` of a recorded S7 class has to be one non-empty string",
+      call. = FALSE
     )
   }
 
@@ -260,7 +301,7 @@ s7_class <- function(state) {
   S7::new_class(
     name = name,
     parent = state[["parent"]],
-    package = NULL,
+    package = package,
     properties = properties,
     abstract = isTRUE(state[["abstract"]]),
     constructor = state[["constructor"]],

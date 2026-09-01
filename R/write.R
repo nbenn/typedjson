@@ -195,6 +195,35 @@
 #' disagree is refused rather than dispatching on the one and taking its
 #' properties from the other.
 #'
+#' Which of the two a class gets is a default rather than a rule, and the
+#' `embed` flag overrides it. A document written with that flag set carries
+#' the definition of every S7 class in it, package-scoped or not, because a
+#' reference resolves against the reader's session rather than the writer's:
+#' the package may not be installed where the document is read, may have been
+#' renamed since, or may have drifted in a way that still validates. That is
+#' the answer an archive wants where a wire format wants the reference. The
+#' definition carries the package the class was scoped by, so the qualified
+#' class vector an instance records still names the class the document
+#' rebuilds.
+#'
+#' What the flag does not reach is the rest of what this format records by
+#' name, and the reason differs across that set rather than falling out of
+#' one rule. A primitive and a class the S7 package itself binds have no
+#' definition to carry, a walk into either landing in machinery rather than
+#' in anything an author wrote, so there the name is the only representation
+#' available. A namespace, a package environment and the imports environment
+#' of one could be carried and should not be, since what that records is a
+#' frozen copy of an installed package where a reader wants the package that
+#' is installed. The global environment is the same answer for the opposite
+#' reason, being where a reference is most fragile and where recording by
+#' contents is least plausible alike: one closure over it would put a whole
+#' workspace into the document. An `R6` generator and the class name an S4
+#' object records keep their reference as well, neither having an embedded
+#' form to switch to. Plain mode records no class at all, so it and the flag
+#' cannot both be asked for, and the second contract holds within a mode
+#' rather than across the pair, a document carrying a definition writing back
+#' to itself where it is written the same way.
+#'
 #' An `R6` instance is refused as well, for a reason one level up. What an
 #' `R6` class guarantees is what its methods say rather than what its
 #' bindings happen to hold, so those bindings are not a value the package
@@ -226,6 +255,13 @@
 #'   writes the annotated form this package reads back unchanged; `FALSE`
 #'   writes plain JSON for a consumer that brings its own schema.
 #'
+#' @param embed Whether to carry a class definition the document would
+#'   otherwise record by name. The default records the name wherever one
+#'   finds the class again, which is what a wire format wants; `TRUE` carries
+#'   the definition instead, which is what an archive wants. Only an S7 class
+#'   is reached, with `vignette("design")` setting out which names are left
+#'   alone and why.
+#'
 #' @return The `json_write()` function returns `path` invisibly and
 #'   `json_write_str()` a length-one character vector. Both readers return
 #'   the value the document describes.
@@ -245,14 +281,31 @@
 #' json_write_str(list(required = I("x"), additionalProperties = FALSE),
 #'                typed = FALSE)
 #'
+#' # The constructor of a class defined in a package closes over that
+#' # namespace, which a name finds again; `local()` stands in for it here.
+#' Archived <- local(
+#'   S7::new_class(
+#'     "Archived", properties = list(n = S7::class_double),
+#'     package = "somepkg"
+#'   ),
+#'   globalenv()
+#' )
+#'
+#' json_write_str(Archived(n = 1))
+#'
+#' json_write_str(Archived(n = 1), embed = TRUE)
+#'
 #' @export
-json_write <- function(x, path, pretty = TRUE, typed = TRUE) {
+json_write <- function(x, path, pretty = TRUE, typed = TRUE, embed = FALSE) {
 
   stopifnot(is.character(path), length(path) == 1L, !is.na(path))
-  check_flags(pretty, typed)
+  check_flags(pretty, typed, embed)
 
-  generator_cache$scope(
-    typedjson_write_file_(x, path, pretty, typed, writer_hooks())
+  writer_embed$scope(
+    embed,
+    generator_cache$scope(
+      typedjson_write_file_(x, path, pretty, typed, writer_hooks())
+    )
   )
 
   invisible(path)
@@ -260,21 +313,60 @@ json_write <- function(x, path, pretty = TRUE, typed = TRUE) {
 
 #' @rdname json_write
 #' @export
-json_write_str <- function(x, pretty = FALSE, typed = TRUE) {
+json_write_str <- function(x, pretty = FALSE, typed = TRUE, embed = FALSE) {
 
-  check_flags(pretty, typed)
+  check_flags(pretty, typed, embed)
 
-  generator_cache$scope(
-    typedjson_write_(x, pretty, typed, writer_hooks())
+  writer_embed$scope(
+    embed,
+    generator_cache$scope(
+      typedjson_write_(x, pretty, typed, writer_hooks())
+    )
   )
 }
 
-check_flags <- function(pretty, typed) {
+check_flags <- function(pretty, typed, embed) {
+
   stopifnot(
     is.logical(pretty), length(pretty) == 1L, !is.na(pretty),
-    is.logical(typed), length(typed) == 1L, !is.na(typed)
+    is.logical(typed), length(typed) == 1L, !is.na(typed),
+    is.logical(embed), length(embed) == 1L, !is.na(embed)
   )
+
+  # Plain mode writes no class at all, by name or otherwise, so the two
+  # flags together spell a document neither of them describes.
+  if (embed && !typed) {
+    stop(
+      "plain mode records no class to embed one in place of, so `embed` ",
+      "and `typed = FALSE` cannot both be asked for", call. = FALSE
+    )
+  }
+
+  invisible(NULL)
 }
+
+# The flag reaches the S7 method through a scope rather than an argument,
+# because `json_state()` is a generic class authors write methods against and
+# its signature is theirs rather than this package's to extend.
+writer_embed <- local({
+
+  embedding <- FALSE
+
+  list(
+    scope = function(flag, expr) {
+
+      outer <- embedding
+      embedding <<- flag
+
+      on.exit(embedding <<- outer)
+
+      expr
+    },
+    on = function() {
+      embedding
+    }
+  )
+})
 
 writer_hooks <- function() {
   list(

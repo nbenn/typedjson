@@ -60,7 +60,7 @@ doc <- json_write_str(x)
 identical(json_write_str(json_read_str(doc)), doc)
 ```
 
-The second falls out of the first once foreign documents are read under the same grammar rather than a separate lossy mode. It holds for every document this package writes; a foreign one settles after a single round trip, since a mixed-type array such as `[1, "a"]` has to come back as a list.
+The second falls out of the first once foreign documents are read under the same grammar rather than a separate lossy mode. It holds for every document this package writes; a foreign one settles after a single round trip, since a mixed-type array such as `[1, "a"]` has to come back as a list. A writer flag is what qualifies it, since a document holds its bytes where it is read and written the same way: `embed` below is the case that matters, a carried definition being recorded as a name again by a writer that was not asked for one.
 
 Three values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test — and a closure over such an environment is stated the same way, since it is that environment plus a formals and a body that do come back identical. An S7 class a document carries the definition of is the first case reached through a class rather than through an environment written on its own: S7 builds the constructor of a class that has a parent in an environment of its own, that environment is recorded by its contents like any other, and so no by-value scheme can hand back the object that was written. Base R does not manage it either, `identical(unserialize(serialize(x, NULL)), x)` being `FALSE` for an S7 object in the same session. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
 
@@ -499,6 +499,40 @@ back <- json_read_str(json_write_str(frame()))
 
 identical(parent.env(back)$inner, back)
 ```
+
+### Self-contained documents
+
+Everything above records a class by the name that finds it again wherever one does, and a reference resolves against the reader's session rather than the writer's. A writer may want the other answer, because the document is an archive rather than a wire format, and the `embed` flag on both writers is where that is asked for.
+
+```{r}
+Archived <- local(
+  S7::new_class(
+    "Archived", properties = list(n = S7::class_double), package = "somepkg"
+  ),
+  globalenv()
+)
+
+json_write_str(Archived(n = 1))
+```
+
+```json
+{"~t": "object", "~a": {"class": ["somepkg::Archived", "S7_object"], "S7_class": {"~s7": {"class": "Archived", "package": "somepkg", "parent": {"~s7": "S7_object"}, "properties": {}, "abstract": false, "constructor": {"~t": "closure", "~v": {}}, "validator": null}}, "n": 1.0}}
+```
+
+The class is built in the global environment above because that is what a class defined in a package has and a class defined in a chunk does not: a constructor closing over an environment a name finds again. The constructor is recorded by the ordinary closure rule wherever it sits, so a class built inside a frame of its own carries that frame's bindings into every document an instance of it is written to, which is the environment rule holding rather than a cost of the flag.
+
+Three things can go wrong with the reference that the definition is immune to. The package may not be installed where the document is read, and then nothing resolves. It may have been removed or renamed between writing and reading. And the class may have drifted in a way that still validates, which is the residue the validity check cannot see: after a property is dropped from the class, the value genuinely is a valid instance of the current definition and the document's entry for it survives as a stray attribute, while a permissive property tolerates its own absence, so a property added since is silently missing.
+
+The definition carries the package the class was scoped by. An instance records a class vector the package qualifies — `somepkg::Archived` rather than `Archived` — and the read compares that vector against the class the document resolves to, so a definition that dropped the package would rebuild a class the object no longer belongs to. Which of the two forms a document holds is therefore read off the constructor rather than off the package, which leaves `package` meaning what it means everywhere else and every document written before the flag existed reading as it did.
+
+The flag's reach is the set of values recorded by name, and the answer differs across that set rather than falling out of one rule.
+
+- A **primitive**, and a **class the S7 package itself binds**, have no definition to carry: a walk into either lands in machinery rather than in anything an author wrote. The name is the only representation available, so the flag has nothing to change.
+- A **namespace**, a **package environment** and the **imports environment** of one could be carried and should not be. What that records is a frozen snapshot of an installed package, which is both enormous and the wrong object, since a reader wants the package that is installed rather than the one that was.
+- The **global environment** is the same answer for the opposite reason. It is where a reference is most fragile, a closure over it being exactly what fails to resolve elsewhere, and also where recording by contents is least plausible, since one such closure would put a whole workspace into the document.
+- An **`R6` generator** and the **class name an S4 object records** keep their reference, neither having an embedded form to switch to. The two are not equally pressing: an `R6` document is unreadable where the class is gone, which is the failure this flag exists to close, while an S4 document already reads there, the object being rebuilt from its attributes and only the validity check skipped.
+
+Two riders. Plain mode records no class at all, so it and the flag cannot both be asked for. And the second contract holds within a mode rather than across the pair: a document carrying a definition writes back to itself where it is written the same way, while re-writing one without the flag records the name again.
 
 ## Reading foreign JSON
 

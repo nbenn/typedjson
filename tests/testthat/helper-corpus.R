@@ -300,14 +300,14 @@ corpus_env_missing <- function() {
   env
 }
 
-round_trip_failures <- function(values) {
+round_trip_failures <- function(values, embed = FALSE) {
 
   failed <- character()
 
   for (nm in names(values)) {
 
     got <- tryCatch(
-      json_read_str(json_write_str(values[[nm]])),
+      json_read_str(json_write_str(values[[nm]], embed = embed)),
       error = function(e) structure(conditionMessage(e), class = "corpus_error")
     )
 

@@ -11,9 +11,9 @@ json_read(path)
 
 json_read_str(txt)
 
-json_write(x, path, pretty = TRUE, typed = TRUE)
+json_write(x, path, pretty = TRUE, typed = TRUE, embed = FALSE)
 
-json_write_str(x, pretty = FALSE, typed = TRUE)
+json_write_str(x, pretty = FALSE, typed = TRUE, embed = FALSE)
 }
 \arguments{
 \item{path}{Path to write to or read from.}
@@ -29,6 +29,13 @@ compact.}
 \item{typed}{Whether to record what JSON cannot express. The default
 writes the annotated form this package reads back unchanged; \code{FALSE}
 writes plain JSON for a consumer that brings its own schema.}
+
+\item{embed}{Whether to carry a class definition the document would
+otherwise record by name. The default records the name wherever one
+finds the class again, which is what a wire format wants; \code{TRUE} carries
+the definition instead, which is what an archive wants. Only an S7 class
+is reached, with \code{vignette("design")} setting out which names are left
+alone and why.}
 }
 \value{
 The \code{json_write()} function returns \code{path} invisibly and
@@ -231,6 +238,35 @@ is checked against the class it resolves to, so a document where the two
 disagree is refused rather than dispatching on the one and taking its
 properties from the other.
 
+Which of the two a class gets is a default rather than a rule, and the
+\code{embed} flag overrides it. A document written with that flag set carries
+the definition of every S7 class in it, package-scoped or not, because a
+reference resolves against the reader's session rather than the writer's:
+the package may not be installed where the document is read, may have been
+renamed since, or may have drifted in a way that still validates. That is
+the answer an archive wants where a wire format wants the reference. The
+definition carries the package the class was scoped by, so the qualified
+class vector an instance records still names the class the document
+rebuilds.
+
+What the flag does not reach is the rest of what this format records by
+name, and the reason differs across that set rather than falling out of
+one rule. A primitive and a class the S7 package itself binds have no
+definition to carry, a walk into either landing in machinery rather than
+in anything an author wrote, so there the name is the only representation
+available. A namespace, a package environment and the imports environment
+of one could be carried and should not be, since what that records is a
+frozen copy of an installed package where a reader wants the package that
+is installed. The global environment is the same answer for the opposite
+reason, being where a reference is most fragile and where recording by
+contents is least plausible alike: one closure over it would put a whole
+workspace into the document. An \code{R6} generator and the class name an S4
+object records keep their reference as well, neither having an embedded
+form to switch to. Plain mode records no class at all, so it and the flag
+cannot both be asked for, and the second contract holds within a mode
+rather than across the pair, a document carrying a definition writing back
+to itself where it is written the same way.
+
 An \code{R6} instance is refused as well, for a reason one level up. What an
 \code{R6} class guarantees is what its methods say rather than what its
 bindings happen to hold, so those bindings are not a value the package
@@ -267,5 +303,19 @@ identical(json_read_str(json_write_str(x)), x)
 
 json_write_str(list(required = I("x"), additionalProperties = FALSE),
                typed = FALSE)
+
+# The constructor of a class defined in a package closes over that
+# namespace, which a name finds again; `local()` stands in for it here.
+Archived <- local(
+  S7::new_class(
+    "Archived", properties = list(n = S7::class_double),
+    package = "somepkg"
+  ),
+  globalenv()
+)
+
+json_write_str(Archived(n = 1))
+
+json_write_str(Archived(n = 1), embed = TRUE)
 
 }
