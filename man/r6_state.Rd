@@ -78,6 +78,7 @@ where they are written.
 }
 
 \examples{
+\dontshow{if (requireNamespace("R6", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 Counter <- R6::R6Class("Counter",
   public = list(
     n = 0,
@@ -95,5 +96,5 @@ json_revive.Counter <- function(class, state) r6_restore(class, state)
 counter <- Counter$new()$bump()$bump()
 
 json_read_str(json_write_str(counter))$n
-
+\dontshow{\}) # examplesIf}
 }

@@ -124,7 +124,7 @@ json_state.refObjectGenerator <- function(x) {
 #' @return The `r6_state()` function returns a list carrying `package`,
 #'   `public` and `private`, and `r6_restore()` the rebuilt instance.
 #'
-#' @examples
+#' @examplesIf requireNamespace("R6", quietly = TRUE)
 #' Counter <- R6::R6Class("Counter",
 #'   public = list(
 #'     n = 0,

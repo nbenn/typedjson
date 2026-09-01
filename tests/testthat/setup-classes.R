@@ -1,5 +1,12 @@
 global <- globalenv()
 
+# The no-suggests check flavour puts only hard dependencies, the
+# `VignetteBuilder` packages and the testing frameworks on the library path,
+# so the part of the corpus built on `S7` has to be optional. The `R6`,
+# `withr` and `jsonlite` packages need no guard: testthat imports all three,
+# and the flavour admits a testing framework's own dependencies with it.
+has_s7 <- requireNamespace("S7", quietly = TRUE)
+
 methods::setClass(
   "CorpusS4", methods::representation(a = "numeric", b = "character"),
   where = global
@@ -191,101 +198,109 @@ assign(
 # A class with no package carries that constructor into every document an
 # instance of it is written to, and the frame this file runs in holds the
 # whole corpus.
-assign(
-  "CorpusS7",
-  local(
-    S7::new_class(
-      "CorpusS7",
-      properties = list(x = S7::class_numeric, y = S7::class_character),
-      package = NULL
-    ),
-    envir = global
-  ),
-  envir = global
-)
-
-assign(
-  "CorpusS7Valid",
-  local(
-    S7::new_class(
-      "CorpusS7Valid",
-      properties = list(x = S7::class_double),
-      validator = function(self) if (self@x < 0) "@x must be non-negative",
-      package = NULL
-    ),
-    envir = global
-  ),
-  envir = global
-)
-
-assign(
-  "CorpusS7Made",
-  local(
-    S7::new_class(
-      "CorpusS7Made",
-      properties = list(
-        celsius = S7::class_double, label = S7::class_character
+if (has_s7) {
+  assign(
+    "CorpusS7",
+    local(
+      S7::new_class(
+        "CorpusS7",
+        properties = list(x = S7::class_numeric, y = S7::class_character),
+        package = NULL
       ),
-      constructor = function(celsius) {
-        S7::new_object(
-          S7::S7_object(), celsius = celsius,
-          label = paste0(celsius, " degC")
-        )
-      },
-      package = NULL
+      envir = global
     ),
     envir = global
-  ),
-  envir = global
-)
+  )
 
-# A class defined in a package is the other half of the discriminator, and
-# `package` names an environment the reader resolves the way the environment
-# rule does, so a class the global environment holds tests the reference form
-# without a package to install.
-assign(
-  "CorpusS7Named",
-  local(
-    S7::new_class(
-      "CorpusS7Named",
-      properties = list(x = S7::class_double),
-      package = "R_GlobalEnv"
+  assign(
+    "CorpusS7Valid",
+    local(
+      S7::new_class(
+        "CorpusS7Valid",
+        properties = list(x = S7::class_double),
+        validator = function(self) if (self@x < 0) "@x must be non-negative",
+        package = NULL
+      ),
+      envir = global
     ),
     envir = global
-  ),
-  envir = global
-)
+  )
 
-assign(
-  "CorpusS7Sub",
-  local(
-    S7::new_class(
-      "CorpusS7Sub",
-      parent = get("CorpusS7", envir = globalenv()),
-      properties = list(z = S7::class_logical),
-      package = NULL
+  assign(
+    "CorpusS7Made",
+    local(
+      S7::new_class(
+        "CorpusS7Made",
+        properties = list(
+          celsius = S7::class_double, label = S7::class_character
+        ),
+        constructor = function(celsius) {
+          S7::new_object(
+            S7::S7_object(), celsius = celsius,
+            label = paste0(celsius, " degC")
+          )
+        },
+        package = NULL
+      ),
+      envir = global
     ),
     envir = global
-  ),
-  envir = global
-)
+  )
+
+  # A class defined in a package is the other half of the discriminator, and
+  # `package` names an environment the reader resolves the way the environment
+  # rule does, so a class the global environment holds tests the reference form
+  # without a package to install.
+  assign(
+    "CorpusS7Named",
+    local(
+      S7::new_class(
+        "CorpusS7Named",
+        properties = list(x = S7::class_double),
+        package = "R_GlobalEnv"
+      ),
+      envir = global
+    ),
+    envir = global
+  )
+
+  assign(
+    "CorpusS7Sub",
+    local(
+      S7::new_class(
+        "CorpusS7Sub",
+        parent = get("CorpusS7", envir = globalenv()),
+        properties = list(z = S7::class_logical),
+        package = NULL
+      ),
+      envir = global
+    ),
+    envir = global
+  )
+}
 
 corpus <- c(
   corpus,
-  list(
-    "r6/generator" = get("CorpusR6", envir = global),
-    "s7/generator" = get("CorpusS7", envir = global),
-    "s7/generator-validator" = get("CorpusS7Valid", envir = global),
-    "s7/generator-constructor" = get("CorpusS7Made", envir = global),
-    "s7/generator-package" = get("CorpusS7Named", envir = global),
-    "s7/class-base" = S7::class_double,
-    "s7/class-union" = S7::class_numeric,
-    "s7/class-s3" = S7::class_factor,
-    "s7/class-object" = S7::S7_object,
-    "s7/class-any" = S7::class_any,
-    "s7/union" = S7::new_union(S7::class_double, S7::class_character)
-  )
+  list("r6/generator" = get("CorpusR6", envir = global))
 )
+
+if (has_s7) {
+  corpus <- c(
+    corpus,
+    list(
+      "s7/generator" = get("CorpusS7", envir = global),
+      "s7/generator-validator" = get("CorpusS7Valid", envir = global),
+      "s7/generator-constructor" = get("CorpusS7Made", envir = global),
+      "s7/generator-package" = get("CorpusS7Named", envir = global),
+      "s7/class-base" = S7::class_double,
+      "s7/class-union" = S7::class_numeric,
+      "s7/class-s3" = S7::class_factor,
+      "s7/class-object" = S7::S7_object,
+      "s7/class-any" = S7::class_any,
+      "s7/union" = S7::new_union(S7::class_double, S7::class_character)
+    )
+  )
+}
 
 # An instance has no method of its own, so every corpus class that is meant
 # to be written opts in to `r6_state()` the way a class author would. The
@@ -308,17 +323,17 @@ withr::defer(
     methods::removeClass("CorpusS4Base", where = global)
     methods::removeClass("CorpusRefDerived", where = global)
     methods::removeClass("CorpusRefClass", where = global)
-    rm(
-      list = c(
-        "CorpusR6", "CorpusR6Base", "CorpusR6Plain", "CorpusR6PublicHook",
-        "CorpusR6PrivateHook", "CorpusR6Holder", "CorpusR6Bound",
-        "CorpusR6BoundBare", "CorpusR6Mute", "CorpusR6Anon", "CorpusR6Amb1",
-        "CorpusR6Amb2", "CorpusS7", "CorpusS7Valid", "CorpusS7Made",
-        "CorpusS7Named", "CorpusS7Sub",
-        "CorpusRefClass", "CorpusRefDerived"
-      ),
-      envir = global
+    # The S7 classes are built only where S7 is installed, so the teardown
+    # removes whichever of these the setup actually created.
+    built <- c(
+      "CorpusR6", "CorpusR6Base", "CorpusR6Plain", "CorpusR6PublicHook",
+      "CorpusR6PrivateHook", "CorpusR6Holder", "CorpusR6Bound",
+      "CorpusR6BoundBare", "CorpusR6Mute", "CorpusR6Anon", "CorpusR6Amb1",
+      "CorpusR6Amb2", "CorpusS7", "CorpusS7Valid", "CorpusS7Made",
+      "CorpusS7Named", "CorpusS7Sub",
+      "CorpusRefClass", "CorpusRefDerived"
     )
+    rm(list = intersect(built, ls(global, all.names = TRUE)), envir = global)
   },
   teardown_env()
 )

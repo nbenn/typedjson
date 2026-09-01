@@ -388,7 +388,7 @@ corpus_refused <- function() {
     "`CorpusR6Amb1`, `CorpusR6Amb2`"
   )
 
-  list(
+  refused <- list(
     "env/active-binding" = list(
       value = corpus_env_active(), message = "cannot write an active binding",
       path = "x$bindings$live"
@@ -457,20 +457,28 @@ corpus_refused <- function() {
     "refclass/generator" = list(
       value = corpus_generator("CorpusRefClass"),
       message = no_ref_generator("CorpusRefClass"), path = "x"
-    ),
-    # Both of these are the walk inside S7's own machinery, which is what
-    # recording a class by what identifies it keeps it out of. The first is
-    # that machinery reached through a class stripped of the attribute that
-    # made it one, and the second through the constructor S7 builds for an
-    # S3 class that has none, which it inlines as a property's default.
-    "s7/unclassed-base" = list(
-      value = structure(S7::class_double, class = "corpus_wrapper"),
-      type = "promise",
-      path = "x$validator$environment$bindings$constructor_name"
-    ),
-    "s7/s3-property-default" = list(
-      value = corpus_s7_s3_property(), type = "promise",
-      path = "x$constructor$formals$f[[1]]$environment$bindings$class"
+    )
+  )
+
+  if (!requireNamespace("S7", quietly = TRUE)) return(refused)
+
+  # Both of these are the walk inside S7's own machinery, which is what
+  # recording a class by what identifies it keeps it out of. The first is
+  # that machinery reached through a class stripped of the attribute that
+  # made it one, and the second through the constructor S7 builds for an
+  # S3 class that has none, which it inlines as a property's default.
+  c(
+    refused,
+    list(
+      "s7/unclassed-base" = list(
+        value = structure(S7::class_double, class = "corpus_wrapper"),
+        type = "promise",
+        path = "x$validator$environment$bindings$constructor_name"
+      ),
+      "s7/s3-property-default" = list(
+        value = corpus_s7_s3_property(), type = "promise",
+        path = "x$constructor$formals$f[[1]]$environment$bindings$class"
+      )
     )
   )
 }
