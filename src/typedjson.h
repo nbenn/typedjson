@@ -251,6 +251,11 @@ inline SEXP attrib_value(const std::vector<Attrib> &attrs, SEXP tag) {
 // The `quote` object itself is spliced rather than its name, since cpp11
 // evaluates in the global environment and a binding of that name there would
 // otherwise be what decides whether the guard holds.
+//
+// What the wrapper has to be is inert, which among R's quoting functions is
+// this one alone: `bquote()` evaluates a `.()` it finds in the tree and the
+// rlang capture functions evaluate a `!!`, so either would run a document
+// that recorded one of those markers and hand back what it returned.
 inline SEXP quoted(SEXP x) {
   static SEXP quote = nullptr;
   if (quote == nullptr) {

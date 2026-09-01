@@ -374,6 +374,30 @@ test_that("a symbol a document records is not resolved at a hook either", {
   expect_null(side$hit)
 })
 
+test_that("a marker an unquoting wrapper would act on is left alone", {
+
+  side <- new.env()
+  local_global_binding(
+    "mark", function() {
+      side$hit <- TRUE
+      42
+    }, environment()
+  )
+
+  inner <- '{"~t":"language","~v":["~:.",{"~t":"language","~v":["~:mark"]}]}'
+  call <- paste0('{"~t":"language","~v":["~:f",', inner, "]}")
+
+  expect_error(
+    json_read_str(paste0('{"~x":', call, "}")),
+    "a recorded state needs a class",
+    fixed = TRUE
+  )
+  expect_null(side$hit)
+
+  expect_identical(json_read_str(json_write_str(str2lang("f(.(g()))"))),
+                   str2lang("f(.(g()))"))
+})
+
 test_that("a binding of `quote` where the hook is called does not undo this", {
 
   side <- new.env()
