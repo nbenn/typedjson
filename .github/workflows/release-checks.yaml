@@ -1,0 +1,124 @@
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      config:
+        description: >-
+          Comma-separated R-hub platforms. Leave empty for the standard
+          release set. Full list: https://r-hub.github.io/containers/
+        type: string
+
+name: release-checks
+
+permissions: read-all
+
+# The CRAN flavours that R-CMD-check.yaml does not cover: AddressSanitizer
+# under both compilers and UndefinedBehaviorSanitizer for the vendored
+# src/yyjson.c and the cpp11 layer, valgrind over the same ground by a
+# different technique, rchk for the direct PROTECT use in src/*.cpp, and a
+# no-suggests run against the seven packages in Suggests.
+#
+# Deliberately kept out of R-CMD-check.yaml: that workflow triggers on
+# pull_request with the default types, so adding labeled there would re-run
+# its whole seven-config matrix on every label change on every pull request.
+env:
+  RELEASE_FLAVOURS: clang-asan,gcc-asan,clang-ubsan,valgrind,rchk,nosuggests
+
+jobs:
+  setup:
+    # A labeled event fires for any label, so the gate has to name this one.
+    # The check job inherits the skip through needs.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'release')
+
+    runs-on: ubuntu-latest
+
+    outputs:
+      containers: ${{ steps.rhub-setup.outputs.containers }}
+
+    steps:
+      # No checkout here: the matrix is resolved from R-hub's own platform
+      # metadata, which carries the image name and the per-flavour extras
+      # (valgrind ships a suppressions script that runs before the check).
+      - uses: r-hub/actions/setup@v1
+        id: rhub-setup
+        with:
+          config: ${{ inputs.config || env.RELEASE_FLAVOURS }}
+
+  release-checks:
+    needs: setup
+
+    runs-on: ubuntu-latest
+
+    name: ${{ matrix.config.label }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJson(needs.setup.outputs.containers) }}
+
+    container:
+      image: ${{ matrix.config.container }}
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: r-hub/actions/checkout@v1
+
+      # Each image declares the dependency set it wants through
+      # RHUB_ACTIONS_DEPS_DEPENDENCIES: rchk asks for LinkingTo plus hard
+      # dependencies only, the rest take everything.
+      - uses: r-hub/actions/setup-deps@v1
+        with:
+          job-config: ${{ matrix.config.job-config }}
+
+      # Reads the flavour off matrix.config.label to decide what counts as a
+      # failure, which is the part that has to be right: neither R CMD check
+      # nor rchk.sh exits non-zero on a sanitizer or PROTECT finding, so a
+      # green exit status means nothing until the output has been grepped.
+      - uses: r-hub/actions/run-check@v1
+        with:
+          job-config: ${{ matrix.config.job-config }}
+
+      # The run-check action gates the rchk leg on the bcheck output but exits
+      # without printing what it matched, and rchk writes no check/ directory,
+      # so its own artifact upload finds nothing. A failed rchk job therefore
+      # reports only an exit code, with the findings buried in the raw log.
+      # These two steps surface them; they never fail on their own.
+      - name: Surface rchk findings
+        if: ${{ always() && matrix.config.label == 'rchk' }}
+        shell: bash
+        run: |
+          pkg=$(sed -n 's/^Package:[[:space:]]*//p' DESCRIPTION)
+          bcheck="/opt/R/devel-rchk/packages/lib/${pkg}/libs/${pkg}.so.bcheck"
+          if [ ! -f "$bcheck" ]; then
+            echo "No bcheck output at ${bcheck}" >&2
+            exit 0
+          fi
+          mkdir -p rchk-findings
+          cp "$bcheck" rchk-findings/
+          # The same filter run-check gates on: tagged lines, less the two
+          # patterns CRAN is known to tolerate.
+          grep -E '^  \[[A-Z][A-Z]\] ' "$bcheck" \
+            | grep -vF 'unsupported form of unprotect' \
+            | grep -vF 'has address taken, results will be incomplete' \
+            > rchk-findings/findings.txt || true
+          n=$(wc -l < rchk-findings/findings.txt)
+          {
+            echo "### rchk: ${n} finding(s) after filtering"
+            echo '```'
+            cat rchk-findings/findings.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "-- rchk findings (${n}) --"
+          cat rchk-findings/findings.txt
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && matrix.config.label == 'rchk' }}
+        with:
+          name: rchk-findings
+          path: rchk-findings
+          if-no-files-found: ignore
