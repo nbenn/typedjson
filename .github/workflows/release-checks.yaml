@@ -1,6 +1,11 @@
 on:
+  # The label is a mode rather than an event: the setup job below tests for it
+  # being present, not for the labelling. Re-checking on synchronize is what
+  # makes that true — the tarball is built from the head commit, so every push
+  # is a new release candidate, and checking only whichever commit happened to
+  # be current when the label went on leaves the submitted one unchecked.
   pull_request:
-    types: [labeled]
+    types: [labeled, synchronize, reopened]
   workflow_dispatch:
     inputs:
       config:
