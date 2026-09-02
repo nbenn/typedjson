@@ -37,6 +37,12 @@ permissions: read-all
 env:
   RELEASE_FLAVOURS: clang-asan,gcc-asan,clang-ubsan,m1-san,valgrind,rchk,nosuggests
 
+# Every job sets `timeout-minutes` — see R-CMD-check.yaml for the reasoning.
+# The two check jobs are this repo's one deviation from the shared hour:
+# valgrind runs the suite far slower than native, and the sanitizers and rchk
+# each pay for an instrumented build from source, so an hour would sit close
+# to legitimate runtime rather than far above it.
+
 jobs:
   setup:
     # A labeled event fires for any label, so the gate has to name this one.
@@ -46,6 +52,8 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'release')
 
     runs-on: ubuntu-latest
+
+    timeout-minutes: 60
 
     # The action emits one matrix per shape: containers for the flavours that
     # are docker images, platforms for the ones that are virtual machines.
@@ -71,6 +79,8 @@ jobs:
     runs-on: ubuntu-latest
 
     name: ${{ matrix.config.label }}
+
+    timeout-minutes: 180
 
     strategy:
       fail-fast: false
@@ -162,6 +172,8 @@ jobs:
     # matches this leg with startsWith where it compares the container labels
     # for equality.
     name: ${{ matrix.config.label }}
+
+    timeout-minutes: 180
 
     strategy:
       fail-fast: false

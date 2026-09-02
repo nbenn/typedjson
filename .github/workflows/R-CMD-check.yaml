@@ -7,11 +7,26 @@ name: R-CMD-check
 
 permissions: read-all
 
+# Every job in every workflow here sets `timeout-minutes`; the other three
+# files carry a one-line pointer back to this paragraph, so keep them in step
+# (`grep -rn timeout-minutes .github/workflows`).
+#
+# GitHub's default is six hours, so a step that hangs rather than failing — an
+# apt index fetch from a mirror that stops answering, say — leaves the pull
+# request showing checks in progress and holds a runner until someone cancels
+# by hand. An hour is deliberately far above normal runtime rather than close
+# to it: these jobs land in minutes on a warm cache, but a cold cache building
+# the dependency tree from source is legitimately much slower, and a bound
+# sized off the happy path would turn honest runs red. The point is to cap a
+# pathological stall, not to police performance.
+
 jobs:
   R-CMD-check:
     runs-on: ${{ matrix.config.os }}
 
     name: ${{ matrix.config.os }} (${{ matrix.config.r }})
+
+    timeout-minutes: 60
 
     strategy:
       fail-fast: false
@@ -73,6 +88,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
 
+    timeout-minutes: 60
+
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       LINTR_ERROR_ON_LINT: true
@@ -95,6 +112,8 @@ jobs:
 
   document:
     runs-on: ubuntu-latest
+
+    timeout-minutes: 60
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
