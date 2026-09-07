@@ -12,9 +12,13 @@ name: pkgdown
 
 permissions: read-all
 
+# Every job sets `timeout-minutes` — see R-CMD-check.yaml for the reasoning.
+
 jobs:
   pkgdown:
     runs-on: ubuntu-latest
+
+    timeout-minutes: 60
 
     # Only restrict concurrency for non-PR jobs
     concurrency:
@@ -51,6 +55,8 @@ jobs:
     needs: pkgdown
 
     runs-on: ubuntu-latest
+
+    timeout-minutes: 60
 
     concurrency:
       group: pages

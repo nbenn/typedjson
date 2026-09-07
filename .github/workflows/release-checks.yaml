@@ -1,6 +1,11 @@
 on:
+  # The label is a mode rather than an event: the setup job below tests for it
+  # being present, not for the labelling. Re-checking on synchronize is what
+  # makes that true — the tarball is built from the head commit, so every push
+  # is a new release candidate, and checking only whichever commit happened to
+  # be current when the label went on leaves the submitted one unchecked.
   pull_request:
-    types: [labeled]
+    types: [labeled, synchronize, reopened]
   workflow_dispatch:
     inputs:
       config:
@@ -19,24 +24,44 @@ permissions: read-all
 # different technique, rchk for the direct PROTECT use in src/*.cpp, and a
 # no-suggests run against the seven packages in Suggests.
 #
+# The m1-san entry is the odd one out twice over. It is the only flavour here
+# that R-hub runs on a virtual machine rather than in a container, so it runs
+# in the second check job below; and it is the only arm64 one, which is what
+# it buys. The six Linux flavours sample a single architecture, so a finding
+# in that byte-level parser code that reproduces only on Apple silicon has
+# nowhere else here to surface.
+#
 # Deliberately kept out of R-CMD-check.yaml: that workflow triggers on
 # pull_request with the default types, so adding labeled there would re-run
 # its whole seven-config matrix on every label change on every pull request.
 env:
-  RELEASE_FLAVOURS: clang-asan,gcc-asan,clang-ubsan,valgrind,rchk,nosuggests
+  RELEASE_FLAVOURS: clang-asan,gcc-asan,clang-ubsan,m1-san,valgrind,rchk,nosuggests
+
+# Every job sets `timeout-minutes` — see R-CMD-check.yaml for the reasoning.
+# The two check jobs are this repo's one deviation from the shared hour:
+# valgrind runs the suite far slower than native, and the sanitizers and rchk
+# each pay for an instrumented build from source, so an hour would sit close
+# to legitimate runtime rather than far above it.
 
 jobs:
   setup:
     # A labeled event fires for any label, so the gate has to name this one.
-    # The check job inherits the skip through needs.
+    # The check jobs inherit the skip through needs.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'release')
 
     runs-on: ubuntu-latest
 
+    timeout-minutes: 60
+
+    # The action emits one matrix per shape: containers for the flavours that
+    # are docker images, platforms for the ones that are virtual machines.
+    # Reading only the first leaves everything in the second group unreachable
+    # by any addition to RELEASE_FLAVOURS.
     outputs:
       containers: ${{ steps.rhub-setup.outputs.containers }}
+      platforms: ${{ steps.rhub-setup.outputs.platforms }}
 
     steps:
       # No checkout here: the matrix is resolved from R-hub's own platform
@@ -47,12 +72,15 @@ jobs:
         with:
           config: ${{ inputs.config || env.RELEASE_FLAVOURS }}
 
+  # One R CMD check per container flavour.
   release-checks:
     needs: setup
 
     runs-on: ubuntu-latest
 
     name: ${{ matrix.config.label }}
+
+    timeout-minutes: 180
 
     strategy:
       fail-fast: false
@@ -122,3 +150,54 @@ jobs:
           name: rchk-findings
           path: rchk-findings
           if-no-files-found: ignore
+
+  # One R CMD check per virtual-machine flavour. Same steps as the container
+  # legs, less the `container:` — the runner is whatever `os` the platform
+  # resolved to — plus setup-r, since a bare runner ships no R where the
+  # images do.
+  #
+  # Guarded because an empty matrix is an error rather than an empty job, and
+  # `platforms` resolves to [] for any all-container flavour list. A skipped
+  # setup still skips this job through needs: the condition names no status
+  # function, so the implicit success() applies as it does above.
+  release-vms:
+    needs: setup
+
+    if: needs.setup.outputs.platforms != '[]'
+
+    runs-on: ${{ matrix.config.os }}
+
+    # The label carries an R-version suffix the container ones do not, so this
+    # reads as `m1-san (R-devel)` rather than `m1-san` — which is why run-check
+    # matches this leg with startsWith where it compares the container labels
+    # for equality.
+    name: ${{ matrix.config.label }}
+
+    timeout-minutes: 180
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ${{ fromJson(needs.setup.outputs.platforms) }}
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: r-hub/actions/checkout@v1
+
+      - uses: r-hub/actions/setup-r@v1
+        with:
+          job-config: ${{ matrix.config.job-config }}
+
+      - uses: r-hub/actions/setup-deps@v1
+        with:
+          job-config: ${{ matrix.config.job-config }}
+
+      # The job-config is load-bearing here rather than decorative: run-check
+      # reads `pre-check` out of it, and on m1-san that names mac-asan.sh, the
+      # script installing the sanitizer toolchain. Omitting it would check an
+      # ordinary macOS build under a name promising sanitizers.
+      - uses: r-hub/actions/run-check@v1
+        with:
+          job-config: ${{ matrix.config.job-config }}
