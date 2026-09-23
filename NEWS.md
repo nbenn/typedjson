@@ -1,3 +1,5 @@
+# typedjson (development version)
+
 # typedjson 0.1.0
 
 First release, carrying the format and the two round-trip contracts described in `vignette("design")`.
