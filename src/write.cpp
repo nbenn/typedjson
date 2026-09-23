@@ -845,7 +845,10 @@ yyjson_write_flag write_flags(bool pretty) {
   std::string named(Rf_translateChar(STRING_ELT(path, 0)));
   const char *expanded = R_ExpandFileName(named.c_str());
 
-  std::string problem;
+  // Every reason is a string constant, yyjson's messages included, so a
+  // pointer outlives the document. Holding one in a `std::string` instead drew
+  // a bogus -Wstringop-overflow from g++ 16 under link-time optimization.
+  const char *problem = nullptr;
   FILE *fp = std::fopen(expanded, "wb");
 
   if (fp == nullptr) {
@@ -861,7 +864,7 @@ yyjson_write_flag write_flags(bool pretty) {
     }
     // Buffered bytes reach the disk at the close, so a full one surfaces
     // there rather than at the write above.
-    if (std::fclose(fp) != 0 && problem.empty()) {
+    if (std::fclose(fp) != 0 && problem == nullptr) {
       problem = "it could not be closed";
     }
   }
@@ -870,8 +873,7 @@ yyjson_write_flag write_flags(bool pretty) {
   yyjson_mut_doc_free(doc);
   UNPROTECT(1);
 
-  if (!problem.empty()) {
-    cpp11::stop("failed to write JSON to `%s`: %s", named.c_str(),
-                problem.c_str());
+  if (problem != nullptr) {
+    cpp11::stop("failed to write JSON to `%s`: %s", named.c_str(), problem);
   }
 }
