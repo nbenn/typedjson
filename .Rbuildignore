@@ -9,3 +9,4 @@
 ^\.covrignore$
 ^cran-comments\.md$
 ^CRAN-SUBMISSION$
+^\.git$

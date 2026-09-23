@@ -1,0 +1,39 @@
+# The cheap half of the release checks, called from blockr.ci.
+#
+# release-checks.yaml covers the expensive half -- container images, an
+# instrumented toolchain, valgrind -- on the CRAN flavours. This covers the
+# half that takes seconds: the five release_checks() gates, check_doc_fields(),
+# spell_check(), README drift, and URL/BugReports presence, with url_check()
+# and the --as-cran notes reported rather than gated.
+#
+# Running it is the point. Those checks were a manual checklist, and a manual
+# tick records that something was true when someone ran it, not that it holds
+# at the commit a tarball would be built from. Reporting on every push to the
+# release pull request is what makes the difference.
+#
+# This repo does not use blockr.ci's ci.yaml, but the gate is callable from
+# outside that fleet by design: everything is derived from the repository, and
+# the BLOCKR_PAT secret is optional and falls back to github.token, so the
+# secrets block is omitted here rather than passing an undefined secret.
+#
+# The caller carries no `if:`. Per blockr.ci#52, gating the caller removes the
+# nested contexts entirely, so a required release-gate / release-gate-all would
+# sit at "Expected -- waiting for status" rather than skipping. Only the inner
+# jobs are conditional, on the `release` label being present.
+#
+# Unlike every other job in this repo, a `uses:` job cannot carry
+# timeout-minutes -- the called workflow owns its own timeouts.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled]
+  merge_group:
+
+name: release-gate
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  release-gate:
+    uses: BristolMyersSquibb/blockr.ci/.github/workflows/release-gate.yaml@main
