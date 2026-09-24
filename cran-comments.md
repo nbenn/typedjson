@@ -2,7 +2,11 @@
 
 0 errors | 0 warnings | 1 note
 
-* This is a new release.
+* Days since last update: 6
+
+## Update
+
+This version clears the WARNING that the gcc-ASAN additional check reports for 0.1.0 at install, a `-Wstringop-overflow` raised by GCC 16 under link-time optimization. That is also why it follows 0.1.0 within a week.
 
 ## Bundled code
 
