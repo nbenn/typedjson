@@ -506,7 +506,7 @@ identical(parent.env(back)$inner, back)
 
 Everything above records a class by the name that finds it again wherever one does, and a reference resolves against the reader's session rather than the writer's. A writer may want the other answer, because the document is an archive rather than a wire format, and the `self_contained` flag on both writers is where that is asked for.
 
-```{r}
+```{r, eval = requireNamespace("S7", quietly = TRUE)}
 Archived <- local(
   S7::new_class(
     "Archived", properties = list(n = S7::class_double), package = "somepkg"

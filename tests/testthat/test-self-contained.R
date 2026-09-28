@@ -1,4 +1,5 @@
 test_that("the flag carries a definition where a name would have found one", {
+  skip_if_not_installed("S7")
 
   doc <- json_write_str(CorpusS7Named, self_contained = TRUE)
 
@@ -13,6 +14,7 @@ test_that("the flag carries a definition where a name would have found one", {
 })
 
 test_that("a definition keeps the package that qualifies the class name", {
+  skip_if_not_installed("S7")
 
   # The class vector an instance records is qualified by the package, and the
   # read checks the two against each other, so a definition that dropped it
@@ -28,6 +30,7 @@ test_that("a definition keeps the package that qualifies the class name", {
 })
 
 test_that("an embedded class reads where the name finds nothing again", {
+  skip_if_not_installed("S7")
 
   # A class scoped by a name that resolves in this session is what the
   # reference form leans on, so a class nothing binds stands in for reading
@@ -54,6 +57,7 @@ test_that("an embedded class reads where the name finds nothing again", {
 })
 
 test_that("the flag reaches a class the definition it writes names", {
+  skip_if_not_installed("S7")
 
   parented <- local(
     S7::new_class(
@@ -74,6 +78,7 @@ test_that("the flag reaches a class the definition it writes names", {
 })
 
 test_that("a class no package scopes writes what it always wrote", {
+  skip_if_not_installed("S7")
 
   for (nm in c("CorpusS7", "CorpusS7Valid", "CorpusS7Made", "CorpusS7Sub")) {
 
@@ -94,6 +99,7 @@ test_that("a class no package scopes writes what it always wrote", {
 # for the opposite reason: recording it by contents would put a whole
 # workspace into any document holding a closure over it.
 test_that("the flag leaves every other name where it is", {
+  skip_if_not_installed("S7")
 
   values <- list(
     primitive = sum,
@@ -122,6 +128,7 @@ test_that("the flag leaves every other name where it is", {
 })
 
 test_that("a generator the flag has no definition for keeps its reference", {
+  skip_if_not_installed("R6")
 
   # An `R6` generator is recorded by class name and package, and an S4 object
   # by a class name the methods registry holds the definition for. Both raise
@@ -138,6 +145,7 @@ test_that("a generator the flag has no definition for keeps its reference", {
 })
 
 test_that("a document the flag wrote writes back to itself", {
+  skip_if_not_installed("S7")
 
   values <- list(
     CorpusS7Named, CorpusS7, CorpusS7Made, CorpusS7Named(x = 1),
@@ -173,6 +181,7 @@ test_that("every corpus document the flag wrote holds its bytes", {
 })
 
 test_that("a file takes the flag the way a string does", {
+  skip_if_not_installed("S7")
 
   path <- withr::local_tempfile(fileext = ".json")
 
@@ -206,6 +215,7 @@ test_that("the flag has to be one logical that is not missing", {
 })
 
 test_that("a definition a document spells wrongly is refused", {
+  skip_if_not_installed("S7")
 
   doc <- json_write_str(CorpusS7Named, self_contained = TRUE)
   edited <- sub(
@@ -232,6 +242,7 @@ test_that("every corpus value survives the trip with the flag set", {
 })
 
 test_that("the reference form still reads where the flag never ran", {
+  skip_if_not_installed("S7")
 
   expect_identical(
     json_read_str('{"~s7":{"class":"CorpusS7Named","package":"R_GlobalEnv"}}'),

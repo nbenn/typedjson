@@ -304,6 +304,7 @@ identical(json_read_str(json_write_str(x)), x)
 json_write_str(list(required = I("x"), additionalProperties = FALSE),
                typed = FALSE)
 
+\dontshow{if (requireNamespace("S7", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 # The constructor of a class defined in a package closes over that
 # namespace, which a name finds again; `local()` stands in for it here.
 Archived <- local(
@@ -317,5 +318,5 @@ Archived <- local(
 json_write_str(Archived(n = 1))
 
 json_write_str(Archived(n = 1), self_contained = TRUE)
-
+\dontshow{\}) # examplesIf}
 }

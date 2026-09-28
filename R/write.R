@@ -281,6 +281,7 @@
 #' json_write_str(list(required = I("x"), additionalProperties = FALSE),
 #'                typed = FALSE)
 #'
+#' @examplesIf requireNamespace("S7", quietly = TRUE)
 #' # The constructor of a class defined in a package closes over that
 #' # namespace, which a name finds again; `local()` stands in for it here.
 #' Archived <- local(
