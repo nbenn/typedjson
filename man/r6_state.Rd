@@ -32,7 +32,7 @@ naming the class and the method it wants.
 A class author is the party who knows whether a field is stored or
 derived, whether \code{initialize} establishes an invariant, and whether a
 reference should be recorded as a key rather than a value. One who has
-made that judgement and wants the instance recorded as its bindings
+made that judgment and wants the instance recorded as its bindings
 anyway opts in with one method each way:
 
 \if{html}{\out{<div class="sourceCode r">}}\preformatted{json_state.MyClass <- function(x) r6_state(x)
@@ -78,6 +78,7 @@ where they are written.
 }
 
 \examples{
+\dontshow{if (requireNamespace("R6", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 Counter <- R6::R6Class("Counter",
   public = list(
     n = 0,
@@ -95,5 +96,5 @@ json_revive.Counter <- function(class, state) r6_restore(class, state)
 counter <- Counter$new()$bump()$bump()
 
 json_read_str(json_write_str(counter))$n
-
+\dontshow{\}) # examplesIf}
 }

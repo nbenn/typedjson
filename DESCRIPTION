@@ -1,9 +1,9 @@
 Package: typedjson
 Title: Type-Faithful and Human-Readable JSON for R Values
-Version: 0.1.0
+Version: 0.1.2
 Authors@R: c(
     person("Nicolas", "Bennett", , "nicolas@cynkra.com",
-           role = c("aut", "cre")),
+           role = c("aut", "cre", "cph")),
     person("YaoYuan", role = c("ctb", "cph"),
            comment = "Author of the vendored yyjson library")
   )
@@ -13,15 +13,17 @@ Description: Writing an R value as JSON that a human can read, and reading
     emits ordinary JSON for ordinary values and annotates only what JSON
     cannot express, namely the distinction between integer and double,
     typed missing values, non-finite numbers, attributes, and objects from
-    the S3, S4 and S7 systems. Foreign documents are read under the
-    same grammar, so files stay diffable, greppable and editable by hand.
+    the S3, S4 and S7 systems.
 License: MIT + file LICENSE
 Copyright: The bundled 'yyjson' code in src/ is Copyright (c) 2020
-    YaoYuan and distributed under the MIT licence. See file
+    YaoYuan and distributed under the MIT license. See file
     YYJSON-LICENSE for its full text.
 Encoding: UTF-8
+Language: en-US
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 8.0.0
+Depends:
+    R (>= 4.3)
 LinkingTo: cpp11
 Imports:
     methods
@@ -33,7 +35,7 @@ Suggests:
     S7,
     testthat (>= 3.0.0),
     withr
-VignetteBuilder: knitr
+VignetteBuilder: knitr, rmarkdown
 Config/testthat/edition: 3
 URL: https://nbenn.github.io/typedjson/
 BugReports: https://github.com/nbenn/typedjson/issues

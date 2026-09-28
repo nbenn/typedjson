@@ -7,11 +7,26 @@ name: R-CMD-check
 
 permissions: read-all
 
+# Every job in every workflow here sets `timeout-minutes`; the other three
+# files carry a one-line pointer back to this paragraph, so keep them in step
+# (`grep -rn timeout-minutes .github/workflows`).
+#
+# GitHub's default is six hours, so a step that hangs rather than failing — an
+# apt index fetch from a mirror that stops answering, say — leaves the pull
+# request showing checks in progress and holds a runner until someone cancels
+# by hand. An hour is deliberately far above normal runtime rather than close
+# to it: these jobs land in minutes on a warm cache, but a cold cache building
+# the dependency tree from source is legitimately much slower, and a bound
+# sized off the happy path would turn honest runs red. The point is to cap a
+# pathological stall, not to police performance.
+
 jobs:
   R-CMD-check:
     runs-on: ${{ matrix.config.os }}
 
     name: ${{ matrix.config.os }} (${{ matrix.config.r }})
+
+    timeout-minutes: 60
 
     strategy:
       fail-fast: false
@@ -22,6 +37,8 @@ jobs:
           - {os: ubuntu-latest,  r: 'devel', http-user-agent: 'release'}
           - {os: ubuntu-latest,  r: 'release'}
           - {os: ubuntu-latest,  r: 'oldrel-1'}
+          - {os: ubuntu-latest,  r: 'oldrel-2'}
+          - {os: ubuntu-latest,  r: 'floor'}
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -30,9 +47,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The floor is a constant in DESCRIPTION, so the job that tests it reads
+      # the version from there rather than counting back from whatever R is
+      # current. An oldrel-N ref would slide off the declared minimum the next
+      # time R releases, leaving the claim untested.
+      - name: Resolve R version
+        id: rversion
+        # The Windows runner defaults to PowerShell, which cannot parse this.
+        shell: bash
+        run: |
+          if [ "${{ matrix.config.r }}" = "floor" ]; then
+            v=$(grep -oE 'R \(>= *[0-9]+\.[0-9]+(\.[0-9]+)?\)' DESCRIPTION |
+                  grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+            if [ -z "$v" ]; then
+              echo "DESCRIPTION declares no 'Depends: R (>= x.y)' to test" >&2
+              exit 1
+            fi
+            echo "Declared minimum: $v"
+          else
+            v='${{ matrix.config.r }}'
+          fi
+          echo "r=$v" >> "$GITHUB_OUTPUT"
+
       - uses: r-lib/actions/setup-r@v2
         with:
-          r-version: ${{ matrix.config.r }}
+          r-version: ${{ steps.rversion.outputs.r }}
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
 
@@ -48,6 +87,8 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+
+    timeout-minutes: 60
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -71,6 +112,8 @@ jobs:
 
   document:
     runs-on: ubuntu-latest
+
+    timeout-minutes: 60
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}

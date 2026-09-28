@@ -9,7 +9,7 @@ tag_ext <- "~x"
 #' whose instances hold something outside that model — a connection opened
 #' by `initialize`, a handle to a running process, a reference that has to
 #' be recorded as a key rather than a value — supplies a method for this
-#' pair instead, modelled on the `__getstate__` and `__setstate__` protocol
+#' pair instead, modeled on the `__getstate__` and `__setstate__` protocol
 #' of Python's pickle.
 #'
 #' A `json_state()` method returns a plain list of what to persist, and is

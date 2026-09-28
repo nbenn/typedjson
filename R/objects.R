@@ -72,7 +72,7 @@ json_state.refObjectGenerator <- function(x) {
 #' A class author is the party who knows whether a field is stored or
 #' derived, whether `initialize` establishes an invariant, and whether a
 #' reference should be recorded as a key rather than a value. One who has
-#' made that judgement and wants the instance recorded as its bindings
+#' made that judgment and wants the instance recorded as its bindings
 #' anyway opts in with one method each way:
 #'
 #' ```r
@@ -124,7 +124,7 @@ json_state.refObjectGenerator <- function(x) {
 #' @return The `r6_state()` function returns a list carrying `package`,
 #'   `public` and `private`, and `r6_restore()` the rebuilt instance.
 #'
-#' @examples
+#' @examplesIf requireNamespace("R6", quietly = TRUE)
 #' Counter <- R6::R6Class("Counter",
 #'   public = list(
 #'     n = 0,

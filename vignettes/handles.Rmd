@@ -73,9 +73,9 @@ json_write_str(reader)
 
 ## What to record
 
-The extension protocol is a pair of generics modelled on the `__getstate__` and `__setstate__` methods of Python's pickle. A `json_state()` method returns a plain list of what to persist, and is free to leave out anything that can be rebuilt.
+The extension protocol is a pair of generics modeled on the `__getstate__` and `__setstate__` methods of Python's pickle. A `json_state()` method returns a plain list of what to persist, and is free to leave out anything that can be rebuilt.
 
-The judgement it asks for is which parts of the object are the state and which are only the means. Here the connection is the means: what identifies this reader is the file it walks, the chunk size it walks in, and how far into the file it has got.
+The judgment it asks for is which parts of the object are the state and which are only the means. Here the connection is the means: what identifies this reader is the file it walks, the chunk size it walks in, and how far into the file it has got.
 
 ```{r}
 json_state.chunk_reader <- function(x) {

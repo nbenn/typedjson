@@ -403,12 +403,14 @@ SEXP Reader::build_complex(yyjson_val *v) {
                 kPartIm, kTagValue);
   }
 
-  SEXP real = PROTECT(coerce(build(re), REALSXP));
-  SEXP imag = PROTECT(coerce(build(im), REALSXP));
+  SEXP re_built = PROTECT(build(re));
+  SEXP real = PROTECT(coerce(re_built, REALSXP));
+  SEXP im_built = PROTECT(build(im));
+  SEXP imag = PROTECT(coerce(im_built, REALSXP));
 
   R_xlen_t n = XLENGTH(real);
   if (XLENGTH(imag) != n) {
-    UNPROTECT(2);
+    UNPROTECT(4);
     cpp11::stop("the `%s` and `%s` parts of a complex value need the same "
                 "length", kPartRe, kPartIm);
   }
@@ -423,7 +425,7 @@ SEXP Reader::build_complex(yyjson_val *v) {
     at[i].i = im_at[i];
   }
 
-  UNPROTECT(3);
+  UNPROTECT(5);
   return out;
 }
 
@@ -476,11 +478,13 @@ SEXP Reader::build_nodes(yyjson_val *v, SEXPTYPE type) {
 
   SEXP built = PROTECT(build(v));
   SEXP items = PROTECT(coerce(built, VECSXP));
-  SEXP nms = Rf_getAttrib(items, R_NamesSymbol);
+  // The names are reachable through `items`, so this protection is what a
+  // static check needs rather than what a collection does.
+  SEXP nms = PROTECT(Rf_getAttrib(items, R_NamesSymbol));
   R_xlen_t n = XLENGTH(items);
 
   if (call && n == 0) {
-    UNPROTECT(2);
+    UNPROTECT(3);
     cpp11::stop("a language value needs the function it calls under `%s`",
                 kTagValue);
   }
@@ -498,13 +502,13 @@ SEXP Reader::build_nodes(yyjson_val *v, SEXPTYPE type) {
 
     SEXP nm = STRING_ELT(nms, i);
     if (nm == NA_STRING) {
-      UNPROTECT(3);
+      UNPROTECT(4);
       cpp11::stop("an argument name cannot be missing");
     }
     if (CHAR(nm)[0] != '\0') SET_TAG(out, Rf_installChar(nm));
   }
 
-  UNPROTECT(3);
+  UNPROTECT(4);
   return out;
 }
 
@@ -573,9 +577,11 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   } else if (type == CLOSXP || type == BUILTINSXP || type == SPECIALSXP) {
     out = build_fun(payload, type_name);
   } else {
-    out = build(payload);
-    if (type != kNoType) out = coerce(out, type);
-    if (wants_s4) out = Rf_asS4(out, TRUE, 0);
+    PROTECT_INDEX at;
+    PROTECT_WITH_INDEX(out = build(payload), &at);
+    if (type != kNoType) REPROTECT(out = coerce(out, type), at);
+    if (wants_s4) REPROTECT(out = Rf_asS4(out, TRUE, 0), at);
+    UNPROTECT(1);
   }
   PROTECT(out);
 
@@ -650,7 +656,9 @@ void Reader::set_attribs(SEXP x, SEXP attrs) {
 
   if (attrs == R_NilValue) return;
 
-  SEXP nms = Rf_getAttrib(attrs, R_NamesSymbol);
+  // The names hang off a parameter, so nothing here establishes that the
+  // caller protected them; they are held across both passes.
+  SEXP nms = PROTECT(Rf_getAttrib(attrs, R_NamesSymbol));
 
   for (R_xlen_t i = 0; i < XLENGTH(attrs); ++i) {
     SEXP sym = Rf_installChar(STRING_ELT(nms, i));
@@ -665,6 +673,8 @@ void Reader::set_attribs(SEXP x, SEXP attrs) {
       Rf_setAttrib(x, sym, VECTOR_ELT(attrs, i));
     }
   }
+
+  UNPROTECT(1);
 }
 
 // Slots and properties are attributes, so an S4 or S7 object is rebuilt by
@@ -785,11 +795,17 @@ void finalize_doc(SEXP xp) {
 
   R_ClearExternalPtr(owner);
   yyjson_doc_free(parsed);
+
+  // A warning runs whatever calling handler is established for it, so the
+  // result moves onto cpp11's preserve list before the protections are
+  // dropped rather than after the warning.
+  cpp11::sexp res(out);
   UNPROTECT(2);
 
   if (!lossy.empty()) {
     std::string msg = lossy_message(lossy);
     cpp11::warning("%s", msg.c_str());
   }
-  return cpp11::sexp(out);
+
+  return res;
 }
