@@ -262,10 +262,13 @@ reason, being where a reference is most fragile and where recording by
 contents is least plausible alike: one closure over it would put a whole
 workspace into the document. An \code{R6} generator and the class name an S4
 object records keep their reference as well, neither having an embedded
-form to switch to. Plain mode records no class at all, so it and the flag
-cannot both be asked for, and the second contract holds within a mode
-rather than across the pair, a document carrying a definition writing back
-to itself where it is written the same way.
+form to switch to. So does a record written by a \code{\link[=json_state]{json_state()}} method,
+whose class vector finds the \code{\link[=json_revive]{json_revive()}} method rebuilding it: that
+method is the class author's code rather than part of the value, so it
+stays where the author registered it. Plain mode records no class at all,
+so it and the flag cannot both be asked for, and the second contract holds
+within a mode rather than across the pair, a document carrying a
+definition writing back to itself where it is written the same way.
 
 An \code{R6} instance is refused as well, for a reason one level up. What an
 \code{R6} class guarantees is what its methods say rather than what its
