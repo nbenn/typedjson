@@ -197,14 +197,17 @@
 #'
 #' Which of the two a class gets is a default rather than a rule, and it is
 #' the `self_contained` flag that overrides it. A document written with that
-#' flag set carries the definition of every S7 class in it, package-scoped
-#' or not, because a reference resolves against the reader's session rather
-#' than the writer's: the package may not be installed where the document is
-#' read, may have been renamed since, or may have drifted in a way that
-#' still validates. That is the answer an archive wants where a wire format
-#' wants the reference. The definition carries the package the class was
-#' scoped by, so the qualified class vector an instance records still names
-#' the class the document rebuilds.
+#' flag set carries the definition of every S7 class in it, package-scoped or
+#' not, because a reference resolves against the reader's session rather than
+#' the writer's: the package may not be installed where the document is read,
+#' may have been renamed since, or may have drifted in a way that still
+#' validates. That is the answer an archive wants where a wire format wants
+#' the reference. The definition carries the package the class was scoped by,
+#' so the qualified class vector an instance records still names the class
+#' the document rebuilds. That vector is also what S7 dispatches on, so
+#' methods still come from the session reading the document, and a method
+#' written for a newer version of the class can meet an object in the shape
+#' the document archived.
 #'
 #' What the flag does not reach is the rest of what this format records by
 #' name, and the reason differs across that set rather than falling out of

@@ -56,6 +56,50 @@ test_that("an embedded class reads where the name finds nothing again", {
   expect_identical(json_read_str(embedded), obj)
 })
 
+test_that("an archived definition wins over the class the reader holds", {
+  skip_if_not_installed("S7")
+
+  global <- globalenv()
+
+  archived <- local(
+    S7::new_class(
+      "CorpusS7Drift", properties = list(a = S7::class_double),
+      package = "R_GlobalEnv"
+    ),
+    envir = global
+  )
+
+  obj <- archived(a = 1)
+  kept <- json_write_str(obj, self_contained = TRUE)
+  named <- json_write_str(obj)
+
+  # The reading session holds a newer version, with a property added since,
+  # and a method registered on it.
+  installed <- local(
+    S7::new_class(
+      "CorpusS7Drift",
+      properties = list(a = S7::class_double, b = S7::class_character),
+      package = "R_GlobalEnv"
+    ),
+    envir = global
+  )
+
+  assign("CorpusS7Drift", installed, envir = global)
+  withr::defer(rm("CorpusS7Drift", envir = global))
+
+  describe <- S7::new_generic("describe", "x")
+  S7::method(describe, installed) <- function(x) "installed"
+
+  back <- json_read_str(kept)
+
+  expect_identical(S7::prop_names(back), "a")
+  expect_false(identical(attr(back, "S7_class"), installed))
+  expect_identical(describe(back), "installed")
+  expect_error(
+    json_read_str(named), "@b must be <character>, not <NULL>", fixed = TRUE
+  )
+})
+
 test_that("the flag reaches a class the definition it writes names", {
   skip_if_not_installed("S7")
 
