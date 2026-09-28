@@ -182,6 +182,18 @@ That lookup runs on the way out as well as on the way in, so a generator built i
 json_write_str((function() R6::R6Class("Local", public = list(v = 1)))())
 ```
 
+A document meant as an archive can carry the class instead, since a name that finds it where the document is written may find nothing where it is read. The `self_contained` flag records what `R6::R6Class()` builds the generator from, which is its members, its parent, its flags and the environment it was defined in, and rebuilds it through that call. So the generator above is carried rather than refused, and comes back as an equivalent copy rather than as the same object.
+
+```{r}
+Local <- (function() R6::R6Class("Local", public = list(v = 1)))()
+
+back <- json_read_str(json_write_str(Local, self_contained = TRUE))
+
+back$new()$v
+```
+
+The methods travel with the definition, so a class fixed or upgraded since the document was written does not reach the one it rebuilds. The rest of what the flag carries, and what it leaves by name, is set out in `vignette("design")`.
+
 ## Reference classes, and where the refusal stops
 
 A reference class instance is refused on the same grounds and settled the same way. Half the question above already has an answer there, since a reference class declares its fields and `Class$fields()` says what the representation is. The other half is unchanged: the object is a reference, `initialize` may establish an invariant that no assignment reproduces, and a field is as good a place to keep a credential as a private binding is.

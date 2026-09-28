@@ -110,10 +110,25 @@ const char *const kTagExt = "~x";
 const char *const kTagId = "~id";
 const char *const kTagRef = "~ref";
 
+// The key only the definition of an `R6` class carries, which is what tells
+// it apart from the reference naming the class.
+const char *const kR6ParentEnv = "parent_env";
+
+inline bool has_key(SEXP x, const char *key) {
+  SEXP nms = Rf_getAttrib(x, R_NamesSymbol);
+  if (TYPEOF(nms) != STRSXP) return false;
+
+  for (R_xlen_t i = 0; i < XLENGTH(nms); ++i) {
+    if (std::strcmp(CHAR(STRING_ELT(nms, i)), key) == 0) return true;
+  }
+  return false;
+}
+
 // A state recorded by name revives to the object it was written from, so the
-// writer's reference bookkeeping has nothing to track under this tag.
-inline bool records_by_name(const char *tag) {
-  return std::strcmp(tag, kTagR6Class) == 0;
+// writer's reference bookkeeping has nothing to track under it. A definition
+// rebuilds a new generator instead, and is a reference like any other.
+inline bool records_by_name(const char *tag, SEXP state) {
+  return std::strcmp(tag, kTagR6Class) == 0 && !has_key(state, kR6ParentEnv);
 }
 
 const char *const kPartRe = "re";

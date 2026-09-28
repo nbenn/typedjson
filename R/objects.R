@@ -19,6 +19,10 @@ json_state.R6 <- function(x) {
 #' @export
 json_state.R6ClassGenerator <- function(x) {
 
+  if (writer_self_contained$on()) {
+    return(tagged_state(tag_r6_class, r6_definition(x)))
+  }
+
   if (!is_one_string(x$classname)) {
     refuse("cannot write an R6 generator that names no class")
   }
@@ -34,6 +38,36 @@ json_state.R6ClassGenerator <- function(x) {
   }
 
   tagged_state(tag_r6_class, list(class = classes, package = package))
+}
+
+# A generator encloses R6's own capsule, which no name finds again, so a walk
+# into one would record R6's machinery along with the class. What is recorded
+# instead is what `R6Class()` builds one from, under the names it takes them
+# by, with one exception forcing another: the class name is `class`, as it is
+# in the reference, so the flag `R6Class()` calls `class` travels as `classed`.
+r6_definition <- function(x) {
+
+  public <- c(x$public_fields, x$public_methods)
+
+  # R6 adds `clone` to a cloneable class and closes it over the generator
+  # itself, so the flag is what carries it.
+  if (isTRUE(x$cloneable)) {
+    public[["clone"]] <- NULL
+  }
+
+  list(
+    class = x$classname,
+    public = public,
+    private = c(x$private_fields, x$private_methods),
+    active = x$active,
+    inherit = x$get_inherit(),
+    lock_objects = x$lock_objects,
+    classed = x$class,
+    portable = x$portable,
+    lock_class = x$lock_class,
+    cloneable = x$cloneable,
+    parent_env = x$parent_env
+  )
 }
 
 # Fields are declared, so the question an `R6` class leaves open — which
@@ -250,9 +284,80 @@ declared_names <- function(chain, slot) {
 
 r6_class_revive <- function(state) {
 
+  # A definition carries the environment its class is rebuilt in and a
+  # reference does not, so that key is what tells the two apart, the way a
+  # constructor does for S7.
+  if (is_named_list(state) && "parent_env" %in% names(state)) {
+    return(r6_rebuild(state))
+  }
+
   check_r6_state(state, paste0("a `", tag_r6_class, "` payload"))
 
   r6_generator(state[["class"]], state[["package"]])
+}
+
+r6_rebuild <- function(state) {
+
+  if (!requireNamespace("R6", quietly = TRUE)) {
+    stop("the R6 package is needed to revive an R6 class", call. = FALSE)
+  }
+
+  name <- state[["class"]]
+
+  if (!is.null(name) && !is_one_string(name)) {
+    stop(
+      "the `class` of a recorded R6 class has to be one string", call. = FALSE
+    )
+  }
+
+  if (!is.environment(state[["parent_env"]])) {
+    stop(
+      "the `parent_env` of a recorded R6 class has to be an environment",
+      call. = FALSE
+    )
+  }
+
+  for (key in c("public", "private", "active")) {
+    if (!is.null(state[[key]]) && !is.list(state[[key]])) {
+      stop(
+        "the `", key, "` of a recorded R6 class has to be an object",
+        call. = FALSE
+      )
+    }
+  }
+
+  for (key in c("lock_objects", "classed", "portable", "lock_class",
+                "cloneable")) {
+
+    flag <- state[[key]]
+
+    if (!is.logical(flag) || length(flag) != 1L || is.na(flag)) {
+      stop(
+        "the `", key, "` flag of a recorded R6 class has to be true or false",
+        call. = FALSE
+      )
+    }
+  }
+
+  gen <- R6::R6Class(
+    classname = name,
+    public = state[["public"]],
+    private = state[["private"]],
+    active = state[["active"]],
+    lock_objects = state[["lock_objects"]],
+    class = state[["classed"]],
+    portable = state[["portable"]],
+    lock_class = state[["lock_class"]],
+    cloneable = state[["cloneable"]],
+    parent_env = state[["parent_env"]]
+  )
+
+  # R6 keeps `inherit` as the expression it was handed and evaluates it in
+  # `parent_env`, where no name finds a parent this document rebuilt. The
+  # parent itself evaluates to itself, so that is what the class holds.
+  gen$inherit <- state[["inherit"]]
+
+  gen
 }
 
 check_r6_state <- function(state, what) {
