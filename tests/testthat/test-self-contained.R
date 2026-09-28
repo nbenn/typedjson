@@ -188,18 +188,18 @@ test_that("the flag carries an R6 class where a name would have found one", {
 
   doc <- json_write_str(CorpusR6, self_contained = TRUE)
 
-  expect_match(doc, '{"~r6class":{"class":"CorpusR6","public":', fixed = TRUE)
   expect_match(
-    doc, '"inherit":{"~r6class":{"class":"CorpusR6Base","public":',
+    doc,
+    paste0(
+      '{"~r6class":{"attributes":{"name":"CorpusR6_generator",',
+      '"class":"R6ClassGenerator"},"bindings":{"active":{'
+    ),
     fixed = TRUE
   )
+  expect_match(doc, '"classname":"CorpusR6"', fixed = TRUE)
+  expect_match(doc, '"inherit":{"~r6class":{', fixed = TRUE)
+  expect_match(doc, '"classname":"CorpusR6Base"', fixed = TRUE)
   expect_no_match(doc, '"package"', fixed = TRUE)
-
-  # A generator encloses R6's own capsule, and what it binds besides the
-  # class is the machinery every generator shares.
-  for (internal in c('"clone"', "clone_method", "get_inherit", "R6_capsule")) {
-    expect_no_match(doc, internal, fixed = TRUE)
-  }
 
   expect_identical(
     json_write_str(CorpusR6),
@@ -207,6 +207,95 @@ test_that("the flag carries an R6 class where a name would have found one", {
       '{"~r6class":{"class":["CorpusR6","CorpusR6Base","R6"],',
       '"package":"R_GlobalEnv"}}'
     )
+  )
+})
+
+test_that("a definition leaves out R6's own machinery", {
+
+  # Every generator binds itself as `self` and encloses the closures R6
+  # installs in it, R6's own `clone` among its methods, and none of that is
+  # the class.
+  doc <- json_write_str(CorpusR6, self_contained = TRUE)
+
+  for (machinery in c("self", "new", "set", "get_inherit", "clone_method")) {
+    expect_no_match(doc, paste0('"', machinery, '":'), fixed = TRUE)
+  }
+
+  expect_match(doc, '"clone":null', fixed = TRUE)
+  expect_no_match(doc, "R6_capsule", fixed = TRUE)
+})
+
+test_that("a generator comes back as it is, whatever changed it since", {
+
+  one <- local(function() 1, globalenv())
+
+  build <- function(name) {
+    R6::R6Class(name, public = list(n = 1, f = one), parent_env = globalenv())
+  }
+
+  set_later <- build("CorpusR6SetLater")
+  set_later$set("public", "g", one)
+
+  extended <- build("CorpusR6Extended")
+  extended$meta <- "kept"
+
+  debugged <- build("CorpusR6Debugged")
+  debugged$debug("f")
+
+  cloned <- build("CorpusR6Cloned")
+  cloned$set(
+    "public", "clone", local(function(deep = FALSE) "own", globalenv()),
+    overwrite = TRUE
+  )
+
+  renewed <- build("CorpusR6Renewed")
+  renewed$new <- local(function(...) "renewed", globalenv())
+
+  subclassed <- build("CorpusR6Subclassed")
+  class(subclassed) <- c("corpus_generator", class(subclassed))
+
+  noted <- build("CorpusR6Noted")
+  attr(noted, "note") <- "kept"
+
+  locked <- build("CorpusR6Locked")
+  lockBinding("portable", locked)
+  lockEnvironment(locked)
+
+  values <- list(
+    set_later = set_later, extended = extended, debugged = debugged,
+    cloned = cloned, renewed = renewed, subclassed = subclassed,
+    noted = noted, locked = locked
+  )
+
+  for (nm in names(values)) {
+
+    doc <- json_write_str(values[[nm]], self_contained = TRUE)
+    back <- json_read_str(doc)
+
+    expect_env_equivalent(back, values[[nm]])
+    expect_identical(json_write_str(back, self_contained = TRUE), doc)
+  }
+
+  expect_identical(json_read_str(json_write_str(
+    cloned, self_contained = TRUE
+  ))$new()$clone(), "own")
+  expect_identical(
+    json_read_str(json_write_str(renewed, self_contained = TRUE))$new(),
+    "renewed"
+  )
+})
+
+test_that("an active binding on a generator is refused rather than read", {
+
+  gen <- local(
+    R6::R6Class("CorpusR6Live", public = list(n = 1)), envir = globalenv()
+  )
+  makeActiveBinding("live", function() stop("read"), gen)
+
+  expect_error(
+    json_write_str(gen, self_contained = TRUE),
+    "cannot write the active binding `live` of an R6 class generator at `x`",
+    fixed = TRUE
   )
 })
 
@@ -370,9 +459,9 @@ test_that("a class no name finds again is carried rather than refused", {
 
 test_that("a class the frame it closes over binds is refused as a cycle", {
 
-  # A class defined in a frame of its own closes its methods over that frame,
-  # and `R6Class()` builds the class in one call, so no generator exists yet
-  # to bind back into the frame on the way in.
+  # A class defined in a frame of its own is defined in that frame, which
+  # binds the class, and a generator is rebuilt in one call, so none exists
+  # yet to bind back into the frame on the way in.
   bound <- local(
     {
       CorpusR6Cycle <- R6::R6Class(
@@ -387,13 +476,13 @@ test_that("a class the frame it closes over binds is refused as a cycle", {
     json_write_str(bound, self_contained = TRUE),
     paste0(
       "cannot write a reference cycle: the object at `x` contains itself at ",
-      "`x$public$again$environment$bindings$CorpusR6Cycle`"
+      "`x$bindings$parent_env$bindings$CorpusR6Cycle`"
     ),
     fixed = TRUE
   )
 })
 
-test_that("the flags R6Class() takes travel with the definition", {
+test_that("the flags a generator was built with travel with it", {
 
   odd <- local(
     R6::R6Class(
@@ -406,13 +495,11 @@ test_that("the flags R6Class() takes travel with the definition", {
   doc <- json_write_str(odd, self_contained = TRUE)
 
   expect_match(
-    doc,
-    paste0(
-      '"lock_objects":false,"classed":false,"portable":false,',
-      '"lock_class":true,"cloneable":false'
-    ),
+    doc, '"class":false,"classname":"CorpusR6Odd","cloneable":false',
     fixed = TRUE
   )
+  expect_match(doc, '"lock_class":true,"lock_objects":false', fixed = TRUE)
+  expect_match(doc, '"portable":false', fixed = TRUE)
 
   back <- json_read_str(doc)
 
@@ -435,29 +522,23 @@ test_that("a rebuilt R6 class is refused where the flag is not set", {
 
 test_that("an R6 definition a document spells wrongly is refused", {
 
-  expect_s3_class(json_read_str(r6_class_document()), "R6ClassGenerator")
+  gen <- json_read_str(r6_class_document())
+
+  expect_s3_class(gen, "R6ClassGenerator")
+  expect_identical(class(gen$new()), c("CorpusR6Spelled", "R6"))
 
   expect_error(
-    json_read_str(r6_class_document(class = '["a","b"]')),
-    "the `class` of a recorded R6 class has to be one string", fixed = TRUE
+    json_read_str(r6_class_document(bindings = "[1.0]")),
+    "the `bindings` of a recorded R6 class have to be an object", fixed = TRUE
   )
   expect_error(
-    json_read_str(r6_class_document(parent_env = "null")),
-    "the `parent_env` of a recorded R6 class has to be an environment",
+    json_read_str(r6_class_document(attributes = "null")),
+    "the `attributes` of a recorded R6 class have to be an object",
     fixed = TRUE
   )
   expect_error(
-    json_read_str(r6_class_document(public = "[1.0]")),
-    "the `public` of a recorded R6 class has to be an object", fixed = TRUE
-  )
-  expect_error(
-    json_read_str(r6_class_document(portable = '"yes"')),
-    "the `portable` flag of a recorded R6 class has to be true or false",
-    fixed = TRUE
-  )
-  expect_error(
-    json_read_str(r6_class_document(classed = "null")),
-    "the `classed` flag of a recorded R6 class has to be true or false",
+    json_read_str(r6_class_document(locked_bindings = '"zz"')),
+    "`locked_bindings` names `zz`, which the environment does not bind",
     fixed = TRUE
   )
 })

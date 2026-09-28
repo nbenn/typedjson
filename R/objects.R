@@ -40,34 +40,76 @@ json_state.R6ClassGenerator <- function(x) {
   tagged_state(tag_r6_class, list(class = classes, package = package))
 }
 
-# A generator encloses R6's own capsule, which no name finds again, so a walk
-# into one would record R6's machinery along with the class. What is recorded
-# instead is what `R6Class()` builds one from, under the names it takes them
-# by, with one exception forcing another: the class name is `class`, as it is
-# in the reference, so the flag `R6Class()` calls `class` travels as `classed`.
+# A generator is an environment, and what it binds falls into two parts. Most
+# of it is the class: its name, members, parent, flags and the environment it
+# was defined in. The rest is R6's machinery, `self` and the closures every
+# generator encloses, which a walk would follow into R6's own capsule and which
+# `R6Class()` supplies again on the way back. So a generator is recorded the
+# way an environment is, apart from that machinery and its parent.
 r6_definition <- function(x) {
 
-  public <- c(x$public_fields, x$public_methods)
+  nms <- sort(ls(x, all.names = TRUE), method = "radix")
+  active <- nms[vapply(nms, bindingIsActive, logical(1L), env = x)]
 
-  # R6 adds `clone` to a cloneable class and closes it over the generator
-  # itself, so the flag is what carries it.
-  if (isTRUE(x$cloneable)) {
-    public[["clone"]] <- NULL
+  if (length(active) > 0L) {
+    refuse(
+      "cannot write the active binding `", active[[1L]], "` of an R6 class ",
+      "generator"
+    )
   }
 
-  list(
-    class = x$classname,
-    public = public,
-    private = c(x$private_fields, x$private_methods),
-    active = x$active,
-    inherit = x$get_inherit(),
-    lock_objects = x$lock_objects,
-    classed = x$class,
-    portable = x$portable,
-    lock_class = x$lock_class,
-    cloneable = x$cloneable,
-    parent_env = x$parent_env
+  bindings <- mget(nms, envir = x)
+  machinery <- nms %in% r6_machinery() &
+    vapply(bindings, r6_owned, logical(1L), gen = x)
+  bindings <- bindings[!machinery]
+
+  # R6 adds its own `clone` to the methods of a cloneable class, so a null
+  # holds its place, a method list otherwise holding functions only.
+  methods <- bindings[["public_methods"]]
+
+  if (r6_owned(methods[["clone"]], x)) {
+    methods["clone"] <- list(NULL)
+    bindings["public_methods"] <- list(methods)
+  }
+
+  # R6 keeps `inherit` as an expression it resolves in `parent_env`, which is
+  # a lookup the reader would have to repeat, so the parent it finds is what
+  # the record carries.
+  bindings["inherit"] <- list(x$get_inherit())
+
+  locked <- nms[vapply(nms, bindingIsLocked, logical(1L), env = x)]
+
+  c(
+    list(attributes = attributes(x), bindings = bindings),
+    if (environmentIsLocked(x)) list(locked = TRUE),
+    if (length(locked) > 0L) list(locked_bindings = locked)
   )
+}
+
+# The machinery is read off a fresh generator rather than listed, as the names
+# it binds to itself or to a closure it encloses. Only the names are cached.
+r6_machinery <- local({
+
+  cached <- NULL
+
+  function() {
+
+    if (is.null(cached)) {
+
+      gen <- R6::R6Class(parent_env = emptyenv())
+      nms <- ls(gen, all.names = TRUE)
+
+      cached <<- nms[vapply(mget(nms, envir = gen), r6_owned, logical(1L),
+                            gen = gen)]
+    }
+
+    cached
+  }
+})
+
+r6_owned <- function(value, gen) {
+  identical(value, gen) ||
+    (is.function(value) && identical(environment(value), gen))
 }
 
 # Fields are declared, so the question an `R6` class leaves open — which
@@ -284,10 +326,10 @@ declared_names <- function(chain, slot) {
 
 r6_class_revive <- function(state) {
 
-  # A definition carries the environment its class is rebuilt in and a
-  # reference does not, so that key is what tells the two apart, the way a
-  # constructor does for S7.
-  if (is_named_list(state) && "parent_env" %in% names(state)) {
+  # A definition carries the bindings of the generator and a reference does
+  # not, so that key is what tells the two apart, the way a constructor does
+  # for S7.
+  if (is_named_list(state) && "bindings" %in% names(state)) {
     return(r6_rebuild(state))
   }
 
@@ -302,60 +344,34 @@ r6_rebuild <- function(state) {
     stop("the R6 package is needed to revive an R6 class", call. = FALSE)
   }
 
-  name <- state[["class"]]
-
-  if (!is.null(name) && !is_one_string(name)) {
-    stop(
-      "the `class` of a recorded R6 class has to be one string", call. = FALSE
-    )
-  }
-
-  if (!is.environment(state[["parent_env"]])) {
-    stop(
-      "the `parent_env` of a recorded R6 class has to be an environment",
-      call. = FALSE
-    )
-  }
-
-  for (key in c("public", "private", "active")) {
-    if (!is.null(state[[key]]) && !is.list(state[[key]])) {
+  for (key in c("attributes", "bindings")) {
+    if (!is_named_list(state[[key]])) {
       stop(
-        "the `", key, "` of a recorded R6 class has to be an object",
+        "the `", key, "` of a recorded R6 class have to be an object",
         call. = FALSE
       )
     }
   }
 
-  for (key in c("lock_objects", "classed", "portable", "lock_class",
-                "cloneable")) {
+  gen <- R6::R6Class(parent_env = emptyenv())
+  bindings <- state[["bindings"]]
+  methods <- bindings[["public_methods"]]
 
-    flag <- state[[key]]
-
-    if (!is.logical(flag) || length(flag) != 1L || is.na(flag)) {
-      stop(
-        "the `", key, "` flag of a recorded R6 class has to be true or false",
-        call. = FALSE
-      )
-    }
+  if ("clone" %in% names(methods) && is.null(methods[["clone"]])) {
+    methods["clone"] <- list(gen$clone_method)
+    bindings["public_methods"] <- list(methods)
   }
 
-  gen <- R6::R6Class(
-    classname = name,
-    public = state[["public"]],
-    private = state[["private"]],
-    active = state[["active"]],
-    lock_objects = state[["lock_objects"]],
-    class = state[["classed"]],
-    portable = state[["portable"]],
-    lock_class = state[["lock_class"]],
-    cloneable = state[["cloneable"]],
-    parent_env = state[["parent_env"]]
-  )
+  fill_env(gen, bindings)
+  attributes(gen) <- state[["attributes"]]
 
-  # R6 keeps `inherit` as the expression it was handed and evaluates it in
-  # `parent_env`, where no name finds a parent this document rebuilt. The
-  # parent itself evaluates to itself, so that is what the class holds.
-  gen$inherit <- state[["inherit"]]
+  for (nm in locked_names(state[["locked_bindings"]], gen)) {
+    lockBinding(nm, gen)
+  }
+
+  if (isTRUE(state[["locked"]])) {
+    lockEnvironment(gen)
+  }
 
   gen
 }

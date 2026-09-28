@@ -609,11 +609,13 @@ r6_document <- function(class, package = '"R_GlobalEnv"', public = "null",
 r6_class_document <- function(...) {
 
   keys <- list(
-    class = '"CorpusR6Spelled"', public = "null", private = "null",
-    active = "null", inherit = "null", lock_objects = "true",
-    classed = "true", portable = "true", lock_class = "false",
-    cloneable = "true",
-    parent_env = '{"~t":"environment","~v":{"name":"R_GlobalEnv"}}'
+    attributes = paste0(
+      '{"name":"CorpusR6Spelled_generator","class":"R6ClassGenerator"}'
+    ),
+    bindings = paste0(
+      '{"classname":"CorpusR6Spelled",',
+      '"parent_env":{"~t":"environment","~v":{"name":"R_GlobalEnv"}}}'
+    )
   )
 
   edits <- list(...)
