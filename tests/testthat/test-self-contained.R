@@ -173,15 +173,20 @@ test_that("the flag leaves every other name where it is", {
 
 test_that("the class name an S4 object records keeps its reference", {
 
-  # An S4 object records a class name the methods registry holds the
-  # definition for, which raises the question this flag answers for S7 and
-  # `R6` but has no embedded form to switch to, so the object writes what it
-  # wrote before.
+  # An S4 definition is an entry in the methods registry rather than a value,
+  # so carrying one would mean registering it where the document is read, a
+  # side effect on the reader's session that no read has. The object writes
+  # what it wrote before, and a document naming a class the reader lacks
+  # reads without one being registered.
   s4 <- methods::new("CorpusS4", a = 1, b = "x")
+  doc <- json_write_str(s4, self_contained = TRUE)
 
-  expect_identical(
-    json_write_str(s4, self_contained = TRUE), json_write_str(s4)
-  )
+  expect_identical(doc, json_write_str(s4))
+
+  back <- json_read_str(sub("CorpusS4", "CorpusS4Absent", doc, fixed = TRUE))
+
+  expect_true(isS4(back))
+  expect_false(methods::isClass("CorpusS4Absent"))
 })
 
 test_that("the flag carries an R6 class where a name would have found one", {

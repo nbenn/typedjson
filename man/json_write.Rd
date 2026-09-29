@@ -268,7 +268,9 @@ is installed. The global environment is the same answer for the opposite
 reason, being where a reference is most fragile and where recording by
 contents is least plausible alike: one closure over it would put a whole
 workspace into the document. The class name an S4 object records keeps its
-reference as well, having no embedded form to switch to. So does a record
+reference as well, since an S4 definition is an entry in a registry the
+whole session shares rather than a value, and carrying one would mean
+registering it where the document is read. So does a record
 written by a \code{\link[=json_state]{json_state()}} method, whose class vector finds the
 \code{\link[=json_revive]{json_revive()}} method rebuilding it: that method is the class author's
 code rather than part of the value, so it stays where the author registered
