@@ -445,6 +445,8 @@ No source reference is recorded. A parser attaches `srcref` to a function defini
 formals(identical)$ignore.srcref
 ```
 
+A definition inside a body is the one exception to the first half. The parser keeps its source reference as the last element of the `function` call rather than as an attribute, and `identical()` compares that element like any other. It is dropped all the same, for the reason below, and comes back as the `NULL` a parse keeping no source leaves there, so the closure is equal to the one that parse would have made rather than to the one written.
+
 Keeping one would be worse than verbose. A `srcref` carries its `srcfile`, which is an environment holding the source text it came from, so a function parsed from a file would arrive with that file beside it. A byte-compiled closure is written from `body()`, which is the source tree it was compiled from, and left to the compiler to compile again; nothing here records bytecode.
 
 Two shapes stay refused, and neither is a closure's own doing. An argument the function was called with stays a promise in its frame whether or not it has been forced, so a closure over such a frame meets the promise rule above.

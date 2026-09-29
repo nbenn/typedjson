@@ -154,7 +154,10 @@
 #' with one. No source reference is recorded: the `srcref` a parser
 #' attaches to a function definition, to a `{` block and to what `parse()`
 #' returns is dropped, which keeps a document diffable and leaves the
-#' value equal under `identical()`, whose default ignores one. A
+#' value equal under `identical()`, whose default ignores one. The one
+#' place it does not is a definition inside a body, whose source reference
+#' the parser keeps as the last element of the `function` call, so that
+#' element comes back as the `NULL` a parse keeping no source puts there. A
 #' byte-compiled closure is written from `body()`, which is the source
 #' tree it was compiled from.
 #'

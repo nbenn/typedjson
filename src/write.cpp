@@ -89,6 +89,15 @@ void drop_srcref(std::vector<Attrib> *attrs) {
   attrs->resize(kept);
 }
 
+// A definition the parser meets inside a body keeps its source reference as
+// the last element of the `function` call rather than as an attribute, where
+// a parse that keeps no source leaves NULL instead.
+bool is_definition_srcref(SEXP call, R_xlen_t i, SEXP elt) {
+  static SEXP function_sym = Rf_install("function");
+  return TYPEOF(call) == LANGSXP && CAR(call) == function_sym && i == 3 &&
+         Rf_inherits(elt, "srcref");
+}
+
 class Writer {
  public:
   Writer(yyjson_mut_doc *doc, bool typed, cpp11::list hooks)
@@ -699,7 +708,9 @@ yyjson_mut_val *Writer::emit_nodes(SEXP x) {
 
   R_xlen_t i = 0;
   for (SEXP node = x; node != R_NilValue; node = CDR(node), ++i) {
-    SET_VECTOR_ELT(items, i, CAR(node));
+    SEXP elt = CAR(node);
+    SET_VECTOR_ELT(items, i,
+                   is_definition_srcref(x, i, elt) ? R_NilValue : elt);
     if (!tagged) continue;
     SEXP tag = TAG(node);
     SET_STRING_ELT(nms, i, tag == R_NilValue ? R_BlankString : PRINTNAME(tag));

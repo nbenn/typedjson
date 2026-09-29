@@ -108,6 +108,28 @@ test_that("a source reference is not recorded", {
   )
 })
 
+test_that("a definition inside a body records no source reference", {
+
+  # The parser keeps the source reference of a definition it meets inside a
+  # body as an element of the `function` call rather than as an attribute,
+  # and the file it points at comes with it.
+  src <- "function() {\n  inner <- function(y) y\n  inner\n}"
+  sourced <- eval(parse(text = src, keep.source = TRUE))
+  bare <- eval(parse(text = src, keep.source = FALSE))
+
+  environment(sourced) <- globalenv()
+  environment(bare) <- globalenv()
+
+  expect_s3_class(body(sourced)[[2L]][[3L]][[4L]], "srcref")
+  expect_null(body(bare)[[2L]][[3L]][[4L]])
+
+  doc <- json_write_str(sourced)
+
+  expect_no_match(doc, "srcfile", fixed = TRUE)
+  expect_identical(doc, json_write_str(bare))
+  expect_identical(json_read_str(doc), bare)
+})
+
 test_that("a byte-compiled closure is written from its source tree", {
 
   fun <- compiler::cmpfun(corpus_closure("function(x) x + 1"))

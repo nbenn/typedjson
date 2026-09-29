@@ -197,7 +197,10 @@ is recorded by the name that finds it again, which is what base R does
 with one. No source reference is recorded: the \code{srcref} a parser
 attaches to a function definition, to a \verb{\{} block and to what \code{parse()}
 returns is dropped, which keeps a document diffable and leaves the
-value equal under \code{identical()}, whose default ignores one. A
+value equal under \code{identical()}, whose default ignores one. The one
+place it does not is a definition inside a body, whose source reference
+the parser keeps as the last element of the \code{function} call, so that
+element comes back as the \code{NULL} a parse keeping no source puts there. A
 byte-compiled closure is written from \code{body()}, which is the source
 tree it was compiled from.
 
