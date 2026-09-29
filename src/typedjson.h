@@ -110,12 +110,6 @@ const char *const kTagExt = "~x";
 const char *const kTagId = "~id";
 const char *const kTagRef = "~ref";
 
-// A state recorded by name revives to the object it was written from, so the
-// writer's reference bookkeeping has nothing to track under this tag.
-inline bool records_by_name(const char *tag) {
-  return std::strcmp(tag, kTagR6Class) == 0;
-}
-
 const char *const kPartRe = "re";
 const char *const kPartIm = "im";
 
@@ -123,6 +117,24 @@ const char *const kEnvParent = "parent";
 const char *const kEnvBindings = "bindings";
 const char *const kEnvLocked = "locked";
 const char *const kEnvLockedBindings = "locked_bindings";
+
+inline bool has_key(SEXP x, const char *key) {
+  SEXP nms = Rf_getAttrib(x, R_NamesSymbol);
+  if (TYPEOF(nms) != STRSXP) return false;
+
+  for (R_xlen_t i = 0; i < XLENGTH(nms); ++i) {
+    if (std::strcmp(CHAR(STRING_ELT(nms, i)), key) == 0) return true;
+  }
+  return false;
+}
+
+// A state recorded by name revives to the object it was written from, so the
+// writer's reference bookkeeping has nothing to track under it. An `R6` class
+// recorded by what it binds, the way an environment is, rebuilds a new
+// generator instead, and is a reference like any other.
+inline bool records_by_name(const char *tag, SEXP state) {
+  return std::strcmp(tag, kTagR6Class) == 0 && !has_key(state, kEnvBindings);
+}
 
 // R 4.5 added R_ParentEnv() and R 4.6 withdrew ENCLOS(), so which accessor
 // reads an environment's parent depends on which side of that change we are on.

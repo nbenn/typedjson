@@ -425,7 +425,8 @@ yyjson_mut_val *Writer::emit_state(SEXP x) {
   const char *key = CHAR(STRING_ELT(VECTOR_ELT(state, 0), 0));
 
   yyjson_mut_val *out = yyjson_mut_obj(doc_);
-  bool reference = (TYPEOF(x) == ENVSXP) && !records_by_name(key);
+  bool reference =
+      (TYPEOF(x) == ENVSXP) && !records_by_name(key, VECTOR_ELT(state, 1));
 
   if (reference) enter_reference(x, out, at, true);
 

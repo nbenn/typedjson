@@ -606,6 +606,28 @@ r6_document <- function(class, package = '"R_GlobalEnv"', public = "null",
   )
 }
 
+r6_class_document <- function(...) {
+
+  keys <- list(
+    attributes = paste0(
+      '{"name":"CorpusR6Spelled_generator","class":"R6ClassGenerator"}'
+    ),
+    bindings = paste0(
+      '{"classname":"CorpusR6Spelled",',
+      '"parent_env":{"~t":"environment","~v":{"name":"R_GlobalEnv"}}}'
+    )
+  )
+
+  edits <- list(...)
+  keys[names(edits)] <- edits
+
+  paste0(
+    '{"~r6class":{',
+    paste0('"', names(keys), '":', unlist(keys), collapse = ","),
+    "}}"
+  )
+}
+
 local_r6_optin <- function(class, env = parent.frame()) {
   local_state_method(
     class,
@@ -747,16 +769,21 @@ r6_shape_grid <- function() {
   c(r6_shape_solo(), r6_shape_chain(), r6_shape_deep(), r6_shape_refused())
 }
 
-r6_shape_noop <- function() NULL
-
 # The test environment binds every helper defined in this file, so a hook
 # enclosed in it would be written as a reference cycle rather than as the
 # field the shape places.
 r6_shape_hook <- local(function() NULL, globalenv())
 
-r6_shape_binding <- function(value) {
-  if (missing(value)) 1 else stop("read-only")
-}
+# A definition the `self_contained` flag writes carries the methods and active
+# bindings a shape places, so those are enclosed the same way.
+r6_shape_noop <- local(function() NULL, globalenv())
+
+r6_shape_binding <- local(
+  function(value) {
+    if (missing(value)) 1 else stop("read-only")
+  },
+  globalenv()
+)
 
 r6_shape_values <- list(
   1L, "a", c(TRUE, NA), NULL, 2.5, as.raw(c(0, 255)), c(x = 1L, y = 2L)
@@ -939,12 +966,34 @@ r6_shape_label <- function(spec, id) {
   )
 }
 
-r6_shape_failures <- function(specs) {
+# A class the flag carries is rebuilt rather than found, so what has to settle
+# is the document and the shape an instance of the rebuilt class takes.
+r6_class_settles <- function(spec, id) {
+
+  gen <- r6_shape_class(spec, id)
+
+  tryCatch(
+    {
+      doc <- json_write_str(gen, self_contained = TRUE)
+      back <- json_read_str(doc)
+
+      !identical(back, gen) &&
+        identical(json_write_str(back, self_contained = TRUE), doc) &&
+        identical(
+          r6_shape_surface(suppressMessages(back$new())),
+          r6_shape_surface(suppressMessages(gen$new()))
+        )
+    },
+    error = function(e) FALSE
+  )
+}
+
+r6_shape_failures <- function(specs, settles = r6_shape_settles) {
 
   failed <- character()
 
   for (id in seq_along(specs)) {
-    if (!r6_shape_settles(specs[[id]], id)) {
+    if (!settles(specs[[id]], id)) {
       failed <- c(failed, r6_shape_label(specs[[id]], id))
     }
   }

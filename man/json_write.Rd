@@ -33,9 +33,9 @@ writes plain JSON for a consumer that brings its own schema.}
 \item{self_contained}{Whether to carry a class definition the document
 would otherwise record by name. The default records the name wherever one
 finds the class again, which is what a wire format wants; \code{TRUE} carries
-the definition instead, which is what an archive wants. Only an S7 class
-is reached, with \code{vignette("design")} setting out which names are left
-alone and why.}
+the definition instead, which is what an archive wants. An S7 class and
+an \code{R6} class generator are reached, with \code{vignette("design")} setting
+out which names are left alone and why.}
 }
 \value{
 The \code{json_write()} function returns \code{path} invisibly and
@@ -58,16 +58,19 @@ json_write_str(json_read_str(doc)) == doc
 The first holds for every supported value: every atomic type, missing
 values of each type, the non-finite doubles, attributes of any shape,
 language objects, closures, and objects built with S3, S4 or S7.
-Three values need it stated differently. An environment recorded by its
+Four values need it stated differently. An environment recorded by its
 contents comes back a new environment, which is the exception base R's
 own \code{serialize()} makes as well: what comes back binds the same names
 to the same values, locked the same way, under a parent that is itself
 equivalent, and a closure over one is equivalent for that same reason.
 An S7 class a document carries the definition of is equivalent for that
 same reason wherever a part of it closes over such an environment, which
-S7 builds for the constructor of every class that has a parent. A string
-R has not declared an encoding for comes back declared UTF-8, so the
-property holds on its bytes rather than under \code{identical()}.
+S7 builds for the constructor of every class that has a parent. An \code{R6}
+class a document carries the definition of is such an environment
+itself, and holds its parent where the class it was written from held
+the expression finding one. A string R has not declared an encoding for
+comes back declared UTF-8, so the property holds on its bytes rather
+than under \code{identical()}.
 The second holds for every document this package can write. Foreign
 documents are read under the same grammar and normalize on the first
 round trip, since a mixed-type array such as \verb{[1, "a"]} has to come
@@ -175,7 +178,8 @@ frame binds it back comes back bound that way. What stays refused,
 naming both ends of it, is a cycle closing through an object the
 extension protocol builds in one call, an opted-in \code{R6} instance among
 them, since a constructor cannot be handed an object that already
-exists.
+exists. So is one through an \code{R6} class a document carries the
+definition of, which is rebuilt in one call the same way.
 
 A language object is a value rather than a handle, so it round-trips
 exactly and nothing about it is deparsed. A call, an expression and a
@@ -263,15 +267,16 @@ frozen copy of an installed package where a reader wants the package that
 is installed. The global environment is the same answer for the opposite
 reason, being where a reference is most fragile and where recording by
 contents is least plausible alike: one closure over it would put a whole
-workspace into the document. An \code{R6} generator and the class name an S4
-object records keep their reference as well, neither having an embedded
-form to switch to. So does a record written by a \code{\link[=json_state]{json_state()}} method,
-whose class vector finds the \code{\link[=json_revive]{json_revive()}} method rebuilding it: that
-method is the class author's code rather than part of the value, so it
-stays where the author registered it. Plain mode records no class at all,
-so it and the flag cannot both be asked for, and the second contract holds
-within a mode rather than across the pair, a document carrying a
-definition writing back to itself where it is written the same way.
+workspace into the document. The class name an S4 object records keeps its
+reference as well, having no embedded form to switch to. So does a record
+written by a \code{\link[=json_state]{json_state()}} method, whose class vector finds the
+\code{\link[=json_revive]{json_revive()}} method rebuilding it: that method is the class author's
+code rather than part of the value, so it stays where the author registered
+it. An \code{R6} instance opted in through \code{\link[=r6_state]{r6_state()}} is such a record, and
+finds its generator by name as well. Plain mode records no class at all, so
+it and the flag cannot both be asked for, and the second contract holds
+within a mode rather than across the pair, a document carrying a definition
+writing back to itself where it is written the same way.
 
 An \code{R6} instance is refused as well, for a reason one level up. What an
 \code{R6} class guarantees is what its methods say rather than what its
@@ -282,6 +287,29 @@ the state opts in with that method, and \code{\link[=r6_state]{r6_state()}} is t
 recording them. An \code{R6} class generator needs no method either way: it
 is recorded by the class it names, and comes back the object it was
 written from.
+
+Where the \code{self_contained} flag asks for it, a generator is recorded by
+what it binds instead, the way an environment is recorded by its
+contents, apart from what is R6's own rather than the class's: \code{self} and
+the functions R6 installs in every generator, its own \code{clone} among the
+methods included, which is whatever refers back to the generator. On the
+way back \code{R6::R6Class()} makes an empty generator, which supplies that
+part again, and the recorded bindings and attributes are put back into
+it. A document holding one therefore needs R6 where it is read but not
+the package that defined the class, a class no name finds again is
+carried rather than refused, and whatever the class binds comes back as
+it was. The parent is carried by the same rule rather than as the
+expression finding it, so a chain comes back whole, and the rebuilt class
+no longer follows a parent redefined after it was written. Unlike an S7
+definition this one carries the methods, which an \code{R6} class holds rather
+than registering them on a generic, so a class fixed or upgraded since
+the document was written does not reach the one it rebuilds. The
+environment those methods close over is recorded by the environment rule,
+so a namespace the reader cannot find is replaced by the global
+environment with a warning, and a method calling into a package that is
+gone fails where it is called. What comes back is a new generator rather
+than the one the name finds, so writing it again without the flag is
+refused.
 
 A reference class instance is refused on the second half of that reason
 alone. Fields are declared there, so what the representation is already

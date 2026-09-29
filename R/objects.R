@@ -19,6 +19,10 @@ json_state.R6 <- function(x) {
 #' @export
 json_state.R6ClassGenerator <- function(x) {
 
+  if (writer_self_contained$on()) {
+    return(tagged_state(tag_r6_class, r6_definition(x)))
+  }
+
   if (!is_one_string(x$classname)) {
     refuse("cannot write an R6 generator that names no class")
   }
@@ -34,6 +38,41 @@ json_state.R6ClassGenerator <- function(x) {
   }
 
   tagged_state(tag_r6_class, list(class = classes, package = package))
+}
+
+# A generator is an environment, and what it binds is partly the class and
+# partly R6's own: `self`, and the functions R6 installs in every generator,
+# `new()` and `set()` among them. R6's part is what refers back to the
+# generator, and `R6Class()` supplies it again on the way back, so what is
+# recorded is the rest, the way an environment is recorded by its contents.
+r6_definition <- function(x) {
+
+  # Ordered by bytes rather than by the locale, as an environment's bindings
+  # are, so one generator writes one document on every machine.
+  nms <- sort(ls(x, all.names = TRUE), method = "radix")
+  bindings <- mget(nms, envir = x)
+  bindings <- bindings[!vapply(bindings, refers_back, logical(1L), gen = x)]
+
+  # R6 adds its own `clone` to the methods of a cloneable class, so a null
+  # holds its place there, a method list otherwise holding functions only.
+  methods <- bindings[["public_methods"]]
+
+  if (refers_back(methods[["clone"]], x)) {
+    methods["clone"] <- list(NULL)
+    bindings["public_methods"] <- list(methods)
+  }
+
+  # R6 keeps `inherit` as an expression it resolves in `parent_env`, which is
+  # a lookup the reader would have to repeat, so the parent it finds is what
+  # the record carries.
+  bindings["inherit"] <- list(x$get_inherit())
+
+  list(attributes = attributes(x), bindings = bindings)
+}
+
+refers_back <- function(value, gen) {
+  identical(value, gen) ||
+    (is.function(value) && identical(environment(value), gen))
 }
 
 # Fields are declared, so the question an `R6` class leaves open — which
@@ -250,9 +289,46 @@ declared_names <- function(chain, slot) {
 
 r6_class_revive <- function(state) {
 
+  # A definition carries the bindings of the generator and a reference does
+  # not, so that key is what tells the two apart, the way a constructor does
+  # for S7.
+  if (is_named_list(state) && "bindings" %in% names(state)) {
+    return(r6_rebuild(state))
+  }
+
   check_r6_state(state, paste0("a `", tag_r6_class, "` payload"))
 
   r6_generator(state[["class"]], state[["package"]])
+}
+
+r6_rebuild <- function(state) {
+
+  if (!requireNamespace("R6", quietly = TRUE)) {
+    stop("the R6 package is needed to revive an R6 class", call. = FALSE)
+  }
+
+  for (key in c("attributes", "bindings")) {
+    if (!is_named_list(state[[key]])) {
+      stop(
+        "the `", key, "` of a recorded R6 class have to be an object",
+        call. = FALSE
+      )
+    }
+  }
+
+  gen <- R6::R6Class(parent_env = emptyenv())
+  bindings <- state[["bindings"]]
+  methods <- bindings[["public_methods"]]
+
+  if ("clone" %in% names(methods) && is.null(methods[["clone"]])) {
+    methods["clone"] <- list(gen$clone_method)
+    bindings["public_methods"] <- list(methods)
+  }
+
+  fill_env(gen, bindings)
+  attributes(gen) <- state[["attributes"]]
+
+  gen
 }
 
 check_r6_state <- function(state, what) {
