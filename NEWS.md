@@ -4,6 +4,8 @@
 
 * The `self_contained` flag carries an `R6` class generator as well, recording what the generator binds apart from R6's own machinery and putting that back into an empty generator on the way in, so a document holding one reads where the class is gone. A generator the default refuses for want of a name that finds it again is carried rather than refused (#69).
 
+* The `self_contained` flag writes an `R6` instance whole where no `json_state()` method records it, as the environment it is, so a document holding one reads where neither the class nor R6 is available. An instance whose class has a method keeps the record that method writes, an `r6_state()` opt-in included (#73).
+
 * A function definition inside a body no longer carries the file it was parsed from into the document. The parser keeps that source reference as part of the `function` call rather than as an attribute, where the writer did not look for one (#98).
 
 # typedjson 0.1.1

@@ -1,6 +1,13 @@
 #' @export
 json_state.R6 <- function(x) {
 
+  # The refusals below rest on having to pick which bindings are the state.
+  # An instance written whole, by the environment rule it would take without
+  # a class, leaves nothing to pick, and is what the flag asks for instead.
+  if (writer_self_contained$on()) {
+    return(default_rule())
+  }
+
   classes <- class(x)
 
   # A method is registered on a class name, and an anonymous class has
@@ -106,7 +113,9 @@ json_state.refObjectGenerator <- function(x) {
 #' an `R6` class guarantees is what its methods say rather than what its
 #' bindings happen to hold: a private field is private precisely because
 #' it is not part of that contract. Writing one is therefore refused,
-#' naming the class and the method it wants.
+#' naming the class and the method it wants, unless the `self_contained`
+#' flag of [json_write()] asks for the instance whole, which records all of
+#' it and so asserts nothing about which part is state.
 #'
 #' A class author is the party who knows whether a field is stored or
 #' derived, whether `initialize` establishes an invariant, and whether a
@@ -153,7 +162,9 @@ json_state.refObjectGenerator <- function(x) {
 #' environment the class was defined in, which is checked on the way out
 #' as well as on the way in. A class defined inside a function, one whose
 #' name finds two generators, and a non-portable class are all refused
-#' where they are written.
+#' where they are written. The `self_contained` flag does not change that,
+#' since it leaves the record a method writes alone, so opting in gives up
+#' the whole form the flag writes for an instance whose class has no method.
 #'
 #' @param x The `R6` instance whose bindings are to be recorded.
 #' @param class Empty object carrying the recorded class vector, which

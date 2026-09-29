@@ -26,7 +26,9 @@ An \code{R6} instance has no \code{\link[=json_state]{json_state()}} method of i
 an \code{R6} class guarantees is what its methods say rather than what its
 bindings happen to hold: a private field is private precisely because
 it is not part of that contract. Writing one is therefore refused,
-naming the class and the method it wants.
+naming the class and the method it wants, unless the \code{self_contained}
+flag of \code{\link[=json_write]{json_write()}} asks for the instance whole, which records all of
+it and so asserts nothing about which part is state.
 }
 \details{
 A class author is the party who knows whether a field is stored or
@@ -74,7 +76,9 @@ Both halves need the generator to be findable by name in the
 environment the class was defined in, which is checked on the way out
 as well as on the way in. A class defined inside a function, one whose
 name finds two generators, and a non-portable class are all refused
-where they are written.
+where they are written. The \code{self_contained} flag does not change that,
+since it leaves the record a method writes alone, so opting in gives up
+the whole form the flag writes for an instance whose class has no method.
 }
 
 \examples{

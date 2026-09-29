@@ -194,6 +194,39 @@ back$new()$v
 
 The methods travel with the definition, so a class fixed or upgraded since the document was written does not reach the one it rebuilds. The rest of what the flag carries, and what it leaves by name, is set out in `vignette("design")`.
 
+## Writing an instance whole
+
+The same flag answers the refusal this page began with. What made writing an instance an assertion about its class was picking which of its bindings are the state, and an instance written whole picks nothing. It is written as the environment it is: fields, private bindings and methods, together with the environment the methods close over.
+
+```{r}
+Account <- R6::R6Class("Account",
+  public = list(
+    deposit = function(x) {
+      private$balance <- private$balance + x
+      invisible(self)
+    },
+    total = function() private$balance
+  ),
+  private = list(balance = 0)
+)
+
+account <- Account$new()$deposit(10)
+
+back <- json_read_str(json_write_str(account, self_contained = TRUE))
+
+back$deposit(5)$total()
+```
+
+Nothing is looked up on the way back, so the document reads where neither the class nor R6 is installed. Nothing is checked either. The object is rebuilt without its class, so its `initialize` does not run, a `finalize` method is not registered, and its methods are the ones the class had where the document was written.
+
+The private balance travels with the rest, which is the point of writing the object whole, and a credential would travel the same way. A class holding one writes a method, which is the answer to the refusal in any case, and the flag leaves the record a method writes alone. So the `store` from the first section writes the same document either way, and its key stays out.
+
+```{r}
+identical(json_write_str(store, self_contained = TRUE), json_write_str(store))
+```
+
+An opted-in class such as `Point` keeps its record under the flag as well, and finds its generator by name where it is read. Two limits remain. An active binding keeps an instance out, as it keeps out any environment, and most of a document holding an instance of a cloneable class is R6's own `clone` method, a copy of which R6 puts into every instance. The design notes in `vignette("design")` set out the rest.
+
 ## Reference classes, and where the refusal stops
 
 A reference class instance is refused on the same grounds and settled the same way. Half the question above already has an answer there, since a reference class declares its fields and `Class$fields()` says what the representation is. The other half is unchanged: the object is a reference, `initialize` may establish an invariant that no assignment reproduces, and a field is as good a place to keep a credential as a private binding is.
@@ -206,7 +239,7 @@ Cache <- setRefClass("Cache",
 json_write_str(Cache$new(root = tempdir(), key = "s3cret"))
 ```
 
-A method registered on the concrete class settles it, and so does one on any class between that and `envRefClass`, since the chain is what the writer looks along and what the document records. The refusal itself sits on the `envRefClass` rung, so that rung is taken, exactly as `R6` is. The generator is refused rather than recorded by the class it names, which is where this differs from the two above: walking into one reaches the internals of the `methods` package rather than anything the class declares.
+A method registered on the concrete class settles it, and so does one on any class between that and `envRefClass`, since the chain is what the writer looks along and what the document records. The refusal itself sits on the `envRefClass` rung, so that rung is taken, exactly as `R6` is. The generator is refused rather than recorded by the class it names, which is where this differs from the two above: walking into one reaches the internals of the `methods` package rather than anything the class declares. The same walk keeps an instance refused under the `self_contained` flag, since the instance binds its class definition.
 
 The refusal follows the label rather than the shape, and only a class system saying its instances are more than their bindings is such a label. An environment you have classed yourself says nothing of the kind, so the environment rule applies to it and its contents are written — the credential included.
 

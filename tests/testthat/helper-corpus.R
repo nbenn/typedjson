@@ -848,7 +848,7 @@ r6_shape_members <- function(spec, level) {
   members
 }
 
-r6_shape_class <- function(spec, id, env = parent.frame()) {
+r6_shape_class <- function(spec, id, env = parent.frame(), optin = TRUE) {
 
   gen <- NULL
   parent <- NULL
@@ -876,7 +876,9 @@ r6_shape_class <- function(spec, id, env = parent.frame()) {
     parent <- name
   }
 
-  local_r6_optin(name, env = env)
+  if (optin) {
+    local_r6_optin(name, env = env)
+  }
 
   gen
 }
@@ -890,9 +892,9 @@ r6_shape_scope <- function(obj, where) {
   obj[[".__enclos_env__"]][["private"]]
 }
 
-r6_shape_instance <- function(spec, id, env = parent.frame()) {
+r6_shape_instance <- function(spec, id, env = parent.frame(), optin = TRUE) {
 
-  obj <- suppressMessages(r6_shape_class(spec, id, env)$new())
+  obj <- suppressMessages(r6_shape_class(spec, id, env, optin)$new())
 
   if (!identical(spec[["hook"]], "none")) {
     assign("hook", r6_shape_hook, envir = r6_shape_scope(obj, spec[["hook"]]))
@@ -986,6 +988,47 @@ r6_class_settles <- function(spec, id) {
     },
     error = function(e) FALSE
   )
+}
+
+# An instance the flag writes whole takes the environment rule, so a shape
+# placing an active binding anywhere is refused for it, and every other shape
+# has to write the document it was read from.
+r6_instance_settles <- function(spec, id) {
+
+  obj <- r6_shape_instance(spec, id, optin = FALSE)
+
+  doc <- tryCatch(
+    json_write_str(obj, self_contained = TRUE),
+    error = function(e) structure(conditionMessage(e), class = "r6_refused")
+  )
+
+  if (any(spec[["active"]] > 0L)) {
+    return(
+      inherits(doc, "r6_refused") &&
+        startsWith(unclass(doc), "cannot write an active binding at `x$")
+    )
+  }
+
+  if (inherits(doc, "r6_refused")) {
+    return(FALSE)
+  }
+
+  tryCatch(
+    {
+      back <- suppressMessages(json_read_str(doc))
+
+      identical(json_write_str(back, self_contained = TRUE), doc) &&
+        identical(r6_shape_surface(obj), r6_shape_surface(back))
+    },
+    error = function(e) FALSE
+  )
+}
+
+r6_shape_passive <- function(spec) {
+
+  spec[["active"]][] <- 0L
+
+  spec
 }
 
 r6_shape_failures <- function(specs, settles = r6_shape_settles) {
