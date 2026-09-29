@@ -257,14 +257,10 @@ test_that("a generator comes back as it is, whatever changed it since", {
   noted <- build("CorpusR6Noted")
   attr(noted, "note") <- "kept"
 
-  locked <- build("CorpusR6Locked")
-  lockBinding("portable", locked)
-  lockEnvironment(locked)
-
   values <- list(
     set_later = set_later, extended = extended, debugged = debugged,
     cloned = cloned, renewed = renewed, subclassed = subclassed,
-    noted = noted, locked = locked
+    noted = noted
   )
 
   for (nm in names(values)) {
@@ -282,20 +278,6 @@ test_that("a generator comes back as it is, whatever changed it since", {
   expect_identical(
     json_read_str(json_write_str(renewed, self_contained = TRUE))$new(),
     "renewed"
-  )
-})
-
-test_that("an active binding on a generator is refused rather than read", {
-
-  gen <- local(
-    R6::R6Class("CorpusR6Live", public = list(n = 1)), envir = globalenv()
-  )
-  makeActiveBinding("live", function() stop("read"), gen)
-
-  expect_error(
-    json_write_str(gen, self_contained = TRUE),
-    "cannot write the active binding `live` of an R6 class generator at `x`",
-    fixed = TRUE
   )
 })
 
@@ -534,11 +516,6 @@ test_that("an R6 definition a document spells wrongly is refused", {
   expect_error(
     json_read_str(r6_class_document(attributes = "null")),
     "the `attributes` of a recorded R6 class have to be an object",
-    fixed = TRUE
-  )
-  expect_error(
-    json_read_str(r6_class_document(locked_bindings = '"zz"')),
-    "`locked_bindings` names `zz`, which the environment does not bind",
     fixed = TRUE
   )
 })

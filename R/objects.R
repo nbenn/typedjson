@@ -40,34 +40,24 @@ json_state.R6ClassGenerator <- function(x) {
   tagged_state(tag_r6_class, list(class = classes, package = package))
 }
 
-# A generator is an environment, and what it binds falls into two parts. Most
-# of it is the class: its name, members, parent, flags and the environment it
-# was defined in. The rest is R6's machinery, `self` and the closures every
-# generator encloses, which a walk would follow into R6's own capsule and which
-# `R6Class()` supplies again on the way back. So a generator is recorded the
-# way an environment is, apart from that machinery and its parent.
+# A generator is an environment, and what it binds is partly the class and
+# partly R6's own: `self`, and the functions R6 installs in every generator,
+# `new()` and `set()` among them. R6's part is what refers back to the
+# generator, and `R6Class()` supplies it again on the way back, so what is
+# recorded is the rest, the way an environment is recorded by its contents.
 r6_definition <- function(x) {
 
+  # Ordered by bytes rather than by the locale, as an environment's bindings
+  # are, so one generator writes one document on every machine.
   nms <- sort(ls(x, all.names = TRUE), method = "radix")
-  active <- nms[vapply(nms, bindingIsActive, logical(1L), env = x)]
-
-  if (length(active) > 0L) {
-    refuse(
-      "cannot write the active binding `", active[[1L]], "` of an R6 class ",
-      "generator"
-    )
-  }
-
   bindings <- mget(nms, envir = x)
-  machinery <- nms %in% r6_machinery() &
-    vapply(bindings, r6_owned, logical(1L), gen = x)
-  bindings <- bindings[!machinery]
+  bindings <- bindings[!vapply(bindings, refers_back, logical(1L), gen = x)]
 
   # R6 adds its own `clone` to the methods of a cloneable class, so a null
-  # holds its place, a method list otherwise holding functions only.
+  # holds its place there, a method list otherwise holding functions only.
   methods <- bindings[["public_methods"]]
 
-  if (r6_owned(methods[["clone"]], x)) {
+  if (refers_back(methods[["clone"]], x)) {
     methods["clone"] <- list(NULL)
     bindings["public_methods"] <- list(methods)
   }
@@ -77,37 +67,10 @@ r6_definition <- function(x) {
   # the record carries.
   bindings["inherit"] <- list(x$get_inherit())
 
-  locked <- nms[vapply(nms, bindingIsLocked, logical(1L), env = x)]
-
-  c(
-    list(attributes = attributes(x), bindings = bindings),
-    if (environmentIsLocked(x)) list(locked = TRUE),
-    if (length(locked) > 0L) list(locked_bindings = locked)
-  )
+  list(attributes = attributes(x), bindings = bindings)
 }
 
-# The machinery is read off a fresh generator rather than listed, as the names
-# it binds to itself or to a closure it encloses. Only the names are cached.
-r6_machinery <- local({
-
-  cached <- NULL
-
-  function() {
-
-    if (is.null(cached)) {
-
-      gen <- R6::R6Class(parent_env = emptyenv())
-      nms <- ls(gen, all.names = TRUE)
-
-      cached <<- nms[vapply(mget(nms, envir = gen), r6_owned, logical(1L),
-                            gen = gen)]
-    }
-
-    cached
-  }
-})
-
-r6_owned <- function(value, gen) {
+refers_back <- function(value, gen) {
   identical(value, gen) ||
     (is.function(value) && identical(environment(value), gen))
 }
@@ -364,14 +327,6 @@ r6_rebuild <- function(state) {
 
   fill_env(gen, bindings)
   attributes(gen) <- state[["attributes"]]
-
-  for (nm in locked_names(state[["locked_bindings"]], gen)) {
-    lockBinding(nm, gen)
-  }
-
-  if (isTRUE(state[["locked"]])) {
-    lockEnvironment(gen)
-  }
 
   gen
 }

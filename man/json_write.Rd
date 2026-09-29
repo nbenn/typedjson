@@ -290,24 +290,26 @@ written from.
 
 Where the \code{self_contained} flag asks for it, a generator is recorded by
 what it binds instead, the way an environment is recorded by its
-contents, apart from R6's own machinery: \code{self}, the closures every
-generator encloses, and R6's \code{clone} among its methods. On the way back
-\code{R6::R6Class()} makes an empty generator, which supplies that machinery
-again, and the recorded bindings, attributes and locks are put back into
-it. A document holding one therefore reads where the class is gone, a
-class no name finds again is carried rather than refused, and whatever
-the class binds comes back as it was. The parent is carried by the same
-rule rather than as the expression finding it, so a chain comes back
-whole, and the rebuilt class no longer follows a parent redefined after
-it was written. Unlike an S7 definition this one carries the methods,
-which an \code{R6} class holds rather than registering them on a generic, so a
-class fixed or upgraded since the document was written does not reach the
-one it rebuilds. The environment those methods close over is recorded by
-the environment rule, so a namespace the reader cannot find is replaced
-by the global environment with a warning, and a method calling into a
-package that is gone fails where it is called. What comes back is a new
-generator rather than the one the name finds, so writing it again without
-the flag is refused.
+contents, apart from what is R6's own rather than the class's: \code{self} and
+the functions R6 installs in every generator, its own \code{clone} among the
+methods included, which is whatever refers back to the generator. On the
+way back \code{R6::R6Class()} makes an empty generator, which supplies that
+part again, and the recorded bindings and attributes are put back into
+it. A document holding one therefore needs R6 where it is read but not
+the package that defined the class, a class no name finds again is
+carried rather than refused, and whatever the class binds comes back as
+it was. The parent is carried by the same rule rather than as the
+expression finding it, so a chain comes back whole, and the rebuilt class
+no longer follows a parent redefined after it was written. Unlike an S7
+definition this one carries the methods, which an \code{R6} class holds rather
+than registering them on a generic, so a class fixed or upgraded since
+the document was written does not reach the one it rebuilds. The
+environment those methods close over is recorded by the environment rule,
+so a namespace the reader cannot find is replaced by the global
+environment with a warning, and a method calling into a package that is
+gone fails where it is called. What comes back is a new generator rather
+than the one the name finds, so writing it again without the flag is
+refused.
 
 A reference class instance is refused on the second half of that reason
 alone. Fields are declared there, so what the representation is already
