@@ -848,7 +848,7 @@ r6_shape_members <- function(spec, level) {
   members
 }
 
-r6_shape_class <- function(spec, id, env = parent.frame(), optin = TRUE) {
+r6_shape_class <- function(spec, id, env = parent.frame()) {
 
   gen <- NULL
   parent <- NULL
@@ -876,9 +876,7 @@ r6_shape_class <- function(spec, id, env = parent.frame(), optin = TRUE) {
     parent <- name
   }
 
-  if (optin) {
-    local_r6_optin(name, env = env)
-  }
+  local_r6_optin(name, env = env)
 
   gen
 }
@@ -892,9 +890,9 @@ r6_shape_scope <- function(obj, where) {
   obj[[".__enclos_env__"]][["private"]]
 }
 
-r6_shape_instance <- function(spec, id, env = parent.frame(), optin = TRUE) {
+r6_shape_instance <- function(spec, id, env = parent.frame()) {
 
-  obj <- suppressMessages(r6_shape_class(spec, id, env, optin)$new())
+  obj <- suppressMessages(r6_shape_class(spec, id, env)$new())
 
   if (!identical(spec[["hook"]], "none")) {
     assign("hook", r6_shape_hook, envir = r6_shape_scope(obj, spec[["hook"]]))
@@ -990,12 +988,13 @@ r6_class_settles <- function(spec, id) {
   )
 }
 
-# An instance the flag writes whole takes the environment rule, so a shape
+# An instance the flag writes whole takes the environment rule whatever
+# methods its class has, the opt-in every shape makes included, so a shape
 # placing an active binding anywhere is refused for it, and every other shape
 # has to write the document it was read from.
 r6_instance_settles <- function(spec, id) {
 
-  obj <- r6_shape_instance(spec, id, optin = FALSE)
+  obj <- r6_shape_instance(spec, id)
 
   doc <- tryCatch(
     json_write_str(obj, self_contained = TRUE),

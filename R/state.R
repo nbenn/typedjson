@@ -31,7 +31,8 @@ tag_ext <- "~x"
 #' that makes one is refused outright, since a walk into it reaches the
 #' internals of the `methods` package rather than the class. A document
 #' written with the `self_contained` flag of [json_write()] takes an `R6`
-#' instance that has no method whole instead, as the environment it is.
+#' instance whole instead, as the environment it is, without asking for a
+#' method at all.
 #'
 #' @param x Object whose state is to be recorded.
 #' @param class Empty object carrying the recorded class vector, which
@@ -84,12 +85,6 @@ json_revive.default <- function(class, state) {
 
 tagged_state <- function(tag, state) {
   structure(list(tag, state), class = "typedjson_state")
-}
-
-# A method returning this hands the value back to the rule for its type, as
-# though the walk had found no method for it.
-default_rule <- function() {
-  structure(list(), class = "typedjson_default")
 }
 
 refuse <- function(...) {

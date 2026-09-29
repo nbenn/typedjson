@@ -656,32 +656,57 @@ test_that("an instance no method can record is carried whole", {
   )
 })
 
-test_that("an instance a method records keeps that record under the flag", {
+test_that("the flag writes an instance whole whatever methods its class has", {
 
-  # A method of the class's own may leave a field out, and the flag writing
-  # the instance whole would put it back, so the method's record stands.
-  local_state_method(
-    "CorpusR6Mute",
-    function(x) list(n = x$n),
-    function(class, state) {
-      out <- CorpusR6Mute$new()
-      out$n <- state$n
-      out
-    }
+  # A record a method writes is read back through the class's own reviver,
+  # found by name, which is the lookup a self-contained document exists to
+  # avoid, so no method is asked, an opt-in included.
+  local_state_method("CorpusR6Mute", function(x) stop("the method was asked"))
+
+  values <- list(
+    opted_in = CorpusR6Plain$new(),
+    own = CorpusR6Mute$new(),
+    opted_in_non_portable = CorpusR6Bound$new()
   )
 
-  values <- list(opted_in = CorpusR6Plain$new(), own = CorpusR6Mute$new())
-
   for (nm in names(values)) {
-    expect_identical(
-      json_write_str(values[[nm]], self_contained = TRUE),
-      json_write_str(values[[nm]]), info = nm
-    )
+
+    doc <- json_write_str(values[[nm]], self_contained = TRUE)
+
+    expect_no_match(doc, '"~x"', fixed = TRUE)
+    expect_env_equivalent(json_read_str(doc), values[[nm]])
   }
 
+  # Without the flag the class is asked again, as for any instance.
+  back <- json_read_str(
+    json_write_str(CorpusR6Plain$new(), self_contained = TRUE)
+  )
+
+  expect_match(json_write_str(back), '{"~x":', fixed = TRUE)
+})
+
+test_that("what a method leaves out is written whole, and a handle is not", {
+
+  local_r6_class("CorpusR6Keeper", public = list(key = NULL))
+  local_state_method("CorpusR6Keeper", function(x) list())
+
+  obj <- CorpusR6Keeper$new()
+  obj$key <- "s3cret"
+
+  expect_no_match(json_write_str(obj), "s3cret", fixed = TRUE)
+  expect_match(
+    json_write_str(obj, self_contained = TRUE), "s3cret", fixed = TRUE
+  )
+
+  path <- withr::local_tempfile()
+  writeLines("a", path)
+  obj$key <- file(path, open = "r")
+  withr::defer(close(obj$key))
+
   expect_error(
-    json_write_str(CorpusR6Bound$new(), self_contained = TRUE),
-    non_portable(c("CorpusR6Bound", "R6")), fixed = TRUE
+    json_write_str(obj, self_contained = TRUE),
+    "cannot write a value of type 'externalptr' at `x$bindings$key$conn_id`",
+    fixed = TRUE
   )
 })
 

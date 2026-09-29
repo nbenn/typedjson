@@ -34,10 +34,9 @@ writes plain JSON for a consumer that brings its own schema.}
 would otherwise record by name. The default records the name wherever one
 finds the class again, which is what a wire format wants; \code{TRUE} carries
 the definition instead, which is what an archive wants. An S7 class and
-an \code{R6} class generator are reached, and an \code{R6} instance no
-\code{\link[=json_state]{json_state()}} method records is written whole where the default refuses
-it, with \code{vignette("design")} setting out which names are left alone and
-why.}
+an \code{R6} class generator are reached, and an \code{R6} instance is written
+whole whatever methods its class has, with \code{vignette("design")} setting
+out which names are left alone and why.}
 }
 \value{
 The \code{json_write()} function returns \code{path} invisibly and
@@ -282,12 +281,12 @@ registering it where the document is read. So does a record
 written by a \code{\link[=json_state]{json_state()}} method, whose class vector finds the
 \code{\link[=json_revive]{json_revive()}} method rebuilding it: that method is the class author's
 code rather than part of the value, so it stays where the author registered
-it. An \code{R6} instance opted in through \code{\link[=r6_state]{r6_state()}} is such a record, and
-finds its generator by name as well, so opting in gives up the whole form
-the flag writes for an instance below. Plain mode records no class at all,
-so it and the flag cannot both be asked for, and the second contract holds
-within a mode rather than across the pair, a document carrying a definition
-writing back to itself where it is written the same way.
+it. An \code{R6} instance is the exception: its whole form needs no method, so
+the flag writes one whole whatever methods its class has, as below. Plain
+mode records no class at all, so it and the flag cannot both be asked for,
+and the second contract holds within a mode rather than across the pair, a
+document carrying a definition writing back to itself where it is written
+the same way.
 
 An \code{R6} instance is refused as well, for a reason one level up. What an
 \code{R6} class guarantees is what its methods say rather than what its
@@ -322,23 +321,30 @@ gone fails where it is called. What comes back is a new generator rather
 than the one the name finds, so writing it again without the flag is
 refused.
 
-The flag reaches an \code{R6} instance as well, where no \code{\link[=json_state]{json_state()}} method
-records it, and answers the refusal rather than overriding it. What made
-recording an instance an assertion about its class was picking which of
-its bindings are the state, and an instance written whole picks nothing:
-the environment rule records it like any other environment, so its
-fields, its private bindings, its methods and the environment those close
-over all travel. What comes back is that environment wearing the class
-attribute, built without the generator, so a document holding one reads
-where neither the class nor R6 is available. Nothing checks it on the way
-back either. It is built without running its \code{initialize} or registering
-a \code{finalize} method, and its methods are the ones the class had where the
-document was written, so a class fixed or upgraded since does not reach
-the object. An active binding keeps an instance out, as it keeps out any
-environment. Most of what an instance of a cloneable class writes is R6's
-own \code{clone} method, a copy of which R6 puts into the instance and into
-each level of the chain it inherits. The class of what comes back still
-has no method, so writing it again without the flag is refused.
+The flag reaches an \code{R6} instance as well, and answers the refusal rather
+than overriding it. What made recording an instance an assertion about
+its class was picking which of its bindings are the state, and an
+instance written whole picks nothing: the environment rule records it
+like any other environment, so its fields, its private bindings, its
+methods and the environment those close over all travel. No
+\code{\link[=json_state]{json_state()}} method is asked, an opt-in through \code{\link[=r6_state]{r6_state()}} included,
+since the record a method writes is read back through the class's own
+\code{\link[=json_revive]{json_revive()}}, found by name, which is the lookup the flag exists to
+avoid. So a field a method would leave out is written, a credential
+included, and a handle a method would stand in for stops the write, as it
+does in any environment, since no document can carry one. What comes back
+is that environment wearing the class attribute, built without the
+generator, so a document holding one reads where neither the class nor R6
+is available. Nothing checks it on the way back either. It is built
+without running its \code{initialize} or registering a \code{finalize} method, and
+its methods are the ones the class had where the document was written, so
+a class fixed or upgraded since does not reach the object. An active
+binding keeps an instance out, as it keeps out any environment. Most of
+what an instance of a cloneable class writes is R6's own \code{clone} method,
+a copy of which R6 puts into the instance and into each level of the
+chain it inherits. Writing what comes back without the flag asks its
+class for a method as for any instance, and is refused where the class
+has none.
 
 A reference class instance is refused on the second half of that reason
 alone. Fields are declared there, so what the representation is already

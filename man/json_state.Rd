@@ -50,7 +50,8 @@ class settles it, as does one on any class between that and
 that makes one is refused outright, since a walk into it reaches the
 internals of the \code{methods} package rather than the class. A document
 written with the \code{self_contained} flag of \code{\link[=json_write]{json_write()}} takes an \code{R6}
-instance that has no method whole instead, as the environment it is.
+instance whole instead, as the environment it is, without asking for a
+method at all.
 }
 \examples{
 handle <- structure(list(path = "/tmp/log", con = "a live connection"),
