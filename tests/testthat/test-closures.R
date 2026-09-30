@@ -172,14 +172,6 @@ test_that("a binding the writer cannot record is refused inside a closure", {
     json_write_str(fun), "type 'promise' at `x$environment$bindings$lazy`",
     fixed = TRUE
   )
-
-  environment(fun) <- corpus_env_active()
-
-  expect_error(
-    json_write_str(fun),
-    "cannot write an active binding at `x$environment$bindings$live`",
-    fixed = TRUE
-  )
 })
 
 test_that("a recorded closure the reader cannot use is an error", {

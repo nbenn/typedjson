@@ -150,15 +150,33 @@ env_contents <- function(state, env) {
     )
   }
 
+  active <- flagged_names(state, "active_bindings", names(bindings))
+  locked <- flagged_names(state, "locked_bindings", names(bindings))
+
+  odd <- active[!vapply(bindings[active], is.function, logical(1L))]
+
+  if (length(odd) > 0L) {
+    stop(
+      "`active_bindings` names `", odd[[1L]], "`, which is bound to something ",
+      "other than a function", call. = FALSE
+    )
+  }
+
   if (is.null(env)) {
     env <- new.env(parent = parent)
   } else {
     parent.env(env) <- parent
   }
 
-  fill_env(env, bindings)
+  fill_env(env, bindings[!names(bindings) %in% active])
 
-  for (nm in locked_names(state[["locked_bindings"]], env)) {
+  # Making a binding active does not call its function, so reading one runs
+  # nothing the document holds.
+  for (nm in active) {
+    makeActiveBinding(nm, bindings[[nm]], env)
+  }
+
+  for (nm in locked) {
     lockBinding(nm, env)
   }
 
@@ -169,22 +187,24 @@ env_contents <- function(state, env) {
   env
 }
 
-locked_names <- function(nms, env) {
+flagged_names <- function(state, key, bound) {
+
+  nms <- state[[key]]
 
   if (is.null(nms)) {
     return(character())
   }
 
   if (!is.character(nms) || anyNA(nms)) {
-    stop("`locked_bindings` has to name bindings", call. = FALSE)
+    stop("`", key, "` has to name bindings", call. = FALSE)
   }
 
-  unknown <- setdiff(nms, ls(env, all.names = TRUE))
+  unknown <- setdiff(nms, bound)
 
   if (length(unknown) > 0L) {
     stop(
-      "`locked_bindings` names `", unknown[[1L]], "`, which the environment ",
-      "does not bind", call. = FALSE
+      "`", key, "` names `", unknown[[1L]], "`, which the environment does ",
+      "not bind", call. = FALSE
     )
   }
 

@@ -125,6 +125,8 @@ class Writer {
   yyjson_mut_val *emit_env(SEXP x, const std::vector<Attrib> &attrs);
   yyjson_mut_val *emit_env_named(SEXP named);
   yyjson_mut_val *emit_env_contents(SEXP x);
+  void add_names(yyjson_mut_val *obj, const char *key,
+                 const std::vector<SEXP> &names);
   yyjson_mut_val *emit_fun(SEXP x);
   yyjson_mut_val *emit_plain(SEXP x, SEXP nms, bool boxed);
   yyjson_mut_val *emit_tagged(SEXP x, const std::vector<Attrib> &attrs,
@@ -525,6 +527,11 @@ yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
 
   SEXP nms = PROTECT(R_lsInternal3(x, TRUE, FALSE));
   R_xlen_t n = XLENGTH(nms);
+
+  // Active and locked are flags R keeps on a binding rather than on the
+  // environment, so each is a list of the names it is set on. What an active
+  // binding holds is the function it runs, which goes where a value would.
+  std::vector<SEXP> active;
   std::vector<SEXP> locked;
 
   // R sorts `ls()` by the collation locale, which would write one environment
@@ -549,15 +556,10 @@ yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
       SEXP value = R_NilValue;
       Step at(this, name, i);
 
-      switch (binding_of(sym, x, &value)) {
-        case BIND_ACTIVE:
-          fail("cannot write an active binding");
-        case BIND_PROMISE:
-          fail("cannot write a value of type 'promise'");
-        default:
-          break;
-      }
+      BindKind kind = binding_of(sym, x, &value);
 
+      if (kind == BIND_PROMISE) fail("cannot write a value of type 'promise'");
+      if (kind == BIND_ACTIVE) active.push_back(name);
       if (R_BindingIsLocked(sym, x)) locked.push_back(name);
 
       yyjson_mut_obj_add(bindings, str_val(name), emit(value, false));
@@ -571,18 +573,24 @@ yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
                        yyjson_mut_bool(doc_, true));
   }
 
-  if (!locked.empty()) {
-    SEXP some = PROTECT(Rf_allocVector(STRSXP, (R_xlen_t)locked.size()));
-    for (size_t i = 0; i < locked.size(); ++i) {
-      SET_STRING_ELT(some, (R_xlen_t)i, locked[i]);
-    }
-    yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kEnvLockedBindings),
-                       emit_plain(some, R_NilValue, false));
-    UNPROTECT(1);
-  }
+  add_names(obj, kEnvActiveBindings, active);
+  add_names(obj, kEnvLockedBindings, locked);
 
   UNPROTECT(1);
   return obj;
+}
+
+void Writer::add_names(yyjson_mut_val *obj, const char *key,
+                       const std::vector<SEXP> &names) {
+  if (names.empty()) return;
+
+  SEXP some = PROTECT(Rf_allocVector(STRSXP, (R_xlen_t)names.size()));
+  for (size_t i = 0; i < names.size(); ++i) {
+    SET_STRING_ELT(some, (R_xlen_t)i, names[i]);
+  }
+  yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, key),
+                     emit_plain(some, R_NilValue, false));
+  UNPROTECT(1);
 }
 
 yyjson_mut_val *Writer::emit_fun(SEXP x) {

@@ -710,20 +710,33 @@ test_that("what a method leaves out is written whole, and a handle is not", {
   )
 })
 
-test_that("an active binding keeps an instance out of the whole form", {
+test_that("an active field comes back active at every level of the chain", {
 
-  obj <- local(
-    R6::R6Class(
-      "CorpusR6WholeActive", public = list(side = 2),
-      active = list(area = function() self$side^2)
-    ),
-    envir = globalenv()
-  )$new()
-
-  expect_error(
-    json_write_str(obj, self_contained = TRUE),
-    "cannot write an active binding at `x$bindings$area`", fixed = TRUE
+  local_r6_class(
+    "CorpusR6WholeShape", public = list(side = 2),
+    active = list(area = function() self$side^2)
   )
+  local_r6_class(
+    "CorpusR6WholeSquare", inherit = CorpusR6WholeShape,
+    active = list(area = function() super$area + 1)
+  )
+
+  obj <- CorpusR6WholeSquare$new()
+  doc <- json_write_str(obj, self_contained = TRUE)
+  back <- json_read_str(doc)
+  enclos <- back$.__enclos_env__
+
+  expect_match(doc, '"active_bindings":"area"', fixed = TRUE)
+  expect_env_equivalent(back, obj)
+  expect_identical(json_write_str(back, self_contained = TRUE), doc)
+  expect_identical(environment(activeBindingFunction("area", back)), enclos)
+  expect_true(bindingIsActive("area", enclos$super))
+
+  back$side <- 3
+  copy <- back$clone()
+  copy$side <- 4
+
+  expect_identical(c(obj$area, back$area, copy$area), c(5, 10, 17))
 })
 
 test_that("a cycle through whole instances closes again on the way back", {

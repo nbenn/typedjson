@@ -65,7 +65,7 @@ The second falls out of the first once foreign documents are read under the same
 Four values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test — and a closure over such an environment is stated the same way, since it is that environment plus a formals and a body that do come back identical. An S7 class a document carries the definition of is the first case reached through a class rather than through an environment written on its own: S7 builds the constructor of a class that has a parent in an environment of its own, that environment is recorded by its contents like any other, and so no by-value scheme can hand back the object that was written. Base R does not manage it either, `identical(unserialize(serialize(x, NULL)), x)` being `FALSE` for an S7 object in the same session. An `R6` class a document carries the definition of goes a step further, since the class is an environment itself: it comes back a new generator whatever its parts close over, equivalent to the one written apart from holding its parent where that held the expression finding one. An `R6` instance the flag writes whole needs no case of its own, being an environment recorded by its contents like any other. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
 
 - **Exact.** The relation above, which every other value in scope meets, and which an environment recorded by name meets too. A string carrying no encoding declaration meets it on its bytes.
-- **Equivalent.** Same bindings by name and by value, same locked and active status, and a parent that is itself equivalent. A closure meets it where its formals and body are identical and the environment it closes over is equivalent.
+- **Equivalent.** Same bindings by name and by value, the value of an active binding being the function it runs, same locked and active status, and a parent that is itself equivalent. A closure meets it where its formals and body are identical and the environment it closes over is equivalent.
 
 The second contract is untouched either way: a document written from a rebuilt environment writes the same bytes again.
 
@@ -406,7 +406,16 @@ lockEnvironment(counter, bindings = TRUE)
 json_write_str(counter)
 ```
 
-Two bindings are refused rather than recorded, and for the same reason: reading either one runs code. A promise would have to be forced, and an environment captured inside a function holds its arguments unforced, so forcing one on the writer's own initiative can error or do arbitrary work at write time. An active binding would have to be called, and recording what it returned would hand back a plain binding wearing its value. Base R writes both unevaluated; this format refuses them, and says where.
+Two bindings would have to run code to be read, and neither is read. A promise would have to be forced, and an environment captured inside a function holds its arguments unforced, so forcing one on the writer's own initiative can error or do arbitrary work at write time. A promise is refused instead, and the error says where. An active binding would have to be called, and recording what it returned would hand back a plain binding wearing its value. Base R writes both unevaluated, and this format writes an active binding the same way. R hands back the function the binding runs without calling it, and that function goes under `bindings` where a plain binding's value would. Being active is a property of the binding, as being locked is: R keeps both as flags on the binding itself, and `serialize()` writes them with it. So `active_bindings` lists the names the flag is set on, as `locked_bindings` does for a lock, and on the way back `makeActiveBinding()` makes each one active again. The function is called on neither side, and is a closure like any other, recorded by the rule for closures below.
+
+```{r}
+clock <- new.env(parent = globalenv())
+makeActiveBinding("now", Sys.time, clock)
+
+json_write_str(clock)
+
+bindingIsActive("now", json_read_str(json_write_str(clock)))
+```
 
 A name that is not available on the way back is replaced by the global environment with a warning, which is what base R already does through `findPackageEnv()` and `..getNamespace()`. Substituting silently was never on the table.
 
@@ -549,7 +558,7 @@ Two bindings raise a question the S7 side did not, and so do the methods.
 
 Nothing is looked up in either direction, so a class the write-time check refuses — one defined inside a function, one that names no class, one whose name finds two generators — is carried wherever the flag is set. What comes back is a new generator, equivalent to the one written apart from holding its parent where that held the expression finding one. The name does not find it again, so writing it without the flag is refused rather than recording a reference that would resolve to the class the session holds.
 
-An `R6` instance is where the flag does more than trade a name for a definition, since the default refuses an instance rather than naming it. That refusal rests on having to choose: recording an instance as its bindings asserts that the bindings are its state, which only the class can say, and `r6_state()` is how its author says so. An instance written whole makes no choice. It is an environment, recorded by its contents the way any environment is — fields and private bindings, methods, and the environment the methods close over — so nothing is left to assert on the class's behalf, and the objection is answered rather than overridden.
+An `R6` instance is where the flag does more than trade a name for a definition, since the default refuses an instance rather than naming it. That refusal rests on having to choose: recording an instance as its bindings asserts that the bindings are its state, which only the class can say, and `r6_state()` is how its author says so. An instance written whole makes no choice. It is an environment, recorded by its contents the way any environment is — fields and private bindings, an active field as the function it runs, methods, and the environment the methods close over — so nothing is left to assert on the class's behalf, and the objection is answered rather than overridden.
 
 ```{r, eval = requireNamespace("R6", quietly = TRUE)}
 Meter <- R6::R6Class("Meter",
@@ -576,12 +585,11 @@ back <- json_read_str(json_write_str(meter, self_contained = TRUE))
 back$add()$n
 ```
 
-Four costs come with it.
+Three costs come with it.
 
 - The **methods** are the ones the class had where the document was written, as with a generator the flag carries, so a class fixed or upgraded since does not reach the object. That is what an archive asks for and the opposite of what a wire format wants, which is why the default goes on refusing rather than writing an instance this way.
 - **Nothing checks** the object on the way back. It is built without the generator, so there is no class to check it against, as `S7::validate()` checks an S7 object, and no warning where the class has since dropped a field, as `r6_restore()` gives. Nor does `initialize` run, and a `finalize` method is not registered on the object that comes back.
 - **R6's own `clone`** is most of the document. R6 puts a copy of that method into every instance of a cloneable class, and into each level of the chain the class inherits. Leaving it out, as a carried generator does, would have R6 supply it again where the document is read, which is the lookup the whole form avoids. The `Meter` class above is built without it to keep its document short.
-- An **active binding** keeps an instance out, as it keeps out any environment, since reading one runs code. Recording the function it runs instead would change the environment rule for every environment rather than for this one.
 
 How much of a document `clone` makes shows on the `Tally` class from the generator example, beside the same class built without it.
 

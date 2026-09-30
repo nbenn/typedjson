@@ -12,6 +12,8 @@
 
 * The S4 bit comes back on every type the reader builds. Complex, raw, language, pairlist, environment and function values used to lose it, a method definition among them, and with the bit went the class's validity check, which runs only on a value carrying it, so an edited document could read into a value its class rejects. A document asking for the bit on an object R shares, which is `NULL`, a symbol, a primitive or an environment recorded by name, no longer sets it on that object for the rest of the session (#96).
 
+* An active binding is recorded by the function it runs rather than refused, and comes back active, so an environment holding one round-trips, as does an `R6` instance with an active field under the `self_contained` flag. The function is called on neither side, which is how `serialize()` records one too (#99).
+
 # typedjson 0.1.1
 
 * Installs cleanly with GCC 16 under link-time optimization, where 0.1.0 drew a spurious `-Wstringop-overflow` warning (#86).
