@@ -146,6 +146,32 @@ test_that("a payload that states its own type needs no tag", {
   expect_identical(asS4(s4, FALSE), c(1.5, 2.5))
 })
 
+test_that("a document cannot set the S4 bit on an object R shares", {
+
+  shared <- c(
+    list(null = NULL, primitive = sum, symbol = quote(corpus_shared)),
+    corpus_envs()
+  )
+
+  # A bit set on one of these stays set for the rest of the session, so a
+  # regression is undone here rather than left to derail every later test.
+  withr::defer(for (x in shared) asS4(x, FALSE, FALSE))
+
+  written <- c('{"~t":"NULL"}', vapply(shared, json_write_str, character(1L)))
+  tagged <- written[startsWith(written, "{")]
+
+  docs <- c(
+    paste0('{"~s4":true,"~v":', written, "}"),
+    sub("{", '{"~s4":true,', tagged, fixed = TRUE)
+  )
+
+  for (doc in docs) {
+    json_read_str(doc)
+  }
+
+  expect_identical(names(Filter(isS4, shared)), character())
+})
+
 test_that("a tag the payload already carries is honored and then dropped", {
 
   doc <- '{"~t":"double","~a":{"class":"Date"},"~v":20454.0}'

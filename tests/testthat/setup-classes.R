@@ -18,6 +18,18 @@ methods::setClass(
 )
 
 methods::setClass(
+  "CorpusS4Complex", contains = "complex",
+  validity = function(object) {
+    if (length(object) != 2L) "a CorpusS4Complex holds two values" else TRUE
+  },
+  where = global
+)
+
+methods::setClass("CorpusS4Raw", contains = "raw", where = global)
+
+methods::setClass("CorpusS4Function", contains = "function", where = global)
+
+methods::setClass(
   "CorpusS4Valid", methods::representation(x = "numeric"),
   validity = function(object) {
     if (object@x < 0) "x must be non-negative" else TRUE
@@ -32,6 +44,16 @@ methods::setClass(
 methods::setClass(
   "CorpusS4Derived", contains = "CorpusS4Base",
   methods::representation(b = "character"), where = global
+)
+
+methods::setGeneric(
+  "corpus_area", function(shape) standardGeneric("corpus_area"),
+  where = global
+)
+
+methods::setMethod(
+  "corpus_area", "CorpusS4", corpus_closure("function(shape) 0"),
+  where = global
 )
 
 assign(
@@ -322,7 +344,15 @@ if (has_s7) {
 
 corpus <- c(
   corpus,
-  list("r6/generator" = get("CorpusR6", envir = global))
+  list(
+    "r6/generator" = get("CorpusR6", envir = global),
+    "s4/complex" = methods::new("CorpusS4Complex", c(1i, 2i)),
+    "s4/raw" = methods::new("CorpusS4Raw", as.raw(c(0, 255))),
+    "s4/function" = methods::new(
+      "CorpusS4Function", corpus_closure("function(x) x")
+    ),
+    "s4/method" = methods::getMethod("corpus_area", "CorpusS4", where = global)
+  )
 )
 
 if (has_s7) {
@@ -357,8 +387,12 @@ for (cls in c(
 
 withr::defer(
   {
+    methods::removeGeneric("corpus_area", where = global)
     methods::removeClass("CorpusS4", where = global)
     methods::removeClass("CorpusS4Numeric", where = global)
+    methods::removeClass("CorpusS4Complex", where = global)
+    methods::removeClass("CorpusS4Raw", where = global)
+    methods::removeClass("CorpusS4Function", where = global)
     methods::removeClass("CorpusS4Valid", where = global)
     methods::removeClass("CorpusS4Derived", where = global)
     methods::removeClass("CorpusS4Base", where = global)
