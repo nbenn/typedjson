@@ -8,6 +8,10 @@
 
 * A function definition inside a body no longer carries the file it was parsed from into the document. The parser keeps that source reference as part of the `function` call rather than as an attribute, where the writer did not look for one (#98).
 
+* Reading a document no longer runs a call recorded with the S4 bit or an `S7_class` attribute. Either one sends the value to the class's validity check, which, unlike every other hook, was handed it outside `quote()`, so R evaluated the call on the way in (#96).
+
+* The S4 bit comes back on every type the reader builds. Complex, raw, language, pairlist, environment and function values used to lose it, a method definition among them, and with the bit went the class's validity check, which runs only on a value carrying it, so an edited document could read into a value its class rejects. A document asking for the bit on an object R shares, which is `NULL`, a symbol, a primitive or an environment recorded by name, no longer sets it on that object for the rest of the session (#96).
+
 # typedjson 0.1.1
 
 * Installs cleanly with GCC 16 under link-time optimization, where 0.1.0 drew a spurious `-Wstringop-overflow` warning (#86).

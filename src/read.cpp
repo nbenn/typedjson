@@ -127,6 +127,35 @@ bool is_tagged(yyjson_val *v) {
          yyjson_obj_get(v, kTagValue) != nullptr;
 }
 
+// R hands out a single object for NULL, for each symbol and for each
+// primitive, and an environment recorded by name reads back as the one the
+// name finds, so what is set on one of these is set on every other reference
+// to it for the rest of the session. The imports environment of a namespace
+// carries its name the way a package environment does, but R has no
+// predicate for it.
+bool shared(SEXP x) {
+  switch (TYPEOF(x)) {
+    case NILSXP:
+    case SYMSXP:
+    case BUILTINSXP:
+    case SPECIALSXP:
+      return true;
+    case ENVSXP: {
+      if (x == R_GlobalEnv || x == R_BaseEnv || x == R_EmptyEnv ||
+          R_IsNamespaceEnv(x) || R_IsPackageEnv(x)) {
+        return true;
+      }
+      const char *prefix = "imports:";
+      SEXP name = Rf_getAttrib(x, R_NameSymbol);
+      return TYPEOF(name) == STRSXP && XLENGTH(name) > 0 &&
+             std::strncmp(CHAR(STRING_ELT(name, 0)), prefix,
+                          std::strlen(prefix)) == 0;
+    }
+    default:
+      return false;
+  }
+}
+
 int nibble(char c) {
   if (c >= '0' && c <= '9') return c - '0';
   if (c >= 'a' && c <= 'f') return c - 'a' + 10;
@@ -580,10 +609,12 @@ SEXP Reader::build_tagged(yyjson_val *v) {
     PROTECT_INDEX at;
     PROTECT_WITH_INDEX(out = build(payload), &at);
     if (type != kNoType) REPROTECT(out = coerce(out, type), at);
-    if (wants_s4) REPROTECT(out = Rf_asS4(out, TRUE, 0), at);
     UNPROTECT(1);
   }
-  PROTECT(out);
+  PROTECT_INDEX at;
+  PROTECT_WITH_INDEX(out, &at);
+
+  if (wants_s4 && !shared(out)) REPROTECT(out = Rf_asS4(out, TRUE, 0), at);
 
   if (out == R_NilValue && attrs != R_NilValue) {
     UNPROTECT(2);
@@ -687,7 +718,9 @@ void Reader::gate(SEXP x, SEXP attrs) {
 
   if (Rf_isS4(x) ||
       (attrs != R_NilValue && Rf_getAttrib(x, s7_class) != R_NilValue)) {
-    validate_(x);
+    SEXP value = PROTECT(quoted(x));
+    validate_(value);
+    UNPROTECT(1);
   }
 }
 

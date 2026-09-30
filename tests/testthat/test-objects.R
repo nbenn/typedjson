@@ -56,6 +56,28 @@ test_that("an edited S4 object is refused by the class's own validity", {
   )
 })
 
+test_that("an edited S4 object over a basic type is refused by its validity", {
+
+  doc <- json_write_str(methods::new("CorpusS4Complex", c(1i, 2i)))
+  edited <- sub(
+    '"re":[0.0,0.0],"im":[1.0,2.0]', '"re":[0.0],"im":[1.0]', doc,
+    fixed = TRUE
+  )
+
+  expect_error(json_read_str(edited), "holds two values", fixed = TRUE)
+})
+
+test_that("the S4 bit comes back on a call, a pairlist and an environment", {
+
+  for (value in list(asS4(quote(f(x))), asS4(pairlist(a = 1)))) {
+    expect_identical(json_read_str(json_write_str(value)), value)
+  }
+
+  env <- asS4(new.env(parent = emptyenv()))
+
+  expect_true(isS4(json_read_str(json_write_str(env))))
+})
+
 test_that("an edited S7 object is refused by the class's own validator", {
   skip_if_not_installed("S7")
 
