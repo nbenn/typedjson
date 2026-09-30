@@ -994,7 +994,13 @@ test_that("a classed call reaches its json_state() method unevaluated", {
 test_that("every R6 class shape settles or names its refusal", {
 
   grid <- r6_shape_grid()
+  portable <- vapply(grid, `[[`, logical(1L), "portable")
 
   expect_length(grid, 815L)
-  expect_identical(r6_shape_failures(grid), character())
+  expect_identical(
+    r6_shape_failures(grid[portable], r6_optin_round_trips), character()
+  )
+  expect_identical(
+    r6_shape_failures(grid[!portable], r6_optin_refused), character()
+  )
 })
