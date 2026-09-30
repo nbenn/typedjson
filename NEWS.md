@@ -4,6 +4,10 @@
 
 * The `self_contained` flag carries an `R6` class generator as well, recording what the generator binds apart from R6's own machinery and putting that back into an empty generator on the way in, so a document holding one reads where the class is gone. A generator the default refuses for want of a name that finds it again is carried rather than refused (#69).
 
+* The `self_contained` flag writes an `R6` instance whole, as the environment it is, without asking its class for a `json_state()` method, so a document holding one reads where neither the class nor R6 is available. Everything the instance holds is written, a field a method would leave out included, and a handle it holds stops the write (#73).
+
+* A function definition inside a body no longer carries the file it was parsed from into the document. The parser keeps that source reference as part of the `function` call rather than as an attribute, where the writer did not look for one (#98).
+
 # typedjson 0.1.1
 
 * Installs cleanly with GCC 16 under link-time optimization, where 0.1.0 drew a spurious `-Wstringop-overflow` warning (#86).

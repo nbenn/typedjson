@@ -531,6 +531,228 @@ test_that("every R6 class shape the flag carries settles", {
   )
 })
 
+test_that("the flag writes an R6 instance whole where no method records it", {
+
+  obj <- CorpusR6Mute$new()
+  obj$n <- 4
+
+  doc <- json_write_str(obj, self_contained = TRUE)
+
+  expect_match(
+    doc, '"~t":"environment","~a":{"class":["CorpusR6Mute","R6"]}',
+    fixed = TRUE
+  )
+  expect_no_match(doc, '"~x"', fixed = TRUE)
+  expect_error(json_write_str(obj), needs_method("CorpusR6Mute"), fixed = TRUE)
+
+  back <- json_read_str(doc)
+
+  expect_env_equivalent(back, obj)
+  expect_identical(back$n, 4)
+  expect_identical(json_write_str(back, self_contained = TRUE), doc)
+})
+
+test_that("a whole instance needs no generator where it is read", {
+
+  global <- globalenv()
+
+  assign(
+    "CorpusR6WholeBase",
+    local(
+      R6::R6Class(
+        "CorpusR6WholeBase",
+        public = list(
+          n = 1,
+          bump = function() {
+            self$n <- self$n + 1
+            private$bumps <- private$bumps + 1L
+            invisible(self)
+          },
+          describe = function() paste("base", self$n, private$bumps)
+        ),
+        private = list(bumps = 0L)
+      ),
+      envir = global
+    ),
+    envir = global
+  )
+
+  sub <- local(
+    R6::R6Class(
+      "CorpusR6Whole", inherit = CorpusR6WholeBase,
+      public = list(describe = function() paste("sub", super$describe()))
+    ),
+    envir = global
+  )
+
+  obj <- sub$new()$bump()
+  doc <- json_write_str(obj, self_contained = TRUE)
+
+  # The parent is gone where the document is read, and the child could not
+  # make an instance without it.
+  rm("CorpusR6WholeBase", envir = global)
+
+  back <- json_read_str(doc)
+
+  expect_identical(class(back), c("CorpusR6Whole", "CorpusR6WholeBase", "R6"))
+  expect_identical(back$describe(), "sub base 2 1")
+  expect_identical(back$.__enclos_env__$self, back)
+  expect_identical(back$bump()$describe(), "sub base 3 2")
+  expect_identical(obj$n, 2)
+
+  copy <- back$clone()
+  copy$bump()
+
+  expect_identical(c(back$n, copy$n), c(3, 4))
+})
+
+test_that("an archived instance keeps the methods it was written with", {
+
+  archived <- local(
+    R6::R6Class(
+      "CorpusR6Kept", public = list(describe = function() "archived")
+    ),
+    envir = globalenv()
+  )
+
+  doc <- json_write_str(archived$new(), self_contained = TRUE)
+
+  # The reading session holds a newer version of the class, which an instance
+  # written whole never consults.
+  local_r6_class(
+    "CorpusR6Kept", public = list(describe = function() "installed")
+  )
+
+  expect_identical(json_read_str(doc)$describe(), "archived")
+})
+
+test_that("an instance no method can record is carried whole", {
+
+  # The anonymous class names nothing to register a method on, and the
+  # non-portable one binds `self` and `private` beside its state.
+  bound <- local(
+    R6::R6Class(
+      "CorpusR6WholeBound", portable = FALSE,
+      public = list(n = 1, get = function() n + secret),
+      private = list(secret = 10)
+    ),
+    envir = globalenv()
+  )
+
+  values <- list(anonymous = CorpusR6Anon$new(), non_portable = bound$new())
+
+  for (nm in names(values)) {
+
+    expect_error(json_write_str(values[[nm]]), info = nm)
+
+    back <- json_read_str(json_write_str(values[[nm]], self_contained = TRUE))
+
+    expect_env_equivalent(back, values[[nm]])
+  }
+
+  expect_identical(
+    json_read_str(json_write_str(bound$new(), self_contained = TRUE))$get(),
+    11
+  )
+})
+
+test_that("the flag writes an instance whole whatever methods its class has", {
+
+  # A record a method writes is read back through the class's own reviver,
+  # found by name, which is the lookup a self-contained document exists to
+  # avoid, so no method is asked, an opt-in included.
+  local_state_method("CorpusR6Mute", function(x) stop("the method was asked"))
+
+  values <- list(
+    opted_in = CorpusR6Plain$new(),
+    own = CorpusR6Mute$new(),
+    opted_in_non_portable = CorpusR6Bound$new()
+  )
+
+  for (nm in names(values)) {
+
+    doc <- json_write_str(values[[nm]], self_contained = TRUE)
+
+    expect_no_match(doc, '"~x"', fixed = TRUE)
+    expect_env_equivalent(json_read_str(doc), values[[nm]])
+  }
+
+  # Without the flag the class is asked again, as for any instance.
+  back <- json_read_str(
+    json_write_str(CorpusR6Plain$new(), self_contained = TRUE)
+  )
+
+  expect_match(json_write_str(back), '{"~x":', fixed = TRUE)
+})
+
+test_that("what a method leaves out is written whole, and a handle is not", {
+
+  local_r6_class("CorpusR6Keeper", public = list(key = NULL))
+  local_state_method("CorpusR6Keeper", function(x) list())
+
+  obj <- CorpusR6Keeper$new()
+  obj$key <- "s3cret"
+
+  expect_no_match(json_write_str(obj), "s3cret", fixed = TRUE)
+  expect_match(
+    json_write_str(obj, self_contained = TRUE), "s3cret", fixed = TRUE
+  )
+
+  path <- withr::local_tempfile()
+  writeLines("a", path)
+  obj$key <- file(path, open = "r")
+  withr::defer(close(obj$key))
+
+  expect_error(
+    json_write_str(obj, self_contained = TRUE),
+    "cannot write a value of type 'externalptr' at `x$bindings$key$conn_id`",
+    fixed = TRUE
+  )
+})
+
+test_that("an active binding keeps an instance out of the whole form", {
+
+  obj <- local(
+    R6::R6Class(
+      "CorpusR6WholeActive", public = list(side = 2),
+      active = list(area = function() self$side^2)
+    ),
+    envir = globalenv()
+  )$new()
+
+  expect_error(
+    json_write_str(obj, self_contained = TRUE),
+    "cannot write an active binding at `x$bindings$area`", fixed = TRUE
+  )
+})
+
+test_that("a cycle through whole instances closes again on the way back", {
+
+  peer <- local(
+    R6::R6Class("CorpusR6WholePeer", public = list(peer = NULL)),
+    envir = globalenv()
+  )
+
+  a <- peer$new()
+  b <- peer$new()
+  a$peer <- b
+  b$peer <- a
+
+  back <- json_read_str(json_write_str(list(a, b), self_contained = TRUE))
+
+  expect_identical(back[[1L]]$peer, back[[2L]])
+  expect_identical(back[[2L]]$peer, back[[1L]])
+})
+
+test_that("a whole instance is refused where the flag is not set", {
+
+  back <- json_read_str(
+    json_write_str(CorpusR6Mute$new(), self_contained = TRUE)
+  )
+
+  expect_error(json_write_str(back), needs_method("CorpusR6Mute"), fixed = TRUE)
+})
+
 test_that("a document the flag wrote writes back to itself", {
   skip_if_not_installed("S7")
 

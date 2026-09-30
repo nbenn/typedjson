@@ -218,3 +218,5 @@ close(revived$con)
 Going through `$new()` on the way back is the usual shape for a class whose constructor acquires the resource. The state list records what the constructor needs, and whatever the constructor cannot know — here the offset — is applied to the instance afterwards.
 
 Rebuilding through the constructor is also what keeps a finalizer honest. Where `initialize` acquires a handle and `finalize` releases it, the two only line up if the revived object went through `initialize` as well; an object filled in from a document acquired nothing, and its finalizer runs against a handle it never held. That hazard is one of the reasons an `R6` instance has no default in the first place, and `vignette("r6")` walks through deciding what a class's state actually is.
+
+A document written with the `self_contained` flag is the one place the pair is not asked. Such a document is read without the class's code, and an `R6` instance is written whole there, so this reader stops the write at the connection it holds, which no document can carry.

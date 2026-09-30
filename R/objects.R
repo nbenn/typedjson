@@ -106,7 +106,9 @@ json_state.refObjectGenerator <- function(x) {
 #' an `R6` class guarantees is what its methods say rather than what its
 #' bindings happen to hold: a private field is private precisely because
 #' it is not part of that contract. Writing one is therefore refused,
-#' naming the class and the method it wants.
+#' naming the class and the method it wants, unless the `self_contained`
+#' flag of [json_write()] asks for the instance whole, which records all of
+#' it and so asserts nothing about which part is state.
 #'
 #' A class author is the party who knows whether a field is stored or
 #' derived, whether `initialize` establishes an invariant, and whether a
@@ -153,7 +155,9 @@ json_state.refObjectGenerator <- function(x) {
 #' environment the class was defined in, which is checked on the way out
 #' as well as on the way in. A class defined inside a function, one whose
 #' name finds two generators, and a non-portable class are all refused
-#' where they are written.
+#' where they are written. A document written with the `self_contained`
+#' flag sets the pair aside: the instance is written whole, and reading it
+#' needs neither the generator nor the pair.
 #'
 #' @param x The `R6` instance whose bindings are to be recorded.
 #' @param class Empty object carrying the recorded class vector, which

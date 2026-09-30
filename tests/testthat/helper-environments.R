@@ -73,7 +73,10 @@ env_closure_difference <- function(x, y, at, seen) {
     return(paste0("`", at, "` is a closure on one side only"))
   }
 
-  if (!identical(x, y, ignore.environment = TRUE)) {
+  # No source reference is recorded, and `identical()` compares the one the
+  # parser keeps inside a definition in a body, so both sides go without.
+  if (!identical(utils::removeSource(x), utils::removeSource(y),
+                 ignore.environment = TRUE)) {
     return(paste0("`", at, "` differs"))
   }
 

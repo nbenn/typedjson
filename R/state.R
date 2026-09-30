@@ -29,7 +29,10 @@ tag_ext <- "~x"
 #' class settles it, as does one on any class between that and
 #' `envRefClass`, which is where the refusal itself sits. The generator
 #' that makes one is refused outright, since a walk into it reaches the
-#' internals of the `methods` package rather than the class.
+#' internals of the `methods` package rather than the class. A document
+#' written with the `self_contained` flag of [json_write()] takes an `R6`
+#' instance whole instead, as the environment it is, without asking for a
+#' method at all.
 #'
 #' @param x Object whose state is to be recorded.
 #' @param class Empty object carrying the recorded class vector, which

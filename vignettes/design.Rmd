@@ -62,7 +62,7 @@ identical(json_write_str(json_read_str(doc)), doc)
 
 The second falls out of the first once foreign documents are read under the same grammar rather than a separate lossy mode. It holds for every document this package writes; a foreign one settles after a single round trip, since a mixed-type array such as `[1, "a"]` has to come back as a list. A writer flag is what qualifies it, since a document holds its bytes where it is read and written the same way: the `self_contained` flag below is the case that matters, a carried definition being recorded as a name again by a writer that was not asked for one, or refused by it where the definition is of an `R6` class.
 
-Four values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test — and a closure over such an environment is stated the same way, since it is that environment plus a formals and a body that do come back identical. An S7 class a document carries the definition of is the first case reached through a class rather than through an environment written on its own: S7 builds the constructor of a class that has a parent in an environment of its own, that environment is recorded by its contents like any other, and so no by-value scheme can hand back the object that was written. Base R does not manage it either, `identical(unserialize(serialize(x, NULL)), x)` being `FALSE` for an S7 object in the same session. An `R6` class a document carries the definition of goes a step further, since the class is an environment itself: it comes back a new generator whatever its parts close over, equivalent to the one written apart from holding its parent where that held the expression finding one. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
+Four values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test — and a closure over such an environment is stated the same way, since it is that environment plus a formals and a body that do come back identical. An S7 class a document carries the definition of is the first case reached through a class rather than through an environment written on its own: S7 builds the constructor of a class that has a parent in an environment of its own, that environment is recorded by its contents like any other, and so no by-value scheme can hand back the object that was written. Base R does not manage it either, `identical(unserialize(serialize(x, NULL)), x)` being `FALSE` for an S7 object in the same session. An `R6` class a document carries the definition of goes a step further, since the class is an environment itself: it comes back a new generator whatever its parts close over, equivalent to the one written apart from holding its parent where that held the expression finding one. An `R6` instance the flag writes whole needs no case of its own, being an environment recorded by its contents like any other. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
 
 - **Exact.** The relation above, which every other value in scope meets, and which an environment recorded by name meets too. A string carrying no encoding declaration meets it on its bytes.
 - **Equivalent.** Same bindings by name and by value, same locked and active status, and a parent that is itself equivalent. A closure meets it where its formals and body are identical and the environment it closes over is equivalent.
@@ -332,7 +332,7 @@ An R6 generator is a name, and is recorded the way a package-scoped S7 class is:
 
 The class has to be recoverable for the document to be readable, so a generator that names no class, or that was built inside a function, is refused where it is written. Finding it again means scanning the environment the class was defined in for an `is.R6Class()` object whose `$classname` matches, then checking that the chain it declares through `get_inherit()` is the one recorded. Scanning is necessary rather than fussy, because the generator variable need not be named after the class — and for the same reason it can turn up two, which is an error rather than a coin toss. That lookup runs on the way out as well as on the way in, so a class vector no generator in that environment declares is caught where it is written rather than where it is read.
 
-An R6 instance is a different question, and the answer is that this package does not have one to give. Every other type in scope has a value its own type system supplies: a vector is its data, an S3 object is a base type plus attributes, and an S4 object is its slots exactly as an S7 object is its properties, which is why `new("Pt", x = 1, y = 2)` is a complete description of one. An R6 object is defined instead by what its methods guarantee, and its private fields are private precisely because they are not part of that. Recording an instance as the bindings it happens to hold is therefore an assertion about the class that only the class can make, so writing one is refused, naming the class and the method that would settle it.
+An R6 instance is a different question, and the answer is that this package does not have one to give. Every other type in scope has a value its own type system supplies: a vector is its data, an S3 object is a base type plus attributes, and an S4 object is its slots exactly as an S7 object is its properties, which is why `new("Pt", x = 1, y = 2)` is a complete description of one. An R6 object is defined instead by what its methods guarantee, and its private fields are private precisely because they are not part of that. Recording an instance as the bindings it happens to hold is therefore an assertion about the class that only the class can make, so writing one is refused, naming the class and the method that would settle it. Writing one whole asserts nothing of the kind, and is what the `self_contained` flag below does instead.
 
 ```{r, error = TRUE, eval = requireNamespace("R6", quietly = TRUE)}
 Counter <- R6::R6Class("Counter", public = list(n = 0))
@@ -373,7 +373,7 @@ json_state.Bound <- function(x) r6_state(x)
 json_write_str(list(a = 1, b = Bound$new()))
 ```
 
-A reference class instance is refused on the second half of that argument alone. Fields are declared, so `Class$fields()` says what the representation is where an `R6` class says nothing; the object is still a reference whose `initialize` may establish an invariant and whose fields are as good a place for a credential as a private binding, so recording the bindings is still an assertion only the class can make. A method on the concrete class settles it, as does one on any class between that and `envRefClass`, which is the rung the refusal itself sits on. The generator is refused rather than recorded by name, unlike the `R6` and S7 ones above, because a walk into one reaches the internals of the `methods` package rather than anything the class declares; recording it the way those two are recorded is open.
+A reference class instance is refused on the second half of that argument alone. Fields are declared, so `Class$fields()` says what the representation is where an `R6` class says nothing; the object is still a reference whose `initialize` may establish an invariant and whose fields are as good a place for a credential as a private binding, so recording the bindings is still an assertion only the class can make. A method on the concrete class settles it, as does one on any class between that and `envRefClass`, which is the rung the refusal itself sits on. The generator is refused rather than recorded by name, unlike the `R6` and S7 ones above, because a walk into one reaches the internals of the `methods` package rather than anything the class declares; recording it the way those two are recorded is open. The same walk keeps an instance refused under the `self_contained` flag below, since the instance binds its class definition.
 
 The refusal follows the label rather than the shape, which is worth stating outright because the shape on its own is written. An environment carrying a class attribute of your own making claims nothing about its instances, so it takes the environment rule below and its bindings reach the document. That is the rule holding rather than a hole in it — an environment is its contents, which is what base R's `serialize()` records too — and a `json_state()` method is how a value of that shape says otherwise.
 
@@ -445,6 +445,8 @@ No source reference is recorded. A parser attaches `srcref` to a function defini
 formals(identical)$ignore.srcref
 ```
 
+A definition inside a body is the one exception to the first half. The parser keeps its source reference as the last element of the `function` call rather than as an attribute, and `identical()` compares that element like any other. It is dropped all the same, for the reason below, and comes back as the `NULL` a parse keeping no source leaves there, so the closure is equal to the one that parse would have made rather than to the one written.
+
 Keeping one would be worse than verbose. A `srcref` carries its `srcfile`, which is an environment holding the source text it came from, so a function parsed from a file would arrive with that file beside it. A byte-compiled closure is written from `body()`, which is the source tree it was compiled from, and left to the compiler to compile again; nothing here records bytecode.
 
 Two shapes stay refused, and neither is a closure's own doing. An argument the function was called with stays a promise in its frame whether or not it has been forced, so a closure over such a frame meets the promise rule above.
@@ -484,7 +486,7 @@ Three pieces, and the third is what the first two are for:
 
 - **A reference table.** Every reference the walk has reached, keyed by its `SEXP`. Reaching one a second time numbers the first write with `~id` and writes `{"~ref": n}` in its place. The number is minted where the repeat happens rather than where the first write did, so a document holding no sharing carries no marker and reads byte for byte as it would have without any of this. Base R's own `serialize()` keeps such a table for environments, which is the axis this used to sit behind `saveRDS` on.
 - **Numbering before descending.** The reader creates an environment and numbers it before reading what it binds, which is where a reference back to it comes from. That is what turns a cycle from an error into a document: `function() {e <- new.env(); e}` returns an environment whose parent frame binds it back, and it now writes and comes back bound the same way. Attributes are read before contents for the same reason, since that is the order they were written in and a reference only ever points backwards.
-- **What is still refused.** A cycle closing through an object built in one call — any class with a `json_state()` method, an opted-in `R6` one among them, and an `R6` class the `self_contained` flag carries, which is rebuilt that way too — since a constructor cannot be handed an object that already exists. The error names both ends of it. Sharing such an object is fine; only the cycle is not, which leaves the chromote shape out (`Chromote` holds `sessions`, each `ChromoteSession` holds `parent`), and both of those wrap a live browser process anyway.
+- **What is still refused.** A cycle closing through an object built in one call — any class with a `json_state()` method, an opted-in `R6` one among them, and an `R6` class the `self_contained` flag carries, which is rebuilt that way too — since a constructor cannot be handed an object that already exists. The error names both ends of it. Sharing such an object is fine; only the cycle is not, which leaves the chromote shape out (`Chromote` holds `sessions`, each `ChromoteSession` holds `parent`), and both of those wrap a live browser process anyway. An `R6` instance the `self_contained` flag writes whole is an environment rather than such an object, so a cycle through one closes again.
 
 The cycle in that second bullet is not a corner case: it is what any function returning an environment it created produces.
 
@@ -547,15 +549,62 @@ Two bindings raise a question the S7 side did not, and so do the methods.
 
 Nothing is looked up in either direction, so a class the write-time check refuses — one defined inside a function, one that names no class, one whose name finds two generators — is carried wherever the flag is set. What comes back is a new generator, equivalent to the one written apart from holding its parent where that held the expression finding one. The name does not find it again, so writing it without the flag is refused rather than recording a reference that would resolve to the class the session holds.
 
+An `R6` instance is where the flag does more than trade a name for a definition, since the default refuses an instance rather than naming it. That refusal rests on having to choose: recording an instance as its bindings asserts that the bindings are its state, which only the class can say, and `r6_state()` is how its author says so. An instance written whole makes no choice. It is an environment, recorded by its contents the way any environment is — fields and private bindings, methods, and the environment the methods close over — so nothing is left to assert on the class's behalf, and the objection is answered rather than overridden.
+
+```{r, eval = requireNamespace("R6", quietly = TRUE)}
+Meter <- R6::R6Class("Meter",
+  public = list(
+    n = 0,
+    add = function(by = 1) {
+      self$n <- self$n + by
+      invisible(self)
+    }
+  ),
+  cloneable = FALSE
+)
+
+meter <- Meter$new()$add(2)
+
+json_write_str(meter, self_contained = TRUE)
+```
+
+What comes back is that environment wearing the class attribute. The methods close over a copy of the environment R6 made for them, which binds `self` to the object that came back rather than to the one written. Nothing is looked up, so the document reads where neither the class nor R6 is available, which is what base R's `serialize()` makes of an instance too.
+
+```{r, eval = requireNamespace("R6", quietly = TRUE)}
+back <- json_read_str(json_write_str(meter, self_contained = TRUE))
+
+back$add()$n
+```
+
+Four costs come with it.
+
+- The **methods** are the ones the class had where the document was written, as with a generator the flag carries, so a class fixed or upgraded since does not reach the object. That is what an archive asks for and the opposite of what a wire format wants, which is why the default goes on refusing rather than writing an instance this way.
+- **Nothing checks** the object on the way back. It is built without the generator, so there is no class to check it against, as `S7::validate()` checks an S7 object, and no warning where the class has since dropped a field, as `r6_restore()` gives. Nor does `initialize` run, and a `finalize` method is not registered on the object that comes back.
+- **R6's own `clone`** is most of the document. R6 puts a copy of that method into every instance of a cloneable class, and into each level of the chain the class inherits. Leaving it out, as a carried generator does, would have R6 supply it again where the document is read, which is the lookup the whole form avoids. The `Meter` class above is built without it to keep its document short.
+- An **active binding** keeps an instance out, as it keeps out any environment, since reading one runs code. Recording the function it runs instead would change the environment rule for every environment rather than for this one.
+
+How much of a document `clone` makes shows on the `Tally` class from the generator example, beside the same class built without it.
+
+```{r, eval = requireNamespace("R6", quietly = TRUE)}
+Bare <- R6::R6Class("Tally", public = list(n = 0), cloneable = FALSE)
+
+c(
+  cloneable = nchar(json_write_str(Tally$new(), self_contained = TRUE)),
+  bare = nchar(json_write_str(Bare$new(), self_contained = TRUE))
+)
+```
+
+No `json_state()` method is asked, an opt-in through `r6_state()` included. The record a method writes is read back through the class's own `json_revive()`, found by name, which is the lookup the flag exists to avoid, and the whole form needs no method in the first place. So everything the instance holds is written. A field a method would leave out is written, a credential among them, as `saveRDS()` would write it, and a handle a method would stand in for stops the write, as it does in any environment, since no document can carry one. Writing what comes back without the flag asks its class for a method as for any instance, and is refused where the class has none.
+
 The flag's reach is the set of values recorded by name, and the answer differs across that set rather than falling out of one rule.
 
 - A **primitive**, and a **class the S7 package itself binds**, have no definition to carry: a walk into either lands in machinery rather than in anything an author wrote. The name is the only representation available, so the flag has nothing to change.
 - A **namespace**, a **package environment** and the **imports environment** of one could be carried and should not be. What that records is a frozen snapshot of an installed package, which is both enormous and the wrong object, since a reader wants the package that is installed rather than the one that was.
 - The **global environment** is the same answer for the opposite reason. It is where a reference is most fragile, a closure over it being exactly what fails to resolve elsewhere, and also where recording by contents is least plausible, since one such closure would put a whole workspace into the document.
 - The **class name an S4 object records** keeps its reference by design rather than for want of an embedded form. An S7 class and an `R6` generator are values, which a document hands back with nothing else happening. An S4 definition is an entry in a registry the whole session shares, and `methods::validObject()` takes no definition to check against, resolving the class, each superclass and the coercion to it through that registry, so a definition a document carried would check nothing until it was registered. Registering one is a side effect no other read has, and not a contained one: a class registered anywhere is found everywhere, one registered over a class the session holds under the same name and package replaces it, and removing it again leaves that class missing from its superclass's list of subclasses. Nor would a definition buy what it buys the other two, a document that reads where the class is gone, since an S4 document already does, the object being rebuilt from its attributes and only the validity check skipped. Where the class is present, that check already refuses a slot added, renamed or retyped since the document was written, which leaves a slot the class has since dropped as the drift only a definition would see, its entry surviving as a stray attribute on an object that still validates.
-- A **record a `json_state()` method writes** keeps the class vector its `json_revive()` method is found through. That method is the class author's code for rebuilding a value rather than part of one, so it stays where the author registered it. An `R6` instance opted in through `r6_state()` is such a record, and finds its generator by name as well.
+- A **record a `json_state()` method writes** keeps the class vector its `json_revive()` method is found through. That method is the class author's code for rebuilding a value rather than part of one, so it stays where the author registered it. An `R6` instance is the exception, taken whole above whatever methods its class has.
 
-Two riders. Plain mode records no class at all, so it and the flag cannot both be asked for. And the second contract holds within a mode rather than across the pair: a document carrying a definition writes back to itself where it is written the same way, while re-writing one without the flag records the name again, or for an `R6` class refuses to, as above.
+Two riders. Plain mode records no class at all, so it and the flag cannot both be asked for. And the second contract holds within a mode rather than across the pair: a document carrying a definition writes back to itself where it is written the same way, while re-writing one without the flag records the name again, refuses to for an `R6` class, and for an `R6` instance asks its class for a method again, as above.
 
 ## Reading foreign JSON
 

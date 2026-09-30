@@ -25,9 +25,10 @@
 #' S7 builds for the constructor of every class that has a parent. An `R6`
 #' class a document carries the definition of is such an environment
 #' itself, and holds its parent where the class it was written from held
-#' the expression finding one. A string R has not declared an encoding for
-#' comes back declared UTF-8, so the property holds on its bytes rather
-#' than under `identical()`.
+#' the expression finding one. An `R6` instance the `self_contained` flag
+#' writes whole is such an environment as well. A string R has not declared
+#' an encoding for comes back declared UTF-8, so the property holds on its
+#' bytes rather than under `identical()`.
 #' The second holds for every document this package can write. Foreign
 #' documents are read under the same grammar and normalize on the first
 #' round trip, since a mixed-type array such as `[1, "a"]` has to come
@@ -136,7 +137,9 @@
 #' extension protocol builds in one call, an opted-in `R6` instance among
 #' them, since a constructor cannot be handed an object that already
 #' exists. So is one through an `R6` class a document carries the
-#' definition of, which is rebuilt in one call the same way.
+#' definition of, which is rebuilt in one call the same way. An `R6`
+#' instance the `self_contained` flag writes whole is an environment rather
+#' than such an object, so a cycle through one comes back.
 #'
 #' A language object is a value rather than a handle, so it round-trips
 #' exactly and nothing about it is deparsed. A call, an expression and a
@@ -154,7 +157,10 @@
 #' with one. No source reference is recorded: the `srcref` a parser
 #' attaches to a function definition, to a `{` block and to what `parse()`
 #' returns is dropped, which keeps a document diffable and leaves the
-#' value equal under `identical()`, whose default ignores one. A
+#' value equal under `identical()`, whose default ignores one. The one
+#' place it does not is a definition inside a body, whose source reference
+#' the parser keeps as the last element of the `function` call, so that
+#' element comes back as the `NULL` a parse keeping no source puts there. A
 #' byte-compiled closure is written from `body()`, which is the source
 #' tree it was compiled from.
 #'
@@ -231,11 +237,12 @@
 #' written by a [json_state()] method, whose class vector finds the
 #' [json_revive()] method rebuilding it: that method is the class author's
 #' code rather than part of the value, so it stays where the author registered
-#' it. An `R6` instance opted in through [r6_state()] is such a record, and
-#' finds its generator by name as well. Plain mode records no class at all, so
-#' it and the flag cannot both be asked for, and the second contract holds
-#' within a mode rather than across the pair, a document carrying a definition
-#' writing back to itself where it is written the same way.
+#' it. An `R6` instance is the exception: its whole form needs no method, so
+#' the flag writes one whole whatever methods its class has, as below. Plain
+#' mode records no class at all, so it and the flag cannot both be asked for,
+#' and the second contract holds within a mode rather than across the pair, a
+#' document carrying a definition writing back to itself where it is written
+#' the same way.
 #'
 #' An `R6` instance is refused as well, for a reason one level up. What an
 #' `R6` class guarantees is what its methods say rather than what its
@@ -270,6 +277,31 @@
 #' than the one the name finds, so writing it again without the flag is
 #' refused.
 #'
+#' The flag reaches an `R6` instance as well, and answers the refusal rather
+#' than overriding it. What made recording an instance an assertion about
+#' its class was picking which of its bindings are the state, and an
+#' instance written whole picks nothing: the environment rule records it
+#' like any other environment, so its fields, its private bindings, its
+#' methods and the environment those close over all travel. No
+#' [json_state()] method is asked, an opt-in through [r6_state()] included,
+#' since the record a method writes is read back through the class's own
+#' [json_revive()], found by name, which is the lookup the flag exists to
+#' avoid. So a field a method would leave out is written, a credential
+#' included, and a handle a method would stand in for stops the write, as it
+#' does in any environment, since no document can carry one. What comes back
+#' is that environment wearing the class attribute, built without the
+#' generator, so a document holding one reads where neither the class nor R6
+#' is available. Nothing checks it on the way back either. It is built
+#' without running its `initialize` or registering a `finalize` method, and
+#' its methods are the ones the class had where the document was written, so
+#' a class fixed or upgraded since does not reach the object. An active
+#' binding keeps an instance out, as it keeps out any environment. Most of
+#' what an instance of a cloneable class writes is R6's own `clone` method,
+#' a copy of which R6 puts into the instance and into each level of the
+#' chain it inherits. Writing what comes back without the flag asks its
+#' class for a method as for any instance, and is refused where the class
+#' has none.
+#'
 #' A reference class instance is refused on the second half of that reason
 #' alone. Fields are declared there, so what the representation is already
 #' has an answer, but the object is still a reference whose `initialize`
@@ -278,9 +310,10 @@
 #' on the concrete class or on any class between that and `envRefClass`,
 #' which is where the refusal sits. The generator that makes one is refused
 #' rather than recorded, since a walk into it reaches the internals of the
-#' `methods` package rather than the class. An environment you have classed
-#' yourself claims none of this, and is written by the environment rule
-#' above, contents and all.
+#' `methods` package rather than the class. The same walk keeps an instance
+#' refused under the `self_contained` flag, the instance binding its class
+#' definition. An environment you have classed yourself claims none of this,
+#' and is written by the environment rule above, contents and all.
 #'
 #' @param x Value to write.
 #' @param path Path to write to or read from.
@@ -295,7 +328,8 @@
 #'   would otherwise record by name. The default records the name wherever one
 #'   finds the class again, which is what a wire format wants; `TRUE` carries
 #'   the definition instead, which is what an archive wants. An S7 class and
-#'   an `R6` class generator are reached, with `vignette("design")` setting
+#'   an `R6` class generator are reached, and an `R6` instance is written
+#'   whole whatever methods its class has, with `vignette("design")` setting
 #'   out which names are left alone and why.
 #'
 #' @return The `json_write()` function returns `path` invisibly and
@@ -417,6 +451,14 @@ writer_hooks <- function() {
 }
 
 writer_kind <- function(class, s4) {
+
+  # A self-contained document is read without the class's code, which a
+  # record a method writes needs, so an `R6` instance is written whole there,
+  # as the environment it is, and no method is asked, the refusal included.
+  if (writer_self_contained$on() && "R6" %in% class) {
+    return(FALSE)
+  }
+
   for (cls in state_classes(class, s4)) {
     if (!is.na(cls) && has_state_method(cls)) {
       return(TRUE)
