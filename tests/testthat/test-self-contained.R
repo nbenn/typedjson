@@ -726,7 +726,7 @@ test_that("an active field comes back active at every level of the chain", {
   back <- json_read_str(doc)
   enclos <- back$.__enclos_env__
 
-  expect_match(doc, '"active_bindings":{"area":', fixed = TRUE)
+  expect_match(doc, '"active_bindings":"area"', fixed = TRUE)
   expect_env_equivalent(back, obj)
   expect_identical(json_write_str(back, self_contained = TRUE), doc)
   expect_identical(environment(activeBindingFunction("area", back)), enclos)

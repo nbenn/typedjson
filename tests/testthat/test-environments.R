@@ -212,9 +212,9 @@ test_that("an active binding is recorded by the function it runs", {
     json_write_str(env),
     paste0(
       '{"~t":"environment","~v":{"parent":{"~t":"environment","~v":',
-      '{"name":"R_EmptyEnv"}},"bindings":{"n":1},"active_bindings":{"live":',
-      '{"~t":"closure","~v":{"formals":null,"body":42.0,"environment":',
-      '{"~t":"environment","~v":{"name":"R_GlobalEnv"}}}}}}}'
+      '{"name":"R_EmptyEnv"}},"bindings":{"live":{"~t":"closure","~v":',
+      '{"formals":null,"body":42.0,"environment":{"~t":"environment","~v":',
+      '{"name":"R_GlobalEnv"}}}},"n":1},"active_bindings":"live"}}'
     )
   )
 })
@@ -354,20 +354,19 @@ test_that("a recorded environment the reader cannot use is an error", {
   expect_error(
     json_read_str(
       sprintf(
-        '{"~t":"environment","~v":{"parent":%s,"active_bindings":[1,2]}}', empty
-      )
-    ),
-    "the `active_bindings` of a recorded environment have to be an object",
-    fixed = TRUE
-  )
-  expect_error(
-    json_read_str(
-      sprintf(
         '{"~t":"environment","~v":{"parent":%s,"active_bindings":{"a":1}}}',
         empty
       )
     ),
-    "`active_bindings` binds `a` to something other than a function",
+    "`active_bindings` has to name bindings", fixed = TRUE
+  )
+  expect_error(
+    json_read_str(
+      sprintf(
+        '{"~t":"environment","~v":{"parent":%s,"active_bindings":"zz"}}', empty
+      )
+    ),
+    "`active_bindings` names `zz`, which the environment does not bind",
     fixed = TRUE
   )
   expect_error(
@@ -375,13 +374,12 @@ test_that("a recorded environment the reader cannot use is an error", {
       sprintf(
         paste0(
           '{"~t":"environment","~v":{"parent":%s,"bindings":{"a":1},',
-          '"active_bindings":{"a":{"~t":"builtin","~v":"sum"}}}}'
+          '"active_bindings":"a"}}'
         ),
         empty
       )
     ),
-    "`active_bindings` names `a`, which `bindings` binds as well",
-    fixed = TRUE
+    "`a`, which is bound to something other than a function", fixed = TRUE
   )
   expect_error(
     json_read_str('{"~t":"environment","~v":{"~q":1}}'), "not a tag"
