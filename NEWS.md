@@ -16,6 +16,8 @@
 
 * The `self_contained` flag asks no `json_state()` method a class author wrote, for any class rather than for an `R6` instance alone, since the record one writes is read back through a `json_revive()` method found by name. A value whose class has such a method is written by the rule for its type, as `serialize()` writes every object, so a field the method leaves out is written and a handle it stands in for stops the write. The package's own methods still run, so an S7 class and an `R6` generator are carried, and a reference class instance is refused whatever methods its class has (#101).
 
+* A document carrying attributes on an environment recorded by name, such as the global environment or a namespace, is refused, as one carrying attributes on `NULL` or on a primitive already was. The reader used to set them on the environment the name finds, where they stayed for the rest of the session (#103).
+
 # typedjson 0.1.1
 
 * Installs cleanly with GCC 16 under link-time optimization, where 0.1.0 drew a spurious `-Wstringop-overflow` warning (#86).
