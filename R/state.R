@@ -29,10 +29,16 @@ tag_ext <- "~x"
 #' class settles it, as does one on any class between that and
 #' `envRefClass`, which is where the refusal itself sits. The generator
 #' that makes one is refused outright, since a walk into it reaches the
-#' internals of the `methods` package rather than the class. A document
-#' written with the `self_contained` flag of [json_write()] takes an `R6`
-#' instance whole instead, as the environment it is, without asking for a
-#' method at all.
+#' internals of the `methods` package rather than the class.
+#'
+#' A document written with the `self_contained` flag of [json_write()] is
+#' read without its classes' code, so no method a class author wrote is asked
+#' there, and a value is written as though its class had none: a field a
+#' method would leave out is written, a handle one would stand in for stops
+#' the write, and an `R6` instance is taken whole, as the environment it is.
+#' The package's own methods are its handling of a class rather than an
+#' author's code, so a reference class instance stays refused there whatever
+#' methods its class has.
 #'
 #' @param x Object whose state is to be recorded.
 #' @param class Empty object carrying the recorded class vector, which
@@ -131,4 +137,25 @@ state_method_table <- function() {
   get(
     ".__S3MethodsTable__.", envir = asNamespace("typedjson"), inherits = FALSE
   )
+}
+
+# A method another package registers lands in the table above beside the
+# package's own, so what tells the two apart is the namespace binding one.
+own_state_method <- function(classes) {
+
+  ns <- asNamespace("typedjson")
+
+  for (cls in classes) {
+
+    found <- get0(
+      paste0("json_state.", cls), envir = ns, inherits = FALSE,
+      mode = "function"
+    )
+
+    if (!is.null(found)) {
+      return(found)
+    }
+  }
+
+  NULL
 }

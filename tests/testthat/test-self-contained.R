@@ -766,6 +766,172 @@ test_that("a whole instance is refused where the flag is not set", {
   expect_error(json_write_str(back), needs_method("CorpusR6Mute"), fixed = TRUE)
 })
 
+test_that("the flag asks no method a class author wrote", {
+
+  # The record a method writes is read back through the class's own reviver,
+  # found by name, which is the lookup a self-contained document exists to
+  # avoid, so the value is written as `serialize()` writes one, by its type.
+  local_state_method(
+    "corpus_keeper",
+    function(x) list(root = x[["root"]]),
+    function(class, state) stop("the reviver was asked")
+  )
+
+  obj <- structure(
+    list(root = "/data", key = "s3cret"), class = "corpus_keeper"
+  )
+
+  doc <- json_write_str(obj, self_contained = TRUE)
+
+  expect_identical(
+    doc,
+    '{"~a":{"class":"corpus_keeper"},"~v":{"root":"/data","key":"s3cret"}}'
+  )
+  expect_identical(json_read_str(doc), obj)
+  expect_identical(
+    json_write_str(obj),
+    '{"~x":{"class":"corpus_keeper","state":{"root":"/data"}}}'
+  )
+})
+
+test_that("the flag writes a value as though its class had no method", {
+
+  values <- list(
+    s4 = methods::new("CorpusS4Derived", a = 1.5, b = "x"),
+    environment = structure(corpus_env(n = 3L), class = "corpus_owned"),
+    call = structure(quote(f(x)), class = "corpus_call")
+  )
+
+  bare <- lapply(values, json_write_str)
+
+  for (cls in c("CorpusS4Base", "corpus_owned", "corpus_call")) {
+    local_state_method(cls, function(x) stop("the method was asked"))
+  }
+
+  for (nm in names(values)) {
+
+    expect_error(
+      json_write_str(values[[nm]]), "the method was asked", fixed = TRUE,
+      info = nm
+    )
+    expect_identical(
+      json_write_str(values[[nm]], self_contained = TRUE), bare[[nm]],
+      info = nm
+    )
+  }
+})
+
+test_that("a method a package registers is not asked under the flag either", {
+
+  # A package puts its method into the table this package's own methods sit
+  # in, rather than binding it where a method defined at top level is.
+  table <- get(
+    ".__S3MethodsTable__.", envir = asNamespace("typedjson"), inherits = FALSE
+  )
+
+  registerS3method(
+    "json_state", "corpus_registered",
+    function(x) stop("the method was asked"),
+    envir = asNamespace("typedjson")
+  )
+  withr::defer(rm("json_state.corpus_registered", envir = table))
+
+  obj <- structure(list(a = 1), class = "corpus_registered")
+
+  expect_error(json_write_str(obj), "the method was asked", fixed = TRUE)
+  expect_identical(
+    json_read_str(json_write_str(obj, self_contained = TRUE)), obj
+  )
+})
+
+test_that("a handle a method stands in for stops the write under the flag", {
+
+  local_state_method("corpus_reader", function(x) list(path = x[["path"]]))
+
+  path <- withr::local_tempfile()
+  writeLines("a", path)
+
+  obj <- structure(
+    list(path = path, con = file(path, open = "r")), class = "corpus_reader"
+  )
+  withr::defer(close(obj[["con"]]))
+
+  expect_match(json_write_str(obj), '{"~x":', fixed = TRUE)
+  expect_error(
+    json_write_str(obj, self_contained = TRUE),
+    "cannot write a value of type 'externalptr' at `x$con$conn_id`",
+    fixed = TRUE
+  )
+})
+
+test_that("a reference class instance stays refused whatever its methods", {
+
+  # The refusal is the package's own method, which dispatch would reach only
+  # after the method the class has, so the flag calls it directly.
+  local_state_method(
+    "CorpusRefClass",
+    function(x) list(a = x$a),
+    function(class, state) CorpusRefClass$new(a = state[["a"]])
+  )
+
+  values <- list(
+    concrete = CorpusRefClass$new(a = 1),
+    derived = CorpusRefDerived$new(a = 1, b = "x")
+  )
+
+  for (nm in names(values)) {
+
+    expect_match(json_write_str(values[[nm]]), '{"~x":', fixed = TRUE)
+    expect_error(
+      json_write_str(list(obj = values[[nm]]), self_contained = TRUE),
+      paste0(no_self_contained_ref(class(values[[nm]])), " at `x$obj`"),
+      fixed = TRUE, info = nm
+    )
+  }
+
+  expect_error(
+    json_write_str(CorpusRefClass, self_contained = TRUE),
+    no_ref_generator("CorpusRefClass"), fixed = TRUE
+  )
+})
+
+test_that("the package's own method is asked ahead of an author's", {
+
+  gen <- R6::R6Class(
+    "CorpusR6Wrapped", public = list(n = 1), parent_env = globalenv()
+  )
+  class(gen) <- c("corpus_generator", class(gen))
+
+  local_state_method(
+    "corpus_generator", function(x) stop("the method was asked")
+  )
+
+  doc <- json_write_str(gen, self_contained = TRUE)
+
+  expect_match(doc, '{"~r6class":{"attributes":', fixed = TRUE)
+  expect_env_equivalent(json_read_str(doc), gen)
+  expect_error(json_write_str(gen), "the method was asked", fixed = TRUE)
+})
+
+test_that("a cycle through a value no method is asked for closes again", {
+
+  local_state_method(
+    "corpus_owned", function(x) list(self = get("self", envir = x))
+  )
+
+  env <- structure(corpus_env(), class = "corpus_owned")
+  assign("self", env, envir = env)
+
+  expect_error(
+    json_write_str(env), "cannot write a reference cycle", fixed = TRUE
+  )
+
+  back <- json_read_str(json_write_str(env, self_contained = TRUE))
+
+  expect_identical(get("self", envir = back), back)
+  expect_s3_class(back, "corpus_owned")
+})
+
 test_that("a document the flag wrote writes back to itself", {
   skip_if_not_installed("S7")
 

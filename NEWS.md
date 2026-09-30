@@ -14,6 +14,8 @@
 
 * An active binding is recorded by the function it runs rather than refused, and comes back active, so an environment holding one round-trips, as does an `R6` instance with an active field under the `self_contained` flag. The function is called on neither side, which is how `serialize()` records one too (#99).
 
+* The `self_contained` flag asks no `json_state()` method a class author wrote, for any class rather than for an `R6` instance alone, since the record one writes is read back through a `json_revive()` method found by name. A value whose class has such a method is written by the rule for its type, as `serialize()` writes every object, so a field the method leaves out is written and a handle it stands in for stops the write. The package's own methods still run, so an S7 class and an `R6` generator are carried, and a reference class instance is refused whatever methods its class has (#101).
+
 # typedjson 0.1.1
 
 * Installs cleanly with GCC 16 under link-time optimization, where 0.1.0 drew a spurious `-Wstringop-overflow` warning (#86).

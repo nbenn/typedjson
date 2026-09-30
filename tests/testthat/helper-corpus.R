@@ -525,6 +525,13 @@ no_ref_generator <- function(class) {
   )
 }
 
+no_self_contained_ref <- function(class) {
+  paste0(
+    "cannot write an instance of the reference class `", class,
+    "` in a self-contained document"
+  )
+}
+
 non_portable <- function(class) {
   paste0(
     "cannot write an instance of the non-portable R6 class `",

@@ -142,7 +142,9 @@
 #' exists. So is one through an `R6` class a document carries the
 #' definition of, which is rebuilt in one call the same way. An `R6`
 #' instance the `self_contained` flag writes whole is an environment rather
-#' than such an object, so a cycle through one comes back.
+#' than such an object, so a cycle through one comes back, as does one
+#' through any environment whose class has a method its author wrote, since
+#' the flag asks none.
 #'
 #' A language object is a value rather than a handle, so it round-trips
 #' exactly and nothing about it is deparsed. A call, an expression and a
@@ -234,16 +236,24 @@
 #' workspace into the document. The class name an S4 object records keeps its
 #' reference as well, since an S4 definition is an entry in a registry the
 #' whole session shares rather than a value, and carrying one would mean
-#' registering it where the document is read. So does a record
-#' written by a [json_state()] method, whose class vector finds the
-#' [json_revive()] method rebuilding it: that method is the class author's
-#' code rather than part of the value, so it stays where the author registered
-#' it. An `R6` instance is the exception: its whole form needs no method, so
-#' the flag writes one whole whatever methods its class has, as below. Plain
-#' mode records no class at all, so it and the flag cannot both be asked for,
-#' and the second contract holds within a mode rather than across the pair, a
-#' document carrying a definition writing back to itself where it is written
-#' the same way.
+#' registering it where the document is read. Plain mode records no class at
+#' all, so it and the flag cannot both be asked for, and the second contract
+#' holds within a mode rather than across the pair, a document carrying a
+#' definition writing back to itself where it is written the same way.
+#'
+#' The flag asks no [json_state()] method a class author wrote, whatever the
+#' class. The record one writes is read back through the class's own
+#' [json_revive()] method, found by name, which is the lookup the flag exists
+#' to avoid, so the model is base R's `serialize()`, which asks a class nothing
+#' and writes an object by its type and attributes. A value whose class has
+#' such a method is written by the rule for its type, as though the class had
+#' none: a field the method would leave out is written, a credential included,
+#' and a handle it would stand in for stops the write where it sits, since no
+#' document can carry one. The package's own methods are its handling of a
+#' class rather than an author's code, so they still run, the refusal of an
+#' `R6` instance aside, which the flag answers by writing one whole, as below.
+#' That is what carries an S7 class and an `R6` generator, and what keeps a
+#' reference class instance refused whatever methods its class has.
 #'
 #' An `R6` instance is refused as well, for a reason one level up. What an
 #' `R6` class guarantees is what its methods say rather than what its
@@ -284,23 +294,20 @@
 #' instance written whole picks nothing: the environment rule records it
 #' like any other environment, so its fields, active ones too, its private
 #' bindings, its methods and the environment those close over all travel. No
-#' [json_state()] method is asked, an opt-in through [r6_state()] included,
-#' since the record a method writes is read back through the class's own
-#' [json_revive()], found by name, which is the lookup the flag exists to
-#' avoid. So a field a method would leave out is written, a credential
-#' included, and a handle a method would stand in for stops the write, as it
-#' does in any environment, since no document can carry one. What comes back
-#' is that environment wearing the class attribute, built without the
-#' generator, so a document holding one reads where neither the class nor R6
-#' is available. Nothing checks it on the way back either. It is built
-#' without running its `initialize` or registering a `finalize` method, and
-#' its methods are the ones the class had where the document was written, so
-#' a class fixed or upgraded since does not reach the object. Most of
-#' what an instance of a cloneable class writes is R6's own `clone` method,
-#' a copy of which R6 puts into the instance and into each level of the
-#' chain it inherits. Writing what comes back without the flag asks its
-#' class for a method as for any instance, and is refused where the class
-#' has none.
+#' [json_state()] method is asked, as for any class above, an opt-in through
+#' [r6_state()] included, so a field a method would leave out is written and
+#' a handle a method would stand in for stops the write, as it does in any
+#' environment. What comes back is that environment wearing the class
+#' attribute, built without the generator, so a document holding one reads
+#' where neither the class nor R6 is available. Nothing checks it on the way
+#' back either. It is built without running its `initialize` or registering a
+#' `finalize` method, and its methods are the ones the class had where the
+#' document was written, so a class fixed or upgraded since does not reach the
+#' object. Most of what an instance of a cloneable class writes is R6's own
+#' `clone` method, a copy of which R6 puts into the instance and into each
+#' level of the chain it inherits. Writing what comes back without the flag
+#' asks its class for a method as for any instance, and is refused where the
+#' class has none.
 #'
 #' A reference class instance is refused on the second half of that reason
 #' alone. Fields are declared there, so what the representation is already
@@ -312,7 +319,8 @@
 #' rather than recorded, since a walk into it reaches the internals of the
 #' `methods` package rather than the class. The same walk keeps an instance
 #' refused under the `self_contained` flag, the instance binding its class
-#' definition. An environment you have classed yourself claims none of this,
+#' definition, and a method of your own does not settle it there, the flag
+#' asking none. An environment you have classed yourself claims none of this,
 #' and is written by the environment rule above, contents and all.
 #'
 #' @param x Value to write.
@@ -328,9 +336,9 @@
 #'   would otherwise record by name. The default records the name wherever one
 #'   finds the class again, which is what a wire format wants; `TRUE` carries
 #'   the definition instead, which is what an archive wants. An S7 class and
-#'   an `R6` class generator are reached, and an `R6` instance is written
-#'   whole whatever methods its class has, with `vignette("design")` setting
-#'   out which names are left alone and why.
+#'   an `R6` class generator are reached, no [json_state()] method a class
+#'   author wrote is asked, and an `R6` instance is written whole, with
+#'   `vignette("design")` setting out which names are left alone and why.
 #'
 #' @return The `json_write()` function returns `path` invisibly and
 #'   `json_write_str()` a length-one character vector. Both readers return
@@ -452,14 +460,17 @@ writer_hooks <- function() {
 
 writer_kind <- function(class, s4) {
 
-  # A self-contained document is read without the class's code, which a
-  # record a method writes needs, so an `R6` instance is written whole there,
-  # as the environment it is, and no method is asked, the refusal included.
-  if (writer_self_contained$on() && "R6" %in% class) {
-    return(FALSE)
+  classes <- state_classes(class, s4)
+
+  # A self-contained document is read without a class author's code, which
+  # the record a method of theirs writes needs, so the only methods asked
+  # there are the package's own. An `R6` instance is written whole, as the
+  # environment it is, so not even the refusal the package has for one is.
+  if (writer_self_contained$on()) {
+    return(!"R6" %in% class && !is.null(own_state_method(classes)))
   }
 
-  for (cls in state_classes(class, s4)) {
+  for (cls in classes) {
     if (!is.na(cls) && has_state_method(cls)) {
       return(TRUE)
     }
@@ -470,7 +481,7 @@ writer_kind <- function(class, s4) {
 writer_state <- function(x, where) {
 
   state <- tryCatch(
-    json_state(x),
+    ask_state(x),
     typedjson_refusal = function(cnd) {
       stop(conditionMessage(cnd), " at `", where, "`", call. = FALSE)
     }
@@ -481,4 +492,16 @@ writer_state <- function(x, where) {
   }
 
   list(tag_ext, list(class = state_classes(class(x), isS4(x)), state = state))
+}
+
+# Dispatch reaches the first method along the chain, which is an author's
+# wherever one sits ahead of the package's own, as one on a reference class
+# does, so under the flag the package's method is called directly.
+ask_state <- function(x) {
+
+  if (!writer_self_contained$on()) {
+    return(json_state(x))
+  }
+
+  own_state_method(state_classes(class(x), isS4(x)))(x)
 }
