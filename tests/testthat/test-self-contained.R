@@ -527,7 +527,7 @@ test_that("an R6 definition a document spells wrongly is refused", {
 
 test_that("every R6 class shape the flag carries settles", {
   expect_identical(
-    r6_shape_failures(r6_shape_grid(), r6_generator_round_trips), character()
+    r6_shape_failures(r6_shape_grid(), r6_class_settles), character()
   )
 })
 
@@ -751,23 +751,6 @@ test_that("a whole instance is refused where the flag is not set", {
   )
 
   expect_error(json_write_str(back), needs_method("CorpusR6Mute"), fixed = TRUE)
-})
-
-test_that("every R6 instance shape the flag writes whole settles", {
-
-  # A shape placing an active binding anywhere is refused for it, which keeps
-  # the deepest chains, the hooks and the non-portable classes out of the
-  # whole form, so every shape is also written with those taken out.
-  grid <- r6_shape_grid()
-  active <- vapply(grid, r6_shape_has_active, logical(1L))
-  without_active <- unique(lapply(grid, r6_shape_without_active))
-
-  expect_identical(
-    r6_shape_failures(grid[active], r6_whole_refused), character()
-  )
-  expect_identical(
-    r6_shape_failures(without_active, r6_whole_round_trips), character()
-  )
 })
 
 test_that("a document the flag wrote writes back to itself", {

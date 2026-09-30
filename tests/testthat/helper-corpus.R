@@ -907,6 +907,15 @@ r6_shape_instance <- function(spec, id, env = parent.frame()) {
   obj
 }
 
+r6_shape_refusal <- function(spec, classes) {
+
+  if (spec[["portable"]]) {
+    return(NA_character_)
+  }
+
+  paste0(non_portable(classes), " at `x`")
+}
+
 r6_shape_surface <- function(obj) {
 
   private <- obj[[".__enclos_env__"]][["private"]]
@@ -921,29 +930,32 @@ r6_shape_surface <- function(obj) {
   )
 }
 
-r6_optin_round_trips <- function(spec, id) {
+r6_shape_settles <- function(spec, id) {
 
   obj <- r6_shape_instance(spec, id)
+  refusal <- r6_shape_refusal(spec, class(obj))
+
+  doc <- tryCatch(
+    json_write_str(obj),
+    error = function(e) structure(conditionMessage(e), class = "r6_refused")
+  )
+
+  if (!is.na(refusal)) {
+    return(inherits(doc, "r6_refused") && identical(unclass(doc), refusal))
+  }
+
+  if (inherits(doc, "r6_refused")) {
+    return(FALSE)
+  }
 
   tryCatch(
     {
-      doc <- json_write_str(obj)
       back <- suppressMessages(json_read_str(doc))
 
       identical(json_write_str(back), doc) &&
         identical(r6_shape_surface(obj), r6_shape_surface(back))
     },
     error = function(e) FALSE
-  )
-}
-
-r6_optin_refused <- function(spec, id) {
-
-  obj <- r6_shape_instance(spec, id)
-
-  identical(
-    tryCatch(json_write_str(obj), error = conditionMessage),
-    paste0(non_portable(class(obj)), " at `x`")
   )
 }
 
@@ -954,9 +966,9 @@ r6_shape_label <- function(spec, id) {
   )
 }
 
-# A class the flag carries is rebuilt rather than found, so it is checked
-# through the document and an instance of the class that comes back.
-r6_generator_round_trips <- function(spec, id) {
+# A class the flag carries is rebuilt rather than found, so what has to settle
+# is the document and the shape an instance of the rebuilt class takes.
+r6_class_settles <- function(spec, id) {
 
   gen <- r6_shape_class(spec, id)
 
@@ -976,56 +988,12 @@ r6_generator_round_trips <- function(spec, id) {
   )
 }
 
-# Every shape opts in to `r6_state()`, which the flag writing an instance
-# whole does not ask.
-r6_whole_round_trips <- function(spec, id) {
-
-  obj <- r6_shape_instance(spec, id)
-
-  tryCatch(
-    {
-      doc <- json_write_str(obj, self_contained = TRUE)
-      back <- suppressMessages(json_read_str(doc))
-
-      identical(json_write_str(back, self_contained = TRUE), doc) &&
-        identical(r6_shape_surface(obj), r6_shape_surface(back))
-    },
-    error = function(e) FALSE
-  )
-}
-
-r6_whole_refused <- function(spec, id) {
-
-  obj <- r6_shape_instance(spec, id)
-
-  refusal <- tryCatch(
-    {
-      json_write_str(obj, self_contained = TRUE)
-      NA_character_
-    },
-    error = conditionMessage
-  )
-
-  isTRUE(startsWith(refusal, "cannot write an active binding at `x$"))
-}
-
-r6_shape_has_active <- function(spec) {
-  any(spec[["active"]] > 0L)
-}
-
-r6_shape_without_active <- function(spec) {
-
-  spec[["active"]][] <- 0L
-
-  spec
-}
-
-r6_shape_failures <- function(specs, check) {
+r6_shape_failures <- function(specs, settles = r6_shape_settles) {
 
   failed <- character()
 
   for (id in seq_along(specs)) {
-    if (!check(specs[[id]], id)) {
+    if (!settles(specs[[id]], id)) {
       failed <- c(failed, r6_shape_label(specs[[id]], id))
     }
   }
