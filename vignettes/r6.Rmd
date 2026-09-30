@@ -239,7 +239,7 @@ Cache <- setRefClass("Cache",
 json_write_str(Cache$new(root = tempdir(), key = "s3cret"))
 ```
 
-A method registered on the concrete class settles it, and so does one on any class between that and `envRefClass`, since the chain is what the writer looks along and what the document records. The refusal itself sits on the `envRefClass` rung, so that rung is taken, exactly as `R6` is. The generator is refused rather than recorded by the class it names, which is where this differs from the two above: walking into one reaches the internals of the `methods` package rather than anything the class declares. The same walk keeps an instance refused under the `self_contained` flag, since the instance binds its class definition.
+A method registered on the concrete class settles it, and so does one on any class between that and `envRefClass`, since the chain is what the writer looks along and what the document records. The refusal itself sits on the `envRefClass` rung, so that rung is taken, exactly as `R6` is. The generator is refused rather than recorded by the class it names, which is where this differs from the two above: walking into one reaches the internals of the `methods` package rather than anything the class declares. The same walk keeps an instance refused under the `self_contained` flag, since the instance binds its class definition, and a method of its own does not settle it there, the flag asking none.
 
 The refusal follows the label rather than the shape, and only a class system saying its instances are more than their bindings is such a label. An environment you have classed yourself says nothing of the kind, so the environment rule applies to it and its contents are written — the credential included.
 

@@ -82,6 +82,17 @@ refers_back <- function(value, gen) {
 # so the bindings are still not a value to record on the class's behalf.
 #' @export
 json_state.envRefClass <- function(x) {
+
+  # The flag asks no method of the class's own, so naming one there would name
+  # something that does not settle it, and the instance is not taken whole the
+  # way an `R6` one is, since it binds its class definition.
+  if (writer_self_contained$on()) {
+    refuse(
+      "cannot write an instance of the reference class `", class(x)[[1L]],
+      "` in a self-contained document"
+    )
+  }
+
   refuse(
     "a reference class instance needs a `json_state()` method for class `",
     class(x)[[1L]], "`"
