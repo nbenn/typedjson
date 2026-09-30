@@ -229,6 +229,21 @@ corpus_env_contents <- function() {
   lockBinding("k", locked)
   lockEnvironment(locked)
 
+  # The setter closes over the environment it is bound in, which is a cycle.
+  active <- corpus_env(n = 2)
+  makeActiveBinding(
+    "twice",
+    corpus_closure(
+      "function(value) if (missing(value)) n * 2 else n <<- value / 2", active
+    ),
+    active
+  )
+
+  sealed <- corpus_env(k = 1)
+  makeActiveBinding("live", corpus_closure("function() 42"), sealed)
+  lockBinding("live", sealed)
+  lockEnvironment(sealed)
+
   list(
     "env/contents/empty" = corpus_env(),
     "env/contents/global-parent" = corpus_env(n = 1L, parent = globalenv()),
@@ -246,7 +261,9 @@ corpus_env_contents <- function() {
       class = "corpus_class", meta = c(a = 1L)
     ),
     "env/contents/dotted" = corpus_env(.hidden = 1L, visible = 2L),
-    "env/contents/closure" = corpus_env(f = mean)
+    "env/contents/closure" = corpus_env(f = mean),
+    "env/contents/active" = active,
+    "env/contents/active-locked" = sealed
   )
 }
 
@@ -284,14 +301,6 @@ corpus_shared <- function() {
       "function() {i <- 0; list(get = function() i, set = function(v) i <<- v)}"
     )()
   )
-}
-
-corpus_env_active <- function() {
-
-  env <- corpus_env(n = 1L)
-  makeActiveBinding("live", function() 42, env)
-
-  env
 }
 
 corpus_env_promise <- function() {
@@ -391,10 +400,6 @@ corpus_refused <- function() {
   )
 
   refused <- list(
-    "env/active-binding" = list(
-      value = corpus_env_active(), message = "cannot write an active binding",
-      path = "x$bindings$live"
-    ),
     "env/promise" = list(
       value = corpus_env_promise(), type = "promise", path = "x$bindings$lazy"
     ),
@@ -1169,6 +1174,12 @@ corpus_closures_local <- function() {
     )(),
     "closure/local/holding-closure" = corpus_closure(
       "function() { f <- mean; function(x) f(x) }"
+    )(),
+    "closure/local/active" = corpus_closure(
+      paste(
+        "function() {",
+        "makeActiveBinding(\"a\", function() 1, environment()); function() a }"
+      )
     )()
   )
 }

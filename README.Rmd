@@ -156,7 +156,7 @@ The method pair below is the answer, and `r6_state()` with `r6_restore()` is the
 
 ## What stays out
 
-Values that are handles rather than data are refused rather than written as something else: an external pointer, plus the two bindings an environment can hold that would have to be run to be read — a promise and an active binding. An error names the path it stopped at, and a closure over a frame holding either one is refused there.
+Values that are handles rather than data are refused rather than written as something else: an external pointer, and a binding holding a promise, which would have to be forced to be read. An error names the path it stopped at, and a closure over a frame holding either one is refused there. An active binding would have to be run to be read as well, so it is recorded by the function it runs instead, and comes back active.
 
 ```r
 json_write_str(list(a = 1, e = local({delayedAssign("f", stop("!")); environment()})))

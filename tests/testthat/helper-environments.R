@@ -138,20 +138,17 @@ env_frame_difference <- function(x, y, at, seen) {
     return(paste0("`", at, "` is locked on one side only"))
   }
 
-  active <- binding_flags(nms, x, bindingIsActive)
-
-  if (!identical(active, binding_flags(nms, y, bindingIsActive)) ||
+  if (!identical(binding_flags(nms, x, bindingIsActive),
+                 binding_flags(nms, y, bindingIsActive)) ||
         !identical(binding_flags(nms, x, bindingIsLocked),
                    binding_flags(nms, y, bindingIsLocked))) {
     return(paste0("`", at, "` binds its names differently"))
   }
 
-  for (nm in nms[!active]) {
+  for (nm in nms) {
 
     difference <- env_difference(
-      get(nm, envir = x, inherits = FALSE),
-      get(nm, envir = y, inherits = FALSE),
-      paste0(at, "$", nm), seen
+      bound_value(nm, x), bound_value(nm, y), paste0(at, "$", nm), seen
     )
 
     if (!is.null(difference)) {
@@ -162,6 +159,17 @@ env_frame_difference <- function(x, y, at, seen) {
   env_difference(
     parent.env(x), parent.env(y), paste0("parent.env(", at, ")"), seen
   )
+}
+
+# An active binding is compared by the function it runs, which is what the
+# document records, rather than by what calling that returns.
+bound_value <- function(nm, env) {
+
+  if (bindingIsActive(nm, env)) {
+    return(activeBindingFunction(nm, env))
+  }
+
+  get(nm, envir = env, inherits = FALSE)
 }
 
 # A cycle reaches the same pair of environments twice, so the pair standing
@@ -247,9 +255,7 @@ env_sharing_frame <- function(x, at, state) {
   }
 
   for (nm in ls(x, all.names = TRUE)) {
-    env_sharing_visit(
-      get(nm, envir = x, inherits = FALSE), paste0(at, "$", nm), state
-    )
+    env_sharing_visit(bound_value(nm, x), paste0(at, "$", nm), state)
   }
 
   env_sharing_visit(

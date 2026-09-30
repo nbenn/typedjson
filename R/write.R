@@ -120,7 +120,10 @@
 #' come back as the object they were written from. Anything else is
 #' recorded by its contents, with the parent following the same rule and
 #' the locked bit and locked bindings recorded alongside, and comes back
-#' equivalent. A recorded name that is not available on the way back is
+#' equivalent. An active binding among those contents is recorded by the
+#' function it runs rather than by what that returns, and comes back active:
+#' the function is called on neither side, which is how `serialize()`
+#' records one too. A recorded name that is not available on the way back is
 #' replaced by the global environment with a warning, the way base R
 #' already does.
 #'
@@ -168,12 +171,10 @@
 #' is refused rather than silently written as something else, and an
 #' environment binding holding one is refused with it. So is a binding
 #' holding a promise, since forcing it on the writer's own initiative
-#' could run arbitrary code, and an active binding, since reading it would
-#' do the same and record the result as though it were a plain value. That
-#' reaches a closure through the frame it closes over, where an argument
-#' the function was called with stays a promise whether or not it has been
-#' forced. A class that owns such a handle can still be persisted by
-#' writing a [json_state()] method for it.
+#' could run arbitrary code. That reaches a closure through the frame it
+#' closes over, where an argument the function was called with stays a
+#' promise whether or not it has been forced. A class that owns such a
+#' handle can still be persisted by writing a [json_state()] method for it.
 #'
 #' Slots and properties are attributes, so an S4 or S7 object is rebuilt
 #' by the attribute rule rather than by whatever the class constructs one
@@ -281,8 +282,8 @@
 #' than overriding it. What made recording an instance an assertion about
 #' its class was picking which of its bindings are the state, and an
 #' instance written whole picks nothing: the environment rule records it
-#' like any other environment, so its fields, its private bindings, its
-#' methods and the environment those close over all travel. No
+#' like any other environment, so its fields, active ones too, its private
+#' bindings, its methods and the environment those close over all travel. No
 #' [json_state()] method is asked, an opt-in through [r6_state()] included,
 #' since the record a method writes is read back through the class's own
 #' [json_revive()], found by name, which is the lookup the flag exists to
@@ -294,8 +295,7 @@
 #' is available. Nothing checks it on the way back either. It is built
 #' without running its `initialize` or registering a `finalize` method, and
 #' its methods are the ones the class had where the document was written, so
-#' a class fixed or upgraded since does not reach the object. An active
-#' binding keeps an instance out, as it keeps out any environment. Most of
+#' a class fixed or upgraded since does not reach the object. Most of
 #' what an instance of a cloneable class writes is R6's own `clone` method,
 #' a copy of which R6 puts into the instance and into each level of the
 #' chain it inherits. Writing what comes back without the flag asks its

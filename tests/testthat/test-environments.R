@@ -202,17 +202,64 @@ test_that("a promise is refused rather than forced", {
   expect_false(forced)
 })
 
-test_that("an active binding is refused rather than read", {
+test_that("an active binding is recorded by the function it runs", {
 
   env <- new.env(parent = emptyenv())
-  read <- FALSE
-  makeActiveBinding("live", function() {
-    read <<- TRUE
-    1
-  }, env)
+  env$n <- 1L
+  makeActiveBinding("live", corpus_closure("function() 42"), env)
 
-  expect_error(json_write_str(env), "cannot write an active binding")
-  expect_false(read)
+  expect_identical(
+    json_write_str(env),
+    paste0(
+      '{"~t":"environment","~v":{"parent":{"~t":"environment","~v":',
+      '{"name":"R_EmptyEnv"}},"bindings":{"n":1},"active_bindings":{"live":',
+      '{"~t":"closure","~v":{"formals":null,"body":42.0,"environment":',
+      '{"~t":"environment","~v":{"name":"R_GlobalEnv"}}}}}}}'
+    )
+  )
+})
+
+test_that("an active binding is run neither to write it nor to read it", {
+
+  seen <- corpus_env(read = FALSE, parent = globalenv())
+  env <- new.env(parent = emptyenv())
+  makeActiveBinding(
+    "live", corpus_closure("function() { read <<- TRUE; 1 }", seen), env
+  )
+
+  back <- json_read_str(json_write_str(env))
+  fun <- activeBindingFunction("live", back)
+
+  expect_false(seen$read)
+  expect_true(bindingIsActive("live", back))
+  expect_false(environment(fun)$read)
+
+  expect_identical(back$live, 1)
+  expect_true(environment(fun)$read)
+  expect_false(seen$read)
+})
+
+test_that("an active binding closing over its own environment comes back", {
+
+  env <- new.env(parent = baseenv())
+  env$n <- 2
+  makeActiveBinding(
+    "twice",
+    corpus_closure(
+      "function(value) if (missing(value)) n * 2 else n <<- value / 2", env
+    ),
+    env
+  )
+
+  back <- json_read_str(json_write_str(env))
+
+  expect_identical(environment(activeBindingFunction("twice", back)), back)
+  expect_identical(back$twice, 4)
+
+  back$twice <- 10
+
+  expect_identical(back$n, 5)
+  expect_identical(env$n, 2)
 })
 
 test_that("a cycle through a bare environment closes again on the way back", {
@@ -303,6 +350,38 @@ test_that("a recorded environment the reader cannot use is an error", {
       )
     ),
     "does not bind"
+  )
+  expect_error(
+    json_read_str(
+      sprintf(
+        '{"~t":"environment","~v":{"parent":%s,"active_bindings":[1,2]}}', empty
+      )
+    ),
+    "the `active_bindings` of a recorded environment have to be an object",
+    fixed = TRUE
+  )
+  expect_error(
+    json_read_str(
+      sprintf(
+        '{"~t":"environment","~v":{"parent":%s,"active_bindings":{"a":1}}}',
+        empty
+      )
+    ),
+    "`active_bindings` binds `a` to something other than a function",
+    fixed = TRUE
+  )
+  expect_error(
+    json_read_str(
+      sprintf(
+        paste0(
+          '{"~t":"environment","~v":{"parent":%s,"bindings":{"a":1},',
+          '"active_bindings":{"a":{"~t":"builtin","~v":"sum"}}}}'
+        ),
+        empty
+      )
+    ),
+    "`active_bindings` names `a`, which `bindings` binds as well",
+    fixed = TRUE
   )
   expect_error(
     json_read_str('{"~t":"environment","~v":{"~q":1}}'), "not a tag"

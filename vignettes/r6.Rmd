@@ -225,7 +225,7 @@ The private balance travels with the rest, and so does everything else the objec
 grepl("s3cret", json_write_str(store, self_contained = TRUE), fixed = TRUE)
 ```
 
-That is what a self-contained document is, and `saveRDS()` would write the key as well. A document that has to leave something out is one written without the flag, where the class's method decides. An object holding a handle, such as an open connection, stops the write under the flag, since no document can carry one, and an opted-in class such as `Point` is written whole like any other. Two limits remain. An active binding keeps an instance out, as it keeps out any environment, and most of a document holding an instance of a cloneable class is R6's own `clone` method, a copy of which R6 puts into every instance. The design notes in `vignette("design")` set out the rest.
+That is what a self-contained document is, and `saveRDS()` would write the key as well. A document that has to leave something out is one written without the flag, where the class's method decides. An object holding a handle, such as an open connection, stops the write under the flag, since no document can carry one, and an opted-in class such as `Point` is written whole like any other. One limit remains: most of a document holding an instance of a cloneable class is R6's own `clone` method, a copy of which R6 puts into every instance. The design notes in `vignette("design")` set out the rest.
 
 ## Reference classes, and where the refusal stops
 

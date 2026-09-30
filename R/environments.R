@@ -150,6 +150,8 @@ env_contents <- function(state, env) {
     )
   }
 
+  active <- active_funs(state[["active_bindings"]], names(bindings))
+
   if (is.null(env)) {
     env <- new.env(parent = parent)
   } else {
@@ -157,6 +159,12 @@ env_contents <- function(state, env) {
   }
 
   fill_env(env, bindings)
+
+  # Making a binding active does not call its function, so reading one runs
+  # nothing the document holds.
+  for (nm in names(active)) {
+    makeActiveBinding(nm, active[[nm]], env)
+  }
 
   for (nm in locked_names(state[["locked_bindings"]], env)) {
     lockBinding(nm, env)
@@ -167,6 +175,42 @@ env_contents <- function(state, env) {
   }
 
   env
+}
+
+active_funs <- function(funs, bound) {
+
+  if (is.null(funs)) {
+    return(list())
+  }
+
+  if (!is_named_list(funs)) {
+    stop(
+      "the `active_bindings` of a recorded environment have to be an object",
+      call. = FALSE
+    )
+  }
+
+  odd <- names(funs)[!vapply(funs, is.function, logical(1L))]
+
+  if (length(odd) > 0L) {
+    stop(
+      "`active_bindings` binds `", odd[[1L]], "` to something other than a ",
+      "function", call. = FALSE
+    )
+  }
+
+  # A name in both would otherwise reach `makeActiveBinding()` already bound,
+  # which R refuses in its own terms rather than the document's.
+  both <- intersect(names(funs), bound)
+
+  if (length(both) > 0L) {
+    stop(
+      "`active_bindings` names `", both[[1L]], "`, which `bindings` binds as ",
+      "well", call. = FALSE
+    )
+  }
+
+  funs
 }
 
 locked_names <- function(nms, env) {

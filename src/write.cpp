@@ -538,6 +538,11 @@ yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
   }
   std::sort(order.begin(), order.end());
 
+  // An active binding is recorded by the function it runs rather than by what
+  // calling that returns, and under a key of its own, so the reader makes it
+  // active again rather than binding the function as a value.
+  std::vector<std::pair<SEXP, SEXP> > active;
+
   if (n > 0) {
     Step step(this, PRINTNAME(Rf_install(kEnvBindings)), 0);
     yyjson_mut_val *bindings = yyjson_mut_obj(doc_);
@@ -549,21 +554,36 @@ yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
       SEXP value = R_NilValue;
       Step at(this, name, i);
 
-      switch (binding_of(sym, x, &value)) {
-        case BIND_ACTIVE:
-          fail("cannot write an active binding");
-        case BIND_PROMISE:
-          fail("cannot write a value of type 'promise'");
-        default:
-          break;
-      }
+      BindKind kind = binding_of(sym, x, &value);
+
+      if (kind == BIND_PROMISE) fail("cannot write a value of type 'promise'");
 
       if (R_BindingIsLocked(sym, x)) locked.push_back(name);
+
+      if (kind == BIND_ACTIVE) {
+        active.push_back(std::make_pair(name, value));
+        continue;
+      }
 
       yyjson_mut_obj_add(bindings, str_val(name), emit(value, false));
     }
 
-    yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kEnvBindings), bindings);
+    if (yyjson_mut_obj_size(bindings) > 0) {
+      yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kEnvBindings), bindings);
+    }
+  }
+
+  if (!active.empty()) {
+    Step step(this, PRINTNAME(Rf_install(kEnvActiveBindings)), 0);
+    yyjson_mut_val *funs = yyjson_mut_obj(doc_);
+
+    for (size_t i = 0; i < active.size(); ++i) {
+      Step at(this, active[i].first, (R_xlen_t)i);
+      yyjson_mut_obj_add(funs, str_val(active[i].first),
+                         emit(active[i].second, false));
+    }
+
+    yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kEnvActiveBindings), funs);
   }
 
   if (R_EnvironmentIsLocked(x)) {
