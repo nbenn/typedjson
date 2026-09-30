@@ -8,6 +8,8 @@
 
 * A function definition inside a body no longer carries the file it was parsed from into the document. The parser keeps that source reference as part of the `function` call rather than as an attribute, where the writer did not look for one (#98).
 
+* Reading a document no longer runs a call recorded with the S4 bit or an `S7_class` attribute. Either one sends the value to the class's validity check, which, unlike every other hook, was handed it outside `quote()`, so R evaluated the call on the way in (#96).
+
 # typedjson 0.1.1
 
 * Installs cleanly with GCC 16 under link-time optimization, where 0.1.0 drew a spurious `-Wstringop-overflow` warning (#86).

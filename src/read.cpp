@@ -687,7 +687,9 @@ void Reader::gate(SEXP x, SEXP attrs) {
 
   if (Rf_isS4(x) ||
       (attrs != R_NilValue && Rf_getAttrib(x, s7_class) != R_NilValue)) {
-    validate_(x);
+    SEXP value = PROTECT(quoted(x));
+    validate_(value);
+    UNPROTECT(1);
   }
 }
 

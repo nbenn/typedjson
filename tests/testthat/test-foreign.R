@@ -373,6 +373,31 @@ test_that("a hook is handed what a document holds rather than what it yields", {
   }
 })
 
+test_that("a call the validity check is run on is handed to it unevaluated", {
+
+  side <- new.env()
+  local_global_binding(
+    "mark", function() {
+      side$hit <- TRUE
+      42
+    }, environment()
+  )
+
+  classed <- json_read_str(
+    '{"~t":"language","~a":{"S7_class":1},"~v":["~:mark"]}'
+  )
+
+  expect_identical(classed, structure(quote(mark()), S7_class = 1L))
+  expect_null(side$hit)
+
+  wrapped <- json_read_str(
+    '{"~s4":true,"~v":{"~t":"language","~v":["~:mark"]}}'
+  )
+
+  expect_identical(wrapped, asS4(quote(mark())))
+  expect_null(side$hit)
+})
+
 test_that("a symbol a document records is not resolved at a hook either", {
 
   side <- new.env()
