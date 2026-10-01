@@ -180,3 +180,60 @@ test_that("an error leaves the session able to write again", {
   invisible(gc())
   expect_identical(json_read_str("[1,2,3]"), 1:3)
 })
+
+test_that("every value a refused document numbered can be collected", {
+
+  side <- new.env()
+  side$freed <- 0L
+
+  local_global_binding(
+    "json_revive.corpus_tracked", function(class, state) {
+      out <- new.env()
+      reg.finalizer(out, function(e) side$freed <- side$freed + 1L)
+      out
+    }, environment()
+  )
+
+  # R refuses what follows the numbered value in all but the last case, which
+  # the reader refuses itself.
+  cases <- list(
+    list('{"~a":{"dim":[5]},"~v":[1,2]}', "do not match the length"),
+    list('{"~a":{"a":1},"~v":"~:a"}', "cannot set attribute"),
+    list('{"~t":"integer","~v":[[1,2]]}', "cannot be coerced"),
+    list('"a\\u0000b"', "embedded nul"),
+    list('{"~t":"frobnicate","~v":[1]}', "not a type")
+  )
+
+  for (case in cases) {
+    doc <- paste0(
+      '[{"~x":{"class":"corpus_tracked","state":{}},"~id":1},', case[[1]], "]"
+    )
+    expect_error(json_read_str(doc), case[[2]])
+  }
+
+  # The first collection runs the finalizer that lets go of what a refused
+  # read held, and only the second can collect that.
+  invisible(gc())
+  invisible(gc())
+
+  expect_identical(side$freed, length(cases))
+})
+
+test_that("a document R refuses partway is not kept in memory", {
+
+  used <- function() {
+    invisible(gc())
+    gc()[["Vcells", "used"]] * 8
+  }
+
+  doc <- paste0(
+    "[[", strrep("1.5,", 1e5), '1.5],{"~a":{"dim":[5]},"~v":[1,2]}]'
+  )
+
+  expect_error(json_read_str(doc), "do not match the length")
+
+  before <- used()
+  for (i in seq_len(10L)) try(json_read_str(doc), silent = TRUE)
+
+  expect_lt(used() - before, nchar(doc))
+})

@@ -579,7 +579,7 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   // in and a reference points backwards.
   int64_t id = marked(v, kTagId);
   bool shelled = (type == ENVSXP && id != 0);
-  cpp11::sexp shell(shelled ? (SEXP)shell_() : R_NilValue);
+  SEXP shell = PROTECT(shelled ? (SEXP)shell_() : R_NilValue);
 
   if (shelled) bind(id, shell);
 
@@ -593,7 +593,7 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   } else if (type == NILSXP) {
     out = R_NilValue;
   } else if (payload == nullptr) {
-    UNPROTECT(1);
+    UNPROTECT(2);
     cpp11::stop("a tagged object needs a value under `%s`", kTagValue);
   } else if (type == CPLXSXP) {
     out = build_complex(payload);
@@ -617,7 +617,7 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   if (wants_s4 && !shared(out)) REPROTECT(out = Rf_asS4(out, TRUE, 0), at);
 
   if (out == R_NilValue && attrs != R_NilValue) {
-    UNPROTECT(2);
+    UNPROTECT(3);
     cpp11::stop("a NULL value cannot carry attributes");
   }
 
@@ -626,12 +626,12 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   // set on either here would be set on every other reference to it.
   if (attrs != R_NilValue &&
       (TYPEOF(out) == BUILTINSXP || TYPEOF(out) == SPECIALSXP)) {
-    UNPROTECT(2);
+    UNPROTECT(3);
     cpp11::stop("a primitive cannot carry attributes");
   }
 
   if (attrs != R_NilValue && TYPEOF(out) == ENVSXP && shared(out)) {
-    UNPROTECT(2);
+    UNPROTECT(3);
     cpp11::stop("an environment recorded by name cannot carry attributes");
   }
 
@@ -641,12 +641,12 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   if (id != 0) {
     if (!shelled) {
       bind(id, out);
-    } else if (out != (SEXP)shell) {
+    } else if (out != shell) {
       rebind(id, out);
     }
   }
 
-  UNPROTECT(2);
+  UNPROTECT(3);
   return out;
 }
 
@@ -799,6 +799,14 @@ std::string lossy_message(const std::vector<std::string> &lexemes) {
   return msg;
 }
 
+void finalize_reader(SEXP xp) {
+  Reader *reader = (Reader *)R_ExternalPtrAddr(xp);
+  if (reader != nullptr) {
+    delete reader;
+    R_ClearExternalPtr(xp);
+  }
+}
+
 void finalize_doc(SEXP xp) {
   yyjson_doc *doc = (yyjson_doc *)R_ExternalPtrAddr(xp);
   if (doc != nullptr) {
@@ -811,8 +819,12 @@ void finalize_doc(SEXP xp) {
 
 }  // namespace typedjson
 
-[[cpp11::register]] cpp11::sexp typedjson_read_(cpp11::raws bytes,
-                                                cpp11::list hooks) {
+// The arguments come in as bare SEXPs, which `.Call()` protects for as long as
+// this runs. Taken as `cpp11::raws` and `cpp11::list`, they would sit on
+// cpp11's preserve list until a destructor that an R error raised in the walk
+// skips, and a refused document would stay in memory for the rest of the
+// session.
+[[cpp11::register]] cpp11::sexp typedjson_read_(SEXP bytes, SEXP hooks) {
   using namespace typedjson;
 
   yyjson_read_err err;
@@ -824,13 +836,17 @@ void finalize_doc(SEXP xp) {
   }
   SEXP owner = PROTECT(guard(parsed, finalize_doc));
 
-  std::vector<std::string> lossy;
-  SEXP out;
-  {
-    Reader reader(hooks);
-    out = PROTECT(reader.build(yyjson_doc_get_root(parsed)));
-    lossy = reader.lossy();
-  }
+  // The reader keeps its hooks and each value the document numbers on
+  // cpp11's preserve list until its destructor runs, so it is owned the way
+  // the document is rather than living on the stack, where an R error raised
+  // in the walk would skip that destructor.
+  Reader *reader = new Reader(cpp11::list(hooks));
+  SEXP keeper = PROTECT(guard(reader, finalize_reader));
+  SEXP out = PROTECT(reader->build(yyjson_doc_get_root(parsed)));
+  std::vector<std::string> lossy = reader->lossy();
+
+  R_ClearExternalPtr(keeper);
+  delete reader;
 
   R_ClearExternalPtr(owner);
   yyjson_doc_free(parsed);
@@ -839,7 +855,7 @@ void finalize_doc(SEXP xp) {
   // result moves onto cpp11's preserve list before the protections are
   // dropped rather than after the warning.
   cpp11::sexp res(out);
-  UNPROTECT(2);
+  UNPROTECT(3);
 
   if (!lossy.empty()) {
     std::string msg = lossy_message(lossy);

@@ -293,9 +293,10 @@ inline SEXP quoted(SEXP x) {
   return Rf_lang2(quote, x);
 }
 
-// A yyjson document outlives every C++ frame that could clean it up, since
-// an R error raised anywhere in the walk longjmps past destructors. Handing
-// ownership to an external pointer lets R reclaim it through the finalizer.
+// A yyjson document outlives every C++ frame that could clean it up, as does
+// the reader walking one, since an R error raised anywhere in the walk
+// longjmps past destructors. Handing ownership to an external pointer lets R
+// reclaim either through the finalizer.
 inline SEXP guard(void *ptr, R_CFinalizer_t finalizer) {
   SEXP out = PROTECT(R_MakeExternalPtr(ptr, R_NilValue, R_NilValue));
   R_RegisterCFinalizerEx(out, finalizer, TRUE);

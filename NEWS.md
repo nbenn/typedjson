@@ -18,6 +18,8 @@
 
 * A document carrying attributes on an environment recorded by name, such as the global environment or a namespace, is refused, as one carrying attributes on `NULL` or on a primitive already was. The reader used to set them on the environment the name finds, where they stayed for the rest of the session (#103).
 
+* A document R refuses partway through the read, such as one whose `dim` does not fit its value, one asking for a coercion R will not make or one holding a NUL in a string, is let go of along with every value it had numbered by then. Both used to stay in memory for the rest of the session, where a document the reader refuses itself never did (#110).
+
 # typedjson 0.1.1
 
 * Installs cleanly with GCC 16 under link-time optimization, where 0.1.0 drew a spurious `-Wstringop-overflow` warning (#86).
