@@ -172,6 +172,37 @@ test_that("a document cannot set the S4 bit on an object R shares", {
   expect_identical(names(Filter(isS4, shared)), character())
 })
 
+test_that("a document cannot set an attribute on an object R shares", {
+
+  shared <- c(
+    list(null = NULL, primitive = sum, symbol = quote(corpus_shared)),
+    corpus_envs()
+  )
+
+  # An attribute set on one of these stays set for the rest of the session, so
+  # a regression is undone here rather than left to derail every later test.
+  withr::defer(for (x in shared) attr(x, "corpus_attr") <- NULL)
+
+  written <- c('{"~t":"NULL"}', vapply(shared, json_write_str, character(1L)))
+  tagged <- written[startsWith(written, "{")]
+
+  docs <- c(
+    paste0('{"~a":{"corpus_attr":1},"~v":', written, "}"),
+    sub("{", '{"~a":{"corpus_attr":1},', tagged, fixed = TRUE)
+  )
+
+  # The symbol is refused by R itself, in words of its own, so what is matched
+  # is what every refusal shares.
+  for (doc in docs) {
+    expect_error(json_read_str(doc), "attribute")
+  }
+
+  expect_identical(
+    names(Filter(function(x) !is.null(attr(x, "corpus_attr")), shared)),
+    character()
+  )
+})
+
 test_that("a tag the payload already carries is honored and then dropped", {
 
   doc <- '{"~t":"double","~a":{"class":"Date"},"~v":20454.0}'

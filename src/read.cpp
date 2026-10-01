@@ -621,12 +621,18 @@ SEXP Reader::build_tagged(yyjson_val *v) {
     cpp11::stop("a NULL value cannot carry attributes");
   }
 
-  // R hands out the one object its primitive table holds, so an attribute
-  // set on it here would be set on every other reference to it.
+  // R hands out the one object its primitive table holds, and an environment
+  // recorded by name reads back as the one the name finds, so an attribute
+  // set on either here would be set on every other reference to it.
   if (attrs != R_NilValue &&
       (TYPEOF(out) == BUILTINSXP || TYPEOF(out) == SPECIALSXP)) {
     UNPROTECT(2);
     cpp11::stop("a primitive cannot carry attributes");
+  }
+
+  if (attrs != R_NilValue && TYPEOF(out) == ENVSXP && shared(out)) {
+    UNPROTECT(2);
+    cpp11::stop("an environment recorded by name cannot carry attributes");
   }
 
   set_attribs(out, attrs);
