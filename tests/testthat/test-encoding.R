@@ -192,18 +192,20 @@ test_that("reading a long name leaves R's count of vector memory as it was", {
 
   # R names a symbol it parses without an encoding mark, where the reader marks
   # its own copy of a name UTF-8, so each document read here meets the parser's
-  # copy. A string under 128 bytes sits in a page R counts as a whole, so only
-  # a longer name could move the count.
-  name <- strrep("\u00e9", 100L)
-  invisible(str2lang(paste0("`", name, "`")))
+  # copy. A string under 128 bytes sits in a page R counts as a whole, which is
+  # what lets the 127-byte name keep the route that leaves its copy hashed.
+  long <- strrep("\u00e9", 100L)
+  short <- paste0(strrep("\u00e9", 63L), "a")
+  invisible(lapply(paste0("`", c(long, short), "`"), str2lang))
 
   read <- c(
-    paste0('"~:', name, '"'),
-    paste0('{"~a":{"', name, '":1},"~v":1}'),
-    paste0('{"~t":"language","~v":{"":"~:f","', name, '":1}}')
+    paste0('"~:', long, '"'),
+    paste0('{"~a":{"', long, '":1},"~v":1}'),
+    paste0('{"~t":"language","~v":{"":"~:f","', long, '":1}}'),
+    paste0('"~:', short, '"')
   )
   refused <- paste0('"~:', c(strrep("a", 10001L), strrep("\u00e9", 5001L)), '"')
-  rm(name)
+  rm(long, short)
 
   before <- used()
 
@@ -215,8 +217,10 @@ test_that("reading a long name leaves R's count of vector memory as it was", {
 
 test_that("a name the locale cannot spell is installed as R installs one", {
 
+  # Only a name of 128 bytes or more reaches the reader's own route, which has
+  # to keep the warning R gives when it installs a name itself.
   withr::local_locale(c(LC_CTYPE = "C"))
-  text <- declared(cafe, "UTF-8")
+  text <- strrep(declared(cafe, "UTF-8"), 30L)
   doc <- paste0('"~:', text, '"')
 
   expect_identical(

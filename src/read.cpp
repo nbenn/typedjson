@@ -163,41 +163,28 @@ int nibble(char c) {
   return -1;
 }
 
-// R refuses a name longer than this, its MAXIDSIZE, which no header exports.
-const int kNameLimit = 10000;
-
-// R marks a string ASCII as it creates one, but the charIsASCII() that reads
-// the mark arrived only in R 4.5.0.
-bool is_ascii(const char *s, size_t len) {
-  for (size_t i = 0; i < len; ++i) {
-    if ((unsigned char)s[i] > 0x7f) return false;
-  }
-  return true;
-}
+// A string shorter than this sits in one of R's small-vector pages, which R
+// counts by the page rather than by the length of each string it holds.
+const int kSmallName = 128;
 
 // For a name that needs no translation, Rf_installChar() calls R's
 // installNoTrChar(), which stores the name's hash in the string before it
 // returns a symbol R already holds under a copy of the same bytes with another
-// encoding mark, or refuses a name over the limit. Either way the string is
-// left hashed without being any symbol's name, and R frees a hashed string at
-// a size taken from the hash, so its count of vector memory drops by as much.
-// Installing from the bytes through Rf_install() stores a hash only on a name
-// it creates. An ASCII string carries no mark, so R holds one string for those
-// bytes and an ASCII name within the limit is or becomes the symbol's own
-// name; it keeps the faster route, which reuses a hash the string already
-// carries. A name that needs translating is left to R, which installs it from
-// a buffer of its own and warns where it has to escape a character.
+// encoding mark, or refuses a name over its limit. Either way the string is
+// left hashed without being any symbol's name, and R frees a hashed string of
+// 128 bytes or more at a size taken from the hash, so its count of vector
+// memory drops by as much. A shorter string sits in a page R counts as a
+// whole, so a short name keeps that route and the hash it reuses, while a
+// longer one is installed from its bytes through Rf_install(), which stores a
+// hash only on a name it creates. A name that needs translating is left to R,
+// which installs it from a buffer of its own and warns where it has to escape
+// a character.
 SEXP install_name(SEXP name) {
-  const char *s = CHAR(name);
-  size_t len = (size_t)LENGTH(name);
-
-  if (len <= (size_t)kNameLimit && is_ascii(s, len)) {
-    return Rf_installChar(name);
-  }
+  if (LENGTH(name) < kSmallName) return Rf_installChar(name);
 
   const void *vmax = vmaxget();
   const char *native = Rf_translateChar(name);
-  SEXP out = native == s ? Rf_install(native) : Rf_installChar(name);
+  SEXP out = native == CHAR(name) ? Rf_install(native) : Rf_installChar(name);
   vmaxset(vmax);
 
   return out;
