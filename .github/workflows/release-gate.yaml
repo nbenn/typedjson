@@ -36,4 +36,4 @@ permissions:
 
 jobs:
   release-gate:
-    uses: BristolMyersSquibb/blockr.ci/.github/workflows/release-gate.yaml@main
+    uses: BristolMyersSquibb/blockr.ci/.github/workflows/release-gate.yaml@v0.1.1
