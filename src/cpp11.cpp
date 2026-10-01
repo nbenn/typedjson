@@ -6,10 +6,10 @@
 #include <R_ext/Visibility.h>
 
 // read.cpp
-cpp11::sexp typedjson_read_(cpp11::raws bytes, cpp11::list hooks);
+cpp11::sexp typedjson_read_(SEXP bytes, SEXP hooks);
 extern "C" SEXP _typedjson_typedjson_read_(SEXP bytes, SEXP hooks) {
   BEGIN_CPP11
-    return cpp11::as_sexp(typedjson_read_(cpp11::as_cpp<cpp11::decay_t<cpp11::raws>>(bytes), cpp11::as_cpp<cpp11::decay_t<cpp11::list>>(hooks)));
+    return cpp11::as_sexp(typedjson_read_(cpp11::as_cpp<cpp11::decay_t<SEXP>>(bytes), cpp11::as_cpp<cpp11::decay_t<SEXP>>(hooks)));
   END_CPP11
 }
 // write.cpp
