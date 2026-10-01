@@ -968,6 +968,24 @@ test_that("a class without a method takes the ordinary path", {
   expect_identical(json_read_str(json_write_str(obj)), obj)
 })
 
+test_that("a class named default takes the ordinary path", {
+
+  values <- list(
+    alone = structure(1, class = "default"),
+    last = structure(list(a = 1), class = c("corpus_unregistered", "default"))
+  )
+
+  expect_identical(
+    json_write_str(values[["alone"]]), '{"~a":{"class":"default"},"~v":1.0}'
+  )
+
+  for (nm in names(values)) {
+    expect_identical(
+      json_read_str(json_write_str(values[[nm]])), values[[nm]], info = nm
+    )
+  }
+})
+
 test_that("a state without a revive method says so", {
 
   local_state_method("corpus_oneway", function(x) list(a = 1))

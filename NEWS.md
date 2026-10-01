@@ -18,6 +18,8 @@
 
 * A document carrying attributes on an environment recorded by name, such as the global environment or a namespace, is refused, as one carrying attributes on `NULL` or on a primitive already was. The reader used to set them on the environment the name finds, where they stayed for the rest of the session (#103).
 
+* A value whose class vector contains `"default"` is written by the rule for its type, with or without the `self_contained` flag. It used to stop with an error saying the class had no `json_state()` method, because the generic's own fallback sits under the name a method for that class would take, and the writer took it for one (#108).
+
 # typedjson 0.1.1
 
 * Installs cleanly with GCC 16 under link-time optimization, where 0.1.0 drew a spurious `-Wstringop-overflow` warning (#86).

@@ -118,7 +118,15 @@ state_classes <- function(class, s4) {
   methods::extends(class)
 }
 
+# The generic's fallback sits in the table under the name a method for a class
+# called `default` would take, and dispatch from inside the package reaches it
+# ahead of any method an author defines under that name. No class of that name
+# has a method of its own, so the fallback is not taken for one.
 has_state_method <- function(cls) {
+
+  if (identical(cls, "default")) {
+    return(FALSE)
+  }
 
   name <- paste0("json_state.", cls)
 
@@ -140,12 +148,14 @@ state_method_table <- function() {
 }
 
 # A method another package registers lands in the table above beside the
-# package's own, so what tells the two apart is the namespace binding one.
+# package's own, so what tells the two apart is the namespace binding one. The
+# namespace binds the generic's fallback too, which is passed over here as it
+# is in the table.
 own_state_method <- function(classes) {
 
   ns <- asNamespace("typedjson")
 
-  for (cls in classes) {
+  for (cls in setdiff(classes, "default")) {
 
     found <- get0(
       paste0("json_state.", cls), envir = ns, inherits = FALSE,

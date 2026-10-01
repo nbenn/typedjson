@@ -844,6 +844,21 @@ test_that("a method a package registers is not asked under the flag either", {
   )
 })
 
+test_that("a class named default takes the ordinary path under the flag", {
+
+  values <- list(
+    alone = structure(1, class = "default"),
+    last = structure(list(a = 1), class = c("corpus_unregistered", "default"))
+  )
+
+  for (nm in names(values)) {
+    expect_identical(
+      json_read_str(json_write_str(values[[nm]], self_contained = TRUE)),
+      values[[nm]], info = nm
+    )
+  }
+})
+
 test_that("a handle a method stands in for stops the write under the flag", {
 
   local_state_method("corpus_reader", function(x) list(path = x[["path"]]))
