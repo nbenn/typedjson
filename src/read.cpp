@@ -163,6 +163,46 @@ int nibble(char c) {
   return -1;
 }
 
+// R refuses a name longer than this, its MAXIDSIZE, which no header exports.
+const int kNameLimit = 10000;
+
+// R marks a string ASCII as it creates one, but the charIsASCII() that reads
+// the mark arrived only in R 4.5.0.
+bool is_ascii(const char *s, size_t len) {
+  for (size_t i = 0; i < len; ++i) {
+    if ((unsigned char)s[i] > 0x7f) return false;
+  }
+  return true;
+}
+
+// For a name that needs no translation, Rf_installChar() calls R's
+// installNoTrChar(), which stores the name's hash in the string before it
+// returns a symbol R already holds under a copy of the same bytes with another
+// encoding mark, or refuses a name over the limit. Either way the string is
+// left hashed without being any symbol's name, and R frees a hashed string at
+// a size taken from the hash, so its count of vector memory drops by as much.
+// Installing from the bytes through Rf_install() stores a hash only on a name
+// it creates. An ASCII string carries no mark, so R holds one string for those
+// bytes and an ASCII name within the limit is or becomes the symbol's own
+// name; it keeps the faster route, which reuses a hash the string already
+// carries. A name that needs translating is left to R, which installs it from
+// a buffer of its own and warns where it has to escape a character.
+SEXP install_name(SEXP name) {
+  const char *s = CHAR(name);
+  size_t len = (size_t)LENGTH(name);
+
+  if (len <= (size_t)kNameLimit && is_ascii(s, len)) {
+    return Rf_installChar(name);
+  }
+
+  const void *vmax = vmaxget();
+  const char *native = Rf_translateChar(name);
+  SEXP out = native == s ? Rf_install(native) : Rf_installChar(name);
+  vmaxset(vmax);
+
+  return out;
+}
+
 class Reader {
  public:
   explicit Reader(cpp11::list hooks)
@@ -491,7 +531,7 @@ SEXP Reader::build_symbol(yyjson_val *v) {
   }
 
   SEXP name = PROTECT(Rf_mkCharLenCE(s, (int)len, CE_UTF8));
-  SEXP out = Rf_installChar(name);
+  SEXP out = install_name(name);
   UNPROTECT(1);
 
   return out;
@@ -534,7 +574,7 @@ SEXP Reader::build_nodes(yyjson_val *v, SEXPTYPE type) {
       UNPROTECT(4);
       cpp11::stop("an argument name cannot be missing");
     }
-    if (CHAR(nm)[0] != '\0') SET_TAG(out, Rf_installChar(nm));
+    if (CHAR(nm)[0] != '\0') SET_TAG(out, install_name(nm));
   }
 
   UNPROTECT(4);
@@ -698,14 +738,14 @@ void Reader::set_attribs(SEXP x, SEXP attrs) {
   SEXP nms = PROTECT(Rf_getAttrib(attrs, R_NamesSymbol));
 
   for (R_xlen_t i = 0; i < XLENGTH(attrs); ++i) {
-    SEXP sym = Rf_installChar(STRING_ELT(nms, i));
+    SEXP sym = install_name(STRING_ELT(nms, i));
     if (sym == R_DimSymbol) {
       Rf_setAttrib(x, sym, VECTOR_ELT(attrs, i));
     }
   }
 
   for (R_xlen_t i = 0; i < XLENGTH(attrs); ++i) {
-    SEXP sym = Rf_installChar(STRING_ELT(nms, i));
+    SEXP sym = install_name(STRING_ELT(nms, i));
     if (sym != R_DimSymbol) {
       Rf_setAttrib(x, sym, VECTOR_ELT(attrs, i));
     }

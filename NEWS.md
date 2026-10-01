@@ -20,6 +20,8 @@
 
 * A document R refuses partway through the read, such as one whose `dim` does not fit its value, one asking for a coercion R will not make or one holding a NUL in a string, is let go of along with every value it had numbered by then. Both used to stay in memory for the rest of the session, where a document the reader refuses itself never did (#110).
 
+* Reading a long name no longer understates R's count of vector memory. A name of 128 bytes or more that R already held under a copy with another encoding mark, as it holds a non-ASCII symbol the parser has read, lowered the count on every read by an amount taken from the name's hash rather than its length, wrapping it past zero in a session holding less, and a name over R's 10,000-byte limit did so on its way to being refused. A symbol the reader creates from a non-ASCII name now has a name without an encoding mark, as one the parser creates already has (#116).
+
 # typedjson 0.1.1
 
 * Installs cleanly with GCC 16 under link-time optimization, where 0.1.0 drew a spurious `-Wstringop-overflow` warning (#86).

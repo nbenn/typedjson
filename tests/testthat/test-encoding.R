@@ -180,3 +180,51 @@ test_that("an invalid document is refused at the byte it goes wrong", {
 
   expect_identical(failed, character())
 })
+
+test_that("reading a long name leaves R's count of vector memory as it was", {
+
+  skip_if_not(l10n_info()[["UTF-8"]])
+
+  used <- function() {
+    invisible(gc())
+    gc()[["Vcells", "used"]]
+  }
+
+  # R names a symbol it parses without an encoding mark, where the reader marks
+  # its own copy of a name UTF-8, so each document read here meets the parser's
+  # copy. A string under 128 bytes sits in a page R counts as a whole, so only
+  # a longer name could move the count.
+  name <- strrep("\u00e9", 100L)
+  invisible(str2lang(paste0("`", name, "`")))
+
+  read <- c(
+    paste0('"~:', name, '"'),
+    paste0('{"~a":{"', name, '":1},"~v":1}'),
+    paste0('{"~t":"language","~v":{"":"~:f","', name, '":1}}')
+  )
+  refused <- paste0('"~:', c(strrep("a", 10001L), strrep("\u00e9", 5001L)), '"')
+  rm(name)
+
+  before <- used()
+
+  for (doc in read) json_read_str(doc)
+  for (doc in refused) expect_error(json_read_str(doc), "limited to 10000")
+
+  expect_lt(abs(used() - before), 1e6)
+})
+
+test_that("a name the locale cannot spell is installed as R installs one", {
+
+  withr::local_locale(c(LC_CTYPE = "C"))
+  text <- declared(cafe, "UTF-8")
+  doc <- paste0('"~:', text, '"')
+
+  expect_identical(
+    capture_warnings(json_read_str(doc)),
+    capture_warnings(as.name(text))
+  )
+  expect_identical(
+    suppressWarnings(json_read_str(doc)),
+    suppressWarnings(as.name(text))
+  )
+})
