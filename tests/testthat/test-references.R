@@ -198,7 +198,7 @@ test_that("every value a refused document numbered can be collected", {
   # the reader refuses itself.
   cases <- list(
     list('{"~a":{"dim":[5]},"~v":[1,2]}', "do not match the length"),
-    list('{"~a":{"a":1},"~v":"~:a"}', "cannot set attribute"),
+    list('{"~a":{"a":1},"~v":"~:a"}', "attribute on a '?symbol"),
     list('{"~t":"integer","~v":[[1,2]]}', "cannot be coerced"),
     list('"a\\u0000b"', "embedded nul"),
     list('{"~t":"frobnicate","~v":[1]}', "not a type")
