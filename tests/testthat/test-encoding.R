@@ -232,3 +232,28 @@ test_that("a name the locale cannot spell is installed as R installs one", {
     suppressWarnings(as.name(text))
   )
 })
+
+test_that("a name the locale cannot spell warns once wherever it sits", {
+
+  # Attributes are set in two passes, `dim` first, and a name installed in
+  # both would warn twice. A name of 128 bytes or more takes the reader's own
+  # route, so every place a name sits is read at both lengths.
+  withr::local_locale(c(LC_CTYPE = "C"))
+  failed <- character()
+
+  for (text in strrep(declared(cafe, "UTF-8"), c(1L, 30L))) {
+    want <- capture_warnings(as.name(text))
+    docs <- c(
+      symbol = paste0('"~:', text, '"'),
+      argument = paste0('{"~t":"language","~v":{"":"~:f","', text, '":1}}'),
+      attribute = paste0('{"~a":{"', text, '":1},"~v":1}')
+    )
+    for (nm in names(docs)) {
+      if (!identical(capture_warnings(json_read_str(docs[[nm]])), want)) {
+        failed <- c(failed, paste(nm, nchar(text, "bytes")))
+      }
+    }
+  }
+
+  expect_identical(failed, character())
+})
