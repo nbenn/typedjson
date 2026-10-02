@@ -180,3 +180,55 @@ test_that("an invalid document is refused at the byte it goes wrong", {
 
   expect_identical(failed, character())
 })
+
+test_that("reading a long name leaves R's count of vector memory as it was", {
+
+  skip_if_not(l10n_info()[["UTF-8"]])
+
+  used <- function() {
+    invisible(gc())
+    gc()[["Vcells", "used"]]
+  }
+
+  # R names a symbol it parses without an encoding mark, where the reader marks
+  # its own copy of a name UTF-8, so each document read here meets the parser's
+  # copy. A string under 128 bytes sits in a page R counts as a whole, which is
+  # what lets the 127-byte name keep the route that leaves its copy hashed.
+  long <- strrep("\u00e9", 100L)
+  short <- paste0(strrep("\u00e9", 63L), "a")
+  invisible(lapply(paste0("`", c(long, short), "`"), str2lang))
+
+  read <- c(
+    paste0('"~:', long, '"'),
+    paste0('{"~a":{"', long, '":1},"~v":1}'),
+    paste0('{"~t":"language","~v":{"":"~:f","', long, '":1}}'),
+    paste0('"~:', short, '"')
+  )
+  refused <- paste0('"~:', c(strrep("a", 10001L), strrep("\u00e9", 5001L)), '"')
+  rm(long, short)
+
+  before <- used()
+
+  for (doc in read) json_read_str(doc)
+  for (doc in refused) expect_error(json_read_str(doc), "limited to 10000")
+
+  expect_lt(abs(used() - before), 1e6)
+})
+
+test_that("a name the locale cannot spell is installed as R installs one", {
+
+  # Only a name of 128 bytes or more reaches the reader's own route, which has
+  # to keep the warning R gives when it installs a name itself.
+  withr::local_locale(c(LC_CTYPE = "C"))
+  text <- strrep(declared(cafe, "UTF-8"), 30L)
+  doc <- paste0('"~:', text, '"')
+
+  expect_identical(
+    capture_warnings(json_read_str(doc)),
+    capture_warnings(as.name(text))
+  )
+  expect_identical(
+    suppressWarnings(json_read_str(doc)),
+    suppressWarnings(as.name(text))
+  )
+})
