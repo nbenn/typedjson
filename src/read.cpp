@@ -179,6 +179,11 @@ const int kSmallName = 128;
 // hash only on a name it creates. A name that needs translating is left to R,
 // which installs it from a buffer of its own and warns where it has to escape
 // a character.
+//
+// The defect is reported as R bug 19195, at
+// https://bugs.r-project.org/show_bug.cgi?id=19195. Once a release of R fixes
+// it, only the releases before that one need a long name installed from its
+// bytes.
 SEXP install_name(SEXP name) {
   if (LENGTH(name) < kSmallName) return Rf_installChar(name);
 
