@@ -729,17 +729,20 @@ void Reader::set_attribs(SEXP x, SEXP attrs) {
   // caller protected them; they are held across both passes.
   SEXP nms = PROTECT(Rf_getAttrib(attrs, R_NamesSymbol));
 
+  // A name is matched to `dim` by its bytes and installed only in the second
+  // pass, since installing a name the locale cannot represent warns each time.
+  // Only a name spelled `dim` installs to `dim`: translation leaves an ASCII
+  // name as it is and cannot turn any other name into one.
   for (R_xlen_t i = 0; i < XLENGTH(attrs); ++i) {
-    SEXP sym = install_name(STRING_ELT(nms, i));
-    if (sym == R_DimSymbol) {
-      Rf_setAttrib(x, sym, VECTOR_ELT(attrs, i));
+    if (std::strcmp(CHAR(STRING_ELT(nms, i)), "dim") == 0) {
+      Rf_setAttrib(x, R_DimSymbol, VECTOR_ELT(attrs, i));
     }
   }
 
   for (R_xlen_t i = 0; i < XLENGTH(attrs); ++i) {
-    SEXP sym = install_name(STRING_ELT(nms, i));
-    if (sym != R_DimSymbol) {
-      Rf_setAttrib(x, sym, VECTOR_ELT(attrs, i));
+    SEXP nm = STRING_ELT(nms, i);
+    if (std::strcmp(CHAR(nm), "dim") != 0) {
+      Rf_setAttrib(x, install_name(nm), VECTOR_ELT(attrs, i));
     }
   }
 
