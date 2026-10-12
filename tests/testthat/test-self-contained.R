@@ -113,11 +113,9 @@ test_that("the flag reaches a class the definition it writes names", {
 
   doc <- json_write_str(parented, self_contained = TRUE)
 
-  expect_no_match(
-    doc, '"parent":{"~s7":{"class":"CorpusS7Named","package":"R_GlobalEnv"}}',
-    fixed = TRUE
-  )
-  expect_match(doc, '"parent":{"~s7":{"class":"CorpusS7Named"', fixed = TRUE)
+  parent <- jsonlite::fromJSON(doc, simplifyVector = FALSE)[["~s7"]]$parent[["~s7"]]
+  expect_identical(parent$class, "CorpusS7Named")
+  expect_type(parent$constructor, "list")
   expect_env_equivalent(json_read_str(doc), parented)
 })
 

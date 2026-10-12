@@ -50,7 +50,7 @@ test_that("a value survives in every position it can occupy", {
         error = function(e) structure(conditionMessage(e), class = "corpus_err")
       )
 
-      if (!identical(got, value)) {
+      if (!roundtrip_equivalent(got, value)) {
         failed <- c(failed, paste0(nm, " @ ", where))
       }
     }

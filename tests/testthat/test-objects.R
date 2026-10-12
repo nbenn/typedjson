@@ -40,8 +40,40 @@ test_that("an S7 object comes back through its generator", {
 
   expect_identical(back, obj)
   expect_false(isS4(back))
-  expect_identical(attr(back, "S7_class"), CorpusS7)
+  expect_identical(S7::S7_class(back), CorpusS7)
   expect_match(doc, '"~s7"', fixed = TRUE)
+})
+
+test_that("S7 objects share the class reconstructed in their document", {
+  skip_if_not_installed("S7")
+
+  objects <- list(class = CorpusS7, first = CorpusS7(x = 1, y = "a"),
+    second = CorpusS7(x = 2, y = "b"))
+  doc <- json_write_str(objects)
+  back <- json_read_str(doc)
+
+  expect_identical(S7::S7_class(back$first), back$class)
+  expect_identical(S7::S7_class(back$second), back$class)
+  expect_identical(S7::S7_class(back$class(x = 3, y = "c")), back$class)
+  expect_env_equivalent(back, objects)
+  expect_identical(env_sharing(back), env_sharing(objects))
+  expect_identical(json_write_str(back), doc)
+})
+
+test_that("resolved S7 constructor bindings round-trip without promises", {
+  skip_if_not_installed("S7")
+  skip_if(utils::packageVersion("S7") <= "0.2.2")
+
+  value <- structure(S7::class_double, class = "corpus_wrapper")
+  expect_env_equivalent(json_read_str(json_write_str(value)), value)
+
+  generator <- corpus_s7_s3_property()
+  doc <- json_write_str(generator)
+  back <- json_read_str(doc)
+  expect_env_equivalent(back, generator)
+  expect_identical(json_write_str(back), doc)
+  f <- structure(1L, class = "CorpusS3Fac")
+  expect_identical(back(f = f)@f, f)
 })
 
 test_that("an edited S4 object is refused by the class's own validity", {
@@ -112,7 +144,7 @@ test_that("an S7 constructor is reached past rather than run", {
   obj <- CorpusS7Made(celsius = 21)
   doc <- json_write_str(obj)
 
-  expect_identical(json_read_str(doc), obj)
+  expect_env_equivalent(json_read_str(doc), obj)
 
   back <- json_read_str(sub('"celsius":21.0', '"celsius":99.0', doc,
                             fixed = TRUE))

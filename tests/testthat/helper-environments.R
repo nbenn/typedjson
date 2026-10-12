@@ -10,6 +10,22 @@ expect_env_equivalent <- function(object, expected) {
   invisible(object)
 }
 
+roundtrip_equivalent <- function(object, expected) {
+  if (identical(object, expected)) return(TRUE)
+  is.null(env_difference(object, expected)) &&
+    identical(env_sharing(object), env_sharing(expected))
+}
+
+expect_roundtrip_equivalent <- function(object, expected) {
+  if (identical(object, expected)) {
+    expect_identical(object, expected)
+    return(invisible(object))
+  }
+  expect_env_equivalent(object, expected)
+  expect_identical(env_sharing(object), env_sharing(expected))
+  invisible(object)
+}
+
 env_difference <- function(x, y, at = "x", seen = env_pairs()) {
 
   if (is.environment(x) || is.environment(y)) {
