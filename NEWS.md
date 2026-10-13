@@ -1,6 +1,6 @@
 # typedjson (development version)
 
-* S7 objects retain shared class definitions with updated S7, and the reader validates the current class-reference representation. Class constructors no longer gain another reference environment on each round trip.
+* Updates for compatibility with S7 > 0.2.2.
 
 * A `self_contained` flag on both writers carries an S7 class definition even where a package would find the class again, for a document meant as an archive rather than a wire format. See `vignette("design")` for what it leaves referenced (#65).
 
