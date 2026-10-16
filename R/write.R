@@ -207,6 +207,8 @@
 #' is checked against the class it resolves to, so a document where the two
 #' disagree is refused rather than dispatching on the one and taking its
 #' properties from the other.
+#' Shared class definitions remain shared between objects written in one
+#' document, including classes whose definitions the reader rebuilds.
 #'
 #' Which of the two a class gets is a default rather than a rule, and it is
 #' the `self_contained` flag that overrides it. A document written with that

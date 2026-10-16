@@ -24,14 +24,16 @@ json_state.S7_any <- function(x) s7_class_state(x)
 #' @export
 json_state.S7_missing <- function(x) s7_class_state(x)
 
+#' @export
+json_state.S7_class_ref <- function(x) {
+  tagged_state(tag_s7, list(reference = x$class))
+}
+
 s7_class_state <- function(x) {
   tagged_state(tag_s7, s7_record(x))
 }
 
-# Every refusal a walk into a class object hits is inside S7's own machinery
-# rather than in the class an author wrote — a base class holds a validator
-# closing over the promise that built it — so the walk never enters one.
-# Each form below records what identifies the class instead.
+# Record what identifies a class rather than walking S7's implementation.
 s7_record <- function(x) {
 
   if (inherits(x, "S7_class")) {
@@ -77,6 +79,13 @@ s7_record <- function(x) {
 # such a class has always written is unchanged.
 s7_definition <- function(x) {
 
+  constructor <- attr(x, "constructor")
+  constructor_env <- environment(constructor)
+  if (!is.null(get0(".S7_class_ref", envir = constructor_env, inherits = FALSE))) {
+    # new_class() recreates its own reference wrapper on the read.
+    environment(constructor) <- parent.env(constructor_env)
+  }
+
   named <- list(class = attr(x, "name"))
   package <- attr(x, "package")
 
@@ -90,7 +99,7 @@ s7_definition <- function(x) {
       parent = attr(x, "parent"),
       properties = attr(x, "properties"),
       abstract = attr(x, "abstract"),
-      constructor = attr(x, "constructor"),
+      constructor = constructor,
       validator = attr(x, "validator")
     )
   )
@@ -168,6 +177,12 @@ s7_revive <- function(state) {
     stop(
       "a `", tag_s7, "` payload has to be a name or an object", call. = FALSE
     )
+  }
+
+  if (!is.null(state[["reference"]])) {
+    reference <- environment(state[["reference"]])[[".S7_class_ref"]]
+    stopifnot(is.environment(reference))
+    return(reference)
   }
 
   # A definition carries a constructor and a reference does not, so the
@@ -324,11 +339,11 @@ validate_s7 <- function(x) {
 
   # A foreign document is free to spell the attribute as anything it likes,
   # and only a generator declares the properties to check an object against.
-  if (!is_s7_object(x) || !requireNamespace("S7", quietly = TRUE)) {
+  if (!requireNamespace("S7", quietly = TRUE) || !is_s7_object(x)) {
     return(invisible(NULL))
   }
 
-  cls <- attr(x, "S7_class")
+  cls <- S7::S7_class(x)
 
   # The class vector is an ordinary attribute and the generator resolves
   # without reading it, so a document where the two disagree would dispatch
@@ -345,7 +360,7 @@ validate_s7 <- function(x) {
 }
 
 is_s7_object <- function(x) {
-  inherits(attr(x, "S7_class"), "S7_class") && inherits(x, "S7_object")
+  inherits(x, "S7_object") && !is.null(S7::S7_class(x))
 }
 
 is_s7_generator <- function(x, class) {

@@ -348,7 +348,7 @@ yyjson_mut_val *Writer::emit(SEXP x, bool boxed) {
 
   if (TYPEOF(x) == SYMSXP) return symbol_val(x);
 
-  if (TYPEOF(x) == ENVSXP) {
+  if (TYPEOF(x) == ENVSXP || Rf_inherits(x, "S7_class")) {
     yyjson_mut_val *back = back_reference(x);
     if (back != nullptr) return back;
   }
@@ -437,7 +437,8 @@ yyjson_mut_val *Writer::emit_state(SEXP x) {
 
   yyjson_mut_val *out = yyjson_mut_obj(doc_);
   bool reference =
-      (TYPEOF(x) == ENVSXP) && !records_by_name(key, VECTOR_ELT(state, 1));
+      (TYPEOF(x) == ENVSXP || Rf_inherits(x, "S7_class")) &&
+      !records_by_name(key, VECTOR_ELT(state, 1));
 
   if (reference) enter_reference(x, out, at, true);
 

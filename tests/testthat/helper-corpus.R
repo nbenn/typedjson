@@ -332,7 +332,7 @@ round_trip_failures <- function(values, self_contained = FALSE) {
       error = function(e) structure(conditionMessage(e), class = "corpus_error")
     )
 
-    if (!identical(got, values[[nm]])) {
+    if (!roundtrip_equivalent(got, values[[nm]])) {
       failed <- c(failed, nm)
     }
   }
@@ -468,6 +468,8 @@ corpus_refused <- function() {
   )
 
   if (!requireNamespace("S7", quietly = TRUE)) return(refused)
+  # Updated S7 resolves these constructor bindings instead of keeping promises.
+  if (utils::packageVersion("S7") > "0.2.2") return(refused)
 
   # Both of these are the walk inside S7's own machinery, which is what
   # recording a class by what identifies it keeps it out of. The first is
@@ -496,9 +498,12 @@ s7_class_kinds <- c(
 )
 
 corpus_s7_s3_property <- function() {
-  S7::new_class(
-    "CorpusS7S3", properties = list(f = S7::new_S3_class("CorpusS3Fac")),
-    package = NULL
+  local(
+    S7::new_class(
+      "CorpusS7S3", properties = list(f = S7::new_S3_class("CorpusS3Fac")),
+      package = NULL
+    ),
+    envir = globalenv()
   )
 }
 

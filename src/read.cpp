@@ -756,9 +756,12 @@ void Reader::set_attribs(SEXP x, SEXP attrs) {
 void Reader::gate(SEXP x, SEXP attrs) {
 
   static SEXP s7_class = Rf_install("S7_class");
+  static SEXP s7_class_ref = Rf_install("_S7_class");
 
   if (Rf_isS4(x) ||
-      (attrs != R_NilValue && Rf_getAttrib(x, s7_class) != R_NilValue)) {
+      (attrs != R_NilValue &&
+       (Rf_getAttrib(x, s7_class) != R_NilValue ||
+        Rf_getAttrib(x, s7_class_ref) != R_NilValue))) {
     SEXP value = PROTECT(quoted(x));
     validate_(value);
     UNPROTECT(1);
