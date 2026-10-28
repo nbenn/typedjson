@@ -298,8 +298,12 @@ class Trail {
     return out;
   }
 
+  std::string at(const std::string &msg) const {
+    return msg + " at `" + path() + "`";
+  }
+
   [[noreturn]] void fail(const std::string &msg) const {
-    std::string full = msg + " at `" + path() + "`";
+    std::string full = at(msg);
     cpp11::stop("%s", full.c_str());
   }
 

@@ -18,7 +18,7 @@ json_read <- function(path, code = TRUE) {
 #' @param code Whether to rebuild what a document records of code. The
 #'   default reads every value the format can record; `FALSE` reads a document
 #'   as data alone, for one from somewhere it cannot be trusted, and refuses
-#'   the rest where it sits.
+#'   the rest where it sits with an error of class `typedjson_code_refusal`.
 #' @rdname json_write
 #' @export
 json_read_str <- function(txt, code = TRUE) {
@@ -44,11 +44,18 @@ json_read_bytes <- function(bytes, code) {
       bytes,
       list(
         revive = reader_revive, env = reader_env, shell = reader_shell,
-        fun = reader_fun, validate = reader_validate
+        fun = reader_fun, validate = reader_validate, refuse = reader_refuse
       ),
       code
     )
   )
+}
+
+# A document refused for what it records of code is the error a caller
+# reading one from outside has reason to tell apart from one that is not JSON
+# at all, so it carries a class of its own, which only R can give a condition.
+reader_refuse <- function(msg) {
+  refuse(msg, class = "typedjson_code_refusal")
 }
 
 reader_revive <- function(tag, state) {

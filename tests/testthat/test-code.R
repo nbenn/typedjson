@@ -2,10 +2,6 @@ code_refusal <- function(what, path) {
   paste0("cannot read ", what, " with `code = FALSE` at `", path, "`")
 }
 
-is_code_refusal <- function(msg) {
-  grepl("with `code = FALSE` at `x", msg, fixed = TRUE)
-}
-
 test_that("a document recording code is refused rather than rebuilt", {
 
   expect_error(
@@ -74,6 +70,24 @@ test_that("each value that is code or reaches it is refused for what it is", {
     code_refusal("a value of type 'symbol'", "x"),
     fixed = TRUE
   )
+})
+
+test_that("a refusal is an error a caller can tell apart", {
+
+  expect_error(
+    json_read_str('"~:x"', code = FALSE), class = "typedjson_code_refusal"
+  )
+  expect_error(
+    json_read_str('"~:x"', code = FALSE), class = "typedjson_refusal"
+  )
+
+  # What the grammar refuses is refused whatever the flag, and is not the
+  # document holding code.
+  for (doc in c("{", '"~zBogus"', '{"~span": 3}')) {
+    got <- tryCatch(json_read_str(doc, code = FALSE), error = identity)
+    expect_s3_class(got, "error")
+    expect_false(inherits(got, "typedjson_refusal"), label = doc)
+  }
 })
 
 test_that("an S7 class and an object of one are refused through the tag", {
@@ -206,15 +220,12 @@ test_that("what is code or reaches it is refused wherever the corpus has it", {
 
   for (nm in names(values)) {
 
-    msg <- tryCatch(
-      {
-        json_read_str(json_write_str(values[[nm]]), code = FALSE)
-        ""
-      },
-      error = conditionMessage
+    got <- tryCatch(
+      json_read_str(json_write_str(values[[nm]]), code = FALSE),
+      error = identity
     )
 
-    if (!is_code_refusal(msg)) {
+    if (!inherits(got, "typedjson_code_refusal")) {
       read <- c(read, nm)
     }
   }
@@ -233,7 +244,7 @@ test_that("a document is either refused or read as the default reads it", {
     got <- tryCatch(json_read_str(doc, code = FALSE), error = identity)
 
     if (inherits(got, "error")) {
-      if (!is_code_refusal(conditionMessage(got))) {
+      if (!inherits(got, "typedjson_code_refusal")) {
         failed <- c(failed, nm)
       }
     } else if (!identical(got, json_read_str(doc))) {
@@ -244,7 +255,7 @@ test_that("a document is either refused or read as the default reads it", {
   expect_identical(failed, character())
 })
 
-test_that("a read without code calls into R for nothing", {
+test_that("a read without code reaches no hook that builds or checks", {
 
   values <- c(corpus, corpus_env_contents(), corpus_shared())
   docs <- vapply(values, json_write_str, character(1L))
@@ -257,7 +268,8 @@ test_that("a read without code calls into R for nothing", {
   )
 
   # The default reaches the hooks through the same bindings, which is what
-  # shows the mock holding them.
+  # shows the mock holding them. The hook raising the refusal is left alone,
+  # since a refusal is the one thing a read without code calls into R for.
   expect_error(json_read_str(docs[["env/named/global"]]), "a reader hook ran")
 
   called <- character()

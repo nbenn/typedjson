@@ -21,7 +21,7 @@ json_write_str(x, pretty = FALSE, typed = TRUE, self_contained = FALSE)
 \item{code}{Whether to rebuild what a document records of code. The
 default reads every value the format can record; \code{FALSE} reads a document
 as data alone, for one from somewhere it cannot be trusted, and refuses
-the rest where it sits.}
+the rest where it sits with an error of class \code{typedjson_code_refusal}.}
 
 \item{txt}{Document to read, as a length-one character vector.}
 
@@ -381,14 +381,16 @@ already holds, picked by what the document names: an environment recorded
 by name can load the package it names, a \code{~x} tag is rebuilt by a
 \code{\link[=json_revive]{json_revive()}} method and an \code{R6} or S7 class by its generator, and an S4
 or S7 object is handed to the check its class supplies. With \code{code = FALSE}
-the reader neither rebuilds code nor calls into R, and every value that
-would take either is refused where it sits, naming the path: a symbol, a
-call, a pairlist and an expression, a closure and a primitive, an
-environment, the \code{~r6class}, \code{~s7} and \code{~x} tags, and a value carrying the
-S4 bit or an \code{S7_class} attribute. What is left is what describes data,
-which is the vector types, lists and \code{NULL}, attributes and the \code{~z}
-specials, so a factor, a date and a data frame still come back, and a
-document the flag does not refuse comes back as the default reads it.
+the reader neither rebuilds code nor calls into R to build or check a
+value, and every value that would take either is refused where it sits,
+naming the path: a symbol, a call, a pairlist and an expression, a closure
+and a primitive, an environment, the \code{~r6class}, \code{~s7} and \code{~x} tags, and a
+value carrying the S4 bit or an \code{S7_class} attribute. A refusal is an error
+of class \code{typedjson_code_refusal}, so a caller can tell a document refused
+for what it records from one that is not JSON at all. What is left is what
+describes data, which is the vector types, lists and \code{NULL}, attributes and
+the \code{~z} specials, so a factor, a date and a data frame still come back, and
+a document the flag does not refuse comes back as the default reads it.
 }
 \examples{
 json_write_str(list(n = 1L, x = 2.5, missing = NA_character_))

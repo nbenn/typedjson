@@ -227,6 +227,7 @@ class Reader {
         shell_(cpp11::function(hooks["shell"])),
         fun_(cpp11::function(hooks["fun"])),
         validate_(cpp11::function(hooks["validate"])),
+        refuse_(cpp11::function(hooks["refuse"])),
         code_(code) {}
 
   SEXP build(yyjson_val *v);
@@ -271,6 +272,7 @@ class Reader {
   cpp11::function shell_;
   cpp11::function fun_;
   cpp11::function validate_;
+  cpp11::function refuse_;
   bool code_;
   Trail trail_;
   std::vector<std::string> lossy_;
@@ -323,9 +325,13 @@ void Reader::note_lossy(const std::string &lexeme) {
 }
 
 // A read that rebuilds no code stops at the first value that would need some,
-// naming the path it stopped at the way the writer names one it refuses.
+// naming the path it stopped at the way the writer names one it refuses. The
+// hook raises the refusal as a condition of its own class, and never returns.
 void Reader::refuse(const std::string &what) const {
-  trail_.fail("cannot read " + what + " with `code = FALSE`");
+  std::string msg = trail_.at("cannot read " + what + " with `code = FALSE`");
+  cpp11::sexp text(cpp11::as_sexp(msg));
+  refuse_(text);
+  cpp11::stop("%s", msg.c_str());
 }
 
 // That refusal is the one error the reader names a path in, so a read that
