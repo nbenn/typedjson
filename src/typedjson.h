@@ -270,6 +270,63 @@ inline SEXP attrib_value(const std::vector<Attrib> &attrs, SEXP tag) {
   return R_NilValue;
 }
 
+// A refusal names the path it stopped at, spelled the way R reaches that
+// position from the root: by name where the position has one and by index
+// where it does not. Each level of a walk pushes the position it enters and
+// pops it again by scope, so the writer and the reader spell a position the
+// same way. A walk that refuses nothing it could name has no trail to keep,
+// and steps without one.
+struct Crumb {
+  SEXP name;
+  R_xlen_t index;
+};
+
+class Trail {
+ public:
+  std::string path() const {
+    std::string out("x");
+    for (size_t i = 0; i < crumbs_.size(); ++i) {
+      const Crumb &crumb = crumbs_[i];
+      if (crumb.name != R_NilValue && crumb.name != NA_STRING &&
+          CHAR(crumb.name)[0] != '\0') {
+        out += "$";
+        out += CHAR(crumb.name);
+      } else {
+        out += "[[" + std::to_string(crumb.index + 1) + "]]";
+      }
+    }
+    return out;
+  }
+
+  [[noreturn]] void fail(const std::string &msg) const {
+    std::string full = msg + " at `" + path() + "`";
+    cpp11::stop("%s", full.c_str());
+  }
+
+ private:
+  std::vector<Crumb> crumbs_;
+
+  friend class Step;
+};
+
+class Step {
+ public:
+  Step(Trail *trail, SEXP name, R_xlen_t index) : trail_(trail) {
+    if (trail_ == nullptr) return;
+    Crumb crumb = {name, index};
+    trail_->crumbs_.push_back(crumb);
+  }
+  ~Step() {
+    if (trail_ != nullptr) trail_->crumbs_.pop_back();
+  }
+
+  Step(const Step &) = delete;
+  Step &operator=(const Step &) = delete;
+
+ private:
+  Trail *trail_;
+};
+
 // A hook is reached through `cpp11::function`, which splices the argument into
 // a call and evaluates it. Nearly every value that crosses the boundary is one
 // R hands back as-is, but a call is run, so a document could execute what it

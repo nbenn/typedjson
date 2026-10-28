@@ -323,6 +323,24 @@
 #' asking none. An environment you have classed yourself claims none of this,
 #' and is written by the environment rule above, contents and all.
 #'
+#' A document that arrives from somewhere it cannot be trusted can be read
+#' as data alone, which is what the `code` flag of both readers is for. By
+#' default a reader rebuilds whatever a document records, and some of that is
+#' code: a call comes back a call, which runs wherever it is evaluated, and a
+#' closure runs wherever it is called. More of it reaches code the session
+#' already holds, picked by what the document names: an environment recorded
+#' by name can load the package it names, a `~x` tag is rebuilt by a
+#' [json_revive()] method and an `R6` or S7 class by its generator, and an S4
+#' or S7 object is handed to the check its class supplies. With `code = FALSE`
+#' the reader neither rebuilds code nor calls into R, and every value that
+#' would take either is refused where it sits, naming the path: a symbol, a
+#' call, a pairlist and an expression, a closure and a primitive, an
+#' environment, the `~r6class`, `~s7` and `~x` tags, and a value carrying the
+#' S4 bit or an `S7_class` attribute. What is left is what describes data,
+#' which is the vector types, lists and `NULL`, attributes and the `~z`
+#' specials, so a factor, a date and a data frame still come back, and a
+#' document the flag does not refuse comes back as the default reads it.
+#'
 #' @param x Value to write.
 #' @param path Path to write to or read from.
 #' @param pretty Whether to indent the output. Files default to indented,
@@ -358,6 +376,10 @@
 #'
 #' json_write_str(list(required = I("x"), additionalProperties = FALSE),
 #'                typed = FALSE)
+#'
+#' # A document read as data alone refuses what it records of code.
+#' doc <- json_write_str(list(when = as.Date("2026-01-01"), by = quote(f(x))))
+#' try(json_read_str(doc, code = FALSE))
 #'
 #' @examplesIf requireNamespace("S7", quietly = TRUE)
 #' # The constructor of a class defined in a package closes over that

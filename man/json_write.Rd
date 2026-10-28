@@ -7,9 +7,9 @@
 \alias{json_write_str}
 \title{Write and read R values as JSON}
 \usage{
-json_read(path)
+json_read(path, code = TRUE)
 
-json_read_str(txt)
+json_read_str(txt, code = TRUE)
 
 json_write(x, path, pretty = TRUE, typed = TRUE, self_contained = FALSE)
 
@@ -17,6 +17,11 @@ json_write_str(x, pretty = FALSE, typed = TRUE, self_contained = FALSE)
 }
 \arguments{
 \item{path}{Path to write to or read from.}
+
+\item{code}{Whether to rebuild what a document records of code. The
+default reads every value the format can record; \code{FALSE} reads a document
+as data alone, for one from somewhere it cannot be trusted, and refuses
+the rest where it sits.}
 
 \item{txt}{Document to read, as a length-one character vector.}
 
@@ -366,6 +371,24 @@ refused under the \code{self_contained} flag, the instance binding its class
 definition, and a method of your own does not settle it there, the flag
 asking none. An environment you have classed yourself claims none of this,
 and is written by the environment rule above, contents and all.
+
+A document that arrives from somewhere it cannot be trusted can be read
+as data alone, which is what the \code{code} flag of both readers is for. By
+default a reader rebuilds whatever a document records, and some of that is
+code: a call comes back a call, which runs wherever it is evaluated, and a
+closure runs wherever it is called. More of it reaches code the session
+already holds, picked by what the document names: an environment recorded
+by name can load the package it names, a \code{~x} tag is rebuilt by a
+\code{\link[=json_revive]{json_revive()}} method and an \code{R6} or S7 class by its generator, and an S4
+or S7 object is handed to the check its class supplies. With \code{code = FALSE}
+the reader neither rebuilds code nor calls into R, and every value that
+would take either is refused where it sits, naming the path: a symbol, a
+call, a pairlist and an expression, a closure and a primitive, an
+environment, the \code{~r6class}, \code{~s7} and \code{~x} tags, and a value carrying the
+S4 bit or an \code{S7_class} attribute. What is left is what describes data,
+which is the vector types, lists and \code{NULL}, attributes and the \code{~z}
+specials, so a factor, a date and a data frame still come back, and a
+document the flag does not refuse comes back as the default reads it.
 }
 \examples{
 json_write_str(list(n = 1L, x = 2.5, missing = NA_character_))
@@ -381,6 +404,10 @@ identical(json_read_str(json_write_str(x)), x)
 
 json_write_str(list(required = I("x"), additionalProperties = FALSE),
                typed = FALSE)
+
+# A document read as data alone refuses what it records of code.
+doc <- json_write_str(list(when = as.Date("2026-01-01"), by = quote(f(x))))
+try(json_read_str(doc, code = FALSE))
 
 \dontshow{if (requireNamespace("S7", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 # The constructor of a class defined in a package closes over that
