@@ -104,7 +104,7 @@ test_that("an S7 class and an object of one are refused through the tag", {
 
   expect_error(
     json_read_str(json_write_str(named(x = 1)), code = FALSE),
-    code_refusal("a `~s7` tag", "x$S7_class"),
+    code_refusal("a `~s7` tag", 'attr(x, "S7_class")'),
     fixed = TRUE
   )
 })
@@ -131,7 +131,7 @@ test_that("a refusal names the path it stopped at", {
   paths <- c(
     root = "x", object_value = "x$a", array_element = "x[[1]]",
     two_object_values = "x$a", two_array_elements = "x[[1]]",
-    deep = "x$a[[1]]$b", attribute = "x$meta", tagged_payload = "x"
+    deep = "x$a[[1]]$b", attribute = 'attr(x, "meta")', tagged_payload = "x"
   )
 
   positions <- corpus_positions(quote(f(x)))
@@ -154,8 +154,26 @@ test_that("a position with no name is named by its index", {
     "x[[1]][[1]]" = '{"":["~:x"]}',
     "x[[2]]" = '{"a":1,"~zNA_character_":"~:x"}',
     "x$~t" = '{"~~t":"~:x"}',
-    "x$meta[[2]]" = '{"~a":{"meta":[1,"~:x"]},"~v":1}',
     "x$f" = '{"~a":{"class":"thing"},"~v":{"f":{"~x":{"class":"thing"}}}}'
+  )
+
+  for (path in names(docs)) {
+    expect_error(
+      json_read_str(docs[[path]], code = FALSE),
+      paste0(" at `", path, "`"),
+      fixed = TRUE,
+      label = docs[[path]]
+    )
+  }
+})
+
+test_that("an attribute is named through `attr()` rather than as an element", {
+
+  docs <- c(
+    'attr(x, "meta")[[2]]' = '{"~a":{"meta":[1,"~:x"]},"~v":1}',
+    'attr(x$a, "meta")$b' = '{"a":{"~a":{"meta":{"b":"~:x"}},"~v":1}}',
+    'attr(attr(x, "a"), "b")' = '{"~a":{"a":{"~a":{"b":"~:x"},"~v":1}},"~v":1}',
+    'attr(x, "a\\"b")' = '{"~a":{"a\\"b":"~:x"},"~v":1}'
   )
 
   for (path in names(docs)) {

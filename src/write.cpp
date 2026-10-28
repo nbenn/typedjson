@@ -712,7 +712,7 @@ yyjson_mut_val *Writer::emit_attribs(const std::vector<Attrib> &attrs,
     if (obj == nullptr) obj = yyjson_mut_obj(doc_);
 
     SEXP name = PRINTNAME(attrs[i].tag);
-    Step step(&trail_, name, 0);
+    Step step(&trail_, name, 0, CRUMB_ATTRIBUTE);
     yyjson_mut_obj_add(obj, str_val(name), emit(attrs[i].value, false));
   }
   return obj;

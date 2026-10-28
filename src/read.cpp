@@ -760,7 +760,7 @@ SEXP Reader::build_attribs(yyjson_val *v) {
     }
     SET_STRING_ELT(nms, (R_xlen_t)idx, name);
     UNPROTECT(1);
-    Step step(trail(), name, 0);
+    Step step(trail(), name, 0, CRUMB_ATTRIBUTE);
     SET_VECTOR_ELT(out, (R_xlen_t)idx, build(val));
   }
 

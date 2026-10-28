@@ -271,15 +271,31 @@ inline SEXP attrib_value(const std::vector<Attrib> &attrs, SEXP tag) {
 }
 
 // A refusal names the path it stopped at, spelled the way R reaches that
-// position from the root: by name where the position has one and by index
-// where it does not. Each level of a walk pushes the position it enters and
-// pops it again by scope, so the writer and the reader spell a position the
-// same way. A walk that refuses nothing it could name has no trail to keep,
-// and steps without one.
+// position from the root: a list element by name where it has one and by
+// index where it does not, and an attribute through `attr()`, since `$` would
+// read the same as an element of that name. Each level of a walk pushes the
+// position it enters and pops it again by scope, so the writer and the reader
+// spell a position the same way. A walk that refuses nothing it could name
+// has no trail to keep, and steps without one.
+enum CrumbKind { CRUMB_ELEMENT = 0, CRUMB_ATTRIBUTE };
+
 struct Crumb {
   SEXP name;
   R_xlen_t index;
+  CrumbKind kind;
 };
+
+// The name of an attribute sits in a string literal, which a quote or a
+// backslash in the name would otherwise end or escape.
+inline std::string literal(const char *s) {
+  std::string out(1, '"');
+  for (; *s != '\0'; ++s) {
+    if (*s == '"' || *s == '\\') out.push_back('\\');
+    out.push_back(*s);
+  }
+  out.push_back('"');
+  return out;
+}
 
 class Trail {
  public:
@@ -287,8 +303,10 @@ class Trail {
     std::string out("x");
     for (size_t i = 0; i < crumbs_.size(); ++i) {
       const Crumb &crumb = crumbs_[i];
-      if (crumb.name != R_NilValue && crumb.name != NA_STRING &&
-          CHAR(crumb.name)[0] != '\0') {
+      if (crumb.kind == CRUMB_ATTRIBUTE) {
+        out = "attr(" + out + ", " + literal(CHAR(crumb.name)) + ")";
+      } else if (crumb.name != R_NilValue && crumb.name != NA_STRING &&
+                 CHAR(crumb.name)[0] != '\0') {
         out += "$";
         out += CHAR(crumb.name);
       } else {
@@ -315,9 +333,11 @@ class Trail {
 
 class Step {
  public:
-  Step(Trail *trail, SEXP name, R_xlen_t index) : trail_(trail) {
+  Step(Trail *trail, SEXP name, R_xlen_t index,
+       CrumbKind kind = CRUMB_ELEMENT)
+      : trail_(trail) {
     if (trail_ == nullptr) return;
-    Crumb crumb = {name, index};
+    Crumb crumb = {name, index, kind};
     trail_->crumbs_.push_back(crumb);
   }
   ~Step() {

@@ -705,7 +705,10 @@ test_that("what a method leaves out is written whole, and a handle is not", {
 
   expect_error(
     json_write_str(obj, self_contained = TRUE),
-    "cannot write a value of type 'externalptr' at `x$bindings$key$conn_id`",
+    paste0(
+      "cannot write a value of type 'externalptr' at ",
+      '`attr(x$bindings$key, "conn_id")`'
+    ),
     fixed = TRUE
   )
 })
@@ -859,7 +862,7 @@ test_that("a handle a method stands in for stops the write under the flag", {
   expect_match(json_write_str(obj), '{"~x":', fixed = TRUE)
   expect_error(
     json_write_str(obj, self_contained = TRUE),
-    "cannot write a value of type 'externalptr' at `x$con$conn_id`",
+    "cannot write a value of type 'externalptr' at `attr(x$con, \"conn_id\")`",
     fixed = TRUE
   )
 })
