@@ -12,11 +12,6 @@ namespace typedjson {
 
 namespace {
 
-struct Crumb {
-  SEXP name;
-  R_xlen_t index;
-};
-
 bool is_generic_vector(SEXP x) {
   return TYPEOF(x) == VECSXP || TYPEOF(x) == EXPRSXP;
 }
@@ -166,45 +161,14 @@ class Writer {
   cpp11::function env_;
   cpp11::function fun_;
   std::unordered_map<std::string, bool> memo_;
-  std::vector<Crumb> crumbs_;
+  Trail trail_;
   std::unordered_map<SEXP, Ref> refs_;
   int ids_;
-
-  friend struct Step;
 };
 
-struct Step {
-  Step(Writer *w, SEXP name, R_xlen_t index) : w_(w) {
-    Crumb crumb = {name, index};
-    w_->crumbs_.push_back(crumb);
-  }
-  ~Step() { w_->crumbs_.pop_back(); }
+std::string Writer::path() const { return trail_.path(); }
 
-  Step(const Step &) = delete;
-  Step &operator=(const Step &) = delete;
-
-  Writer *w_;
-};
-
-std::string Writer::path() const {
-  std::string out("x");
-  for (size_t i = 0; i < crumbs_.size(); ++i) {
-    const Crumb &crumb = crumbs_[i];
-    if (crumb.name != R_NilValue && crumb.name != NA_STRING &&
-        CHAR(crumb.name)[0] != '\0') {
-      out += "$";
-      out += CHAR(crumb.name);
-    } else {
-      out += "[[" + std::to_string(crumb.index + 1) + "]]";
-    }
-  }
-  return out;
-}
-
-void Writer::fail(const std::string &msg) const {
-  std::string full = msg + " at `" + path() + "`";
-  cpp11::stop("%s", full.c_str());
-}
+void Writer::fail(const std::string &msg) const { trail_.fail(msg); }
 
 yyjson_mut_val *Writer::text_val(const char *s, size_t len) {
   yyjson_mut_val *out;
@@ -520,7 +484,7 @@ yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
   yyjson_mut_val *obj = yyjson_mut_obj(doc_);
 
   {
-    Step step(this, PRINTNAME(Rf_install(kEnvParent)), 0);
+    Step step(&trail_, PRINTNAME(Rf_install(kEnvParent)), 0);
     yyjson_mut_obj_add(obj, yyjson_mut_str(doc_, kEnvParent),
                        emit(parent_env(x), false));
   }
@@ -546,7 +510,7 @@ yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
   std::sort(order.begin(), order.end());
 
   if (n > 0) {
-    Step step(this, PRINTNAME(Rf_install(kEnvBindings)), 0);
+    Step step(&trail_, PRINTNAME(Rf_install(kEnvBindings)), 0);
     yyjson_mut_val *bindings = yyjson_mut_obj(doc_);
 
     for (R_xlen_t i = 0; i < n; ++i) {
@@ -554,7 +518,7 @@ yyjson_mut_val *Writer::emit_env_contents(SEXP x) {
       SEXP name = order[(size_t)i].second;
       SEXP sym = Rf_installChar(name);
       SEXP value = R_NilValue;
-      Step at(this, name, i);
+      Step at(&trail_, name, i);
 
       BindKind kind = binding_of(sym, x, &value);
 
@@ -646,7 +610,7 @@ yyjson_mut_val *Writer::emit_plain(SEXP x, SEXP nms, bool boxed) {
   if (nms == R_NilValue) {
     yyjson_mut_val *arr = yyjson_mut_arr(doc_);
     for (R_xlen_t i = 0; i < n; ++i) {
-      Step step(this, R_NilValue, i);
+      Step step(&trail_, R_NilValue, i);
       yyjson_mut_arr_append(arr, emit(VECTOR_ELT(x, i), typed_));
     }
     return arr;
@@ -655,7 +619,7 @@ yyjson_mut_val *Writer::emit_plain(SEXP x, SEXP nms, bool boxed) {
   yyjson_mut_val *obj = yyjson_mut_obj(doc_);
   for (R_xlen_t i = 0; i < n; ++i) {
     SEXP name = STRING_ELT(nms, i);
-    Step step(this, name, i);
+    Step step(&trail_, name, i);
     if (!typed_ && name == NA_STRING) {
       fail("cannot write a missing name as a plain JSON key");
     }
@@ -748,7 +712,7 @@ yyjson_mut_val *Writer::emit_attribs(const std::vector<Attrib> &attrs,
     if (obj == nullptr) obj = yyjson_mut_obj(doc_);
 
     SEXP name = PRINTNAME(attrs[i].tag);
-    Step step(this, name, 0);
+    Step step(&trail_, name, 0, CRUMB_ATTRIBUTE);
     yyjson_mut_obj_add(obj, str_val(name), emit(attrs[i].value, false));
   }
   return obj;

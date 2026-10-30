@@ -647,13 +647,28 @@ One grammar, applied to whatever is handed to us. Nothing is inferred from conte
 | `{"~foo": …}` | an error | the reserved prefix at key position |
 | `{"~ref": 3}` | an error unless something carries `"~id": 3` | the reference table |
 
-No `NA` from `"NA"`, no `Inf` from `"Inf"`, no date from an ISO-8601-looking string, no data frame from an array of objects. There is no strict mode and no lossy mode, because there is only one set of rules.
+No `NA` from `"NA"`, no `Inf` from `"Inf"`, no date from an ISO-8601-looking string, no data frame from an array of objects. There is no lossy mode, because there is only one set of rules.
 
 Numbers beyond what R holds exactly were left open while the format was being settled, and the resolution is to read them as doubles and say so. Silence would have been the one unacceptable answer, since the whole point is that a document never comes back quietly changed.
 
 ```{r}
 json_read_str("[1, 9007199254740993]")
 ```
+
+### Reading without code
+
+The format records code as faithfully as data, which is the point of it for a session persisting its own state and the danger in it for one reading a file that arrived from outside, such as a board a browser uploaded. A call comes back a call, and one spliced into an expression with `bquote()` runs when that expression is evaluated; a closure runs where it is called. Other values hold no code themselves but reach code the session holds, picked by what the document names: an environment recorded by name can load the package it names, a `~x` tag is rebuilt by a `json_revive()` method found under the class it records, an `R6` or S7 class by its generator, and an S4 or S7 object is handed to the check its class supplies.
+
+With `code = FALSE` a reader neither rebuilds code nor calls into R to build or check a value, and every value that would take either is refused where it sits, naming the path the way the writer's refusals do: a symbol, a call, a pairlist and an expression, a closure and a primitive, an environment, the `~r6class`, `~s7` and `~x` tags, and a value carrying the S4 bit or an `S7_class` attribute. A refusal is an error of class `typedjson_code_refusal`, so a caller can tell a document refused for what it records from one that is not JSON at all.
+
+```{r, error = TRUE}
+doc <- '{"by": {"~t": "language", "~v": ["~:Sys.getenv", "HOME"]}}'
+json_read_str(doc, code = FALSE)
+```
+
+What is left is what describes data: the vector types, lists and `NULL`, attributes of any kind, and the `~z` specials. A factor, a date and a data frame therefore still come back, and every document the flag does not refuse comes back as the default reads it, which the test suite checks over the whole corpus. The flag decides whether a document is read and never what it reads as, which is what keeps it the one switch a reader takes. Refusing is also the answer plain mode gives on the way out, and for the same reason: a document that came back without the call it held would be the quiet change this package exists to prevent.
+
+A few of the refusals reach past code itself. An expression is refused although each of its elements is checked by the same rule, for the reason a pairlist is: both are where R keeps code. An S4 object is refused rather than read without its check, since the check is code the class supplies and the document picks it by naming the class. A value carrying an `S7_class` attribute is refused for the same check, an S7 object itself being refused already through its class, which is a `~s7` tag.
 
 ## API
 
@@ -665,7 +680,7 @@ json_write_str(x)          json_read_str(txt)
 json_state(x)              json_revive(class, state)     # extension protocol
 ```
 
-Both writers take `pretty`, which indents, and `typed`, which at `FALSE` drops the annotations for a consumer that brings its own schema.
+Both writers take `pretty`, which indents, and `typed`, which at `FALSE` drops the annotations for a consumer that brings its own schema. Both readers take `code`, which at `FALSE` reads a document as data alone.
 
 ## Extension protocol
 

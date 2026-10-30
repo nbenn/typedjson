@@ -85,6 +85,30 @@ SEXPTYPE sexptype_of(const char *name) {
               kTagType);
 }
 
+// What a read that rebuilds no code can still build is what a document
+// records of data: the vector types, a list, NULL and an object of attributes
+// alone. Every other type a document can name is code or reaches it. A call, a
+// pairlist and an expression are what R evaluates, a function runs where it
+// is called, and an environment is where code finds what it calls, while
+// reading one recorded by name can load the package it names.
+bool is_data(SEXPTYPE type) {
+  switch (type) {
+    case kNoType:
+    case NILSXP:
+    case LGLSXP:
+    case INTSXP:
+    case REALSXP:
+    case STRSXP:
+    case CPLXSXP:
+    case RAWSXP:
+    case VECSXP:
+    case OBJSXP:
+      return true;
+    default:
+      return false;
+  }
+}
+
 bool is_key_tag(const char *s, size_t len) {
   return len > 0 && s[0] == kEscape && (len < 2 || s[1] != kEscape) &&
          ztag_of(s, len) != Z_NA_STR;
@@ -197,12 +221,14 @@ SEXP install_name(SEXP name) {
 
 class Reader {
  public:
-  explicit Reader(cpp11::list hooks)
+  Reader(cpp11::list hooks, bool code)
       : revive_(cpp11::function(hooks["revive"])),
         env_(cpp11::function(hooks["env"])),
         shell_(cpp11::function(hooks["shell"])),
         fun_(cpp11::function(hooks["fun"])),
-        validate_(cpp11::function(hooks["validate"])) {}
+        validate_(cpp11::function(hooks["validate"])),
+        refuse_(cpp11::function(hooks["refuse"])),
+        code_(code) {}
 
   SEXP build(yyjson_val *v);
 
@@ -233,6 +259,8 @@ class Reader {
   SEXP as_chr(yyjson_val *v);
 
   void note_lossy(const std::string &lexeme);
+  [[noreturn]] void refuse(const std::string &what) const;
+  Trail *trail();
 
   int64_t marked(yyjson_val *v, const char *tag);
   void bind(int64_t id, SEXP value);
@@ -244,6 +272,9 @@ class Reader {
   cpp11::function shell_;
   cpp11::function fun_;
   cpp11::function validate_;
+  cpp11::function refuse_;
+  bool code_;
+  Trail trail_;
   std::vector<std::string> lossy_;
   std::vector<std::pair<int64_t, cpp11::sexp> > refs_;
 };
@@ -292,6 +323,20 @@ SEXP Reader::resolve(int64_t id) {
 void Reader::note_lossy(const std::string &lexeme) {
   if (lossy_.size() < 5) lossy_.push_back(lexeme);
 }
+
+// A read that rebuilds no code stops at the first value that would need some,
+// naming the path it stopped at the way the writer names one it refuses. The
+// hook raises the refusal as a condition of its own class, and never returns.
+void Reader::refuse(const std::string &what) const {
+  std::string msg = trail_.at("cannot read " + what + " with `code = FALSE`");
+  cpp11::sexp text(cpp11::as_sexp(msg));
+  refuse_(text);
+  cpp11::stop("%s", msg.c_str());
+}
+
+// That refusal is the one error the reader names a path in, so a read that
+// rebuilds code keeps no trail and spends nothing on one.
+Trail *Reader::trail() { return code_ ? nullptr : &trail_; }
 
 int Reader::as_lgl(yyjson_val *v) {
   if (yyjson_is_bool(v)) return yyjson_get_bool(v) ? TRUE : FALSE;
@@ -398,8 +443,10 @@ void Reader::fill(SEXP out, Kind kind, size_t i, yyjson_val *v) {
     case K_STR:
       SET_STRING_ELT(out, at, as_chr(v));
       break;
-    default:
+    default: {
+      Step step(trail(), R_NilValue, at);
       SET_VECTOR_ELT(out, at, build(v));
+    }
   }
 }
 
@@ -445,6 +492,7 @@ SEXP Reader::build_obj(yyjson_val *v) {
 
   yyjson_obj_foreach(v, idx, max, key, val) {
     SET_STRING_ELT(nms, (R_xlen_t)idx, as_chr(key));
+    Step step(trail(), STRING_ELT(nms, (R_xlen_t)idx), (R_xlen_t)idx);
     SET_VECTOR_ELT(out, (R_xlen_t)idx, build(val));
   }
 
@@ -514,6 +562,8 @@ SEXP Reader::build_raw(yyjson_val *v) {
 }
 
 SEXP Reader::build_symbol(yyjson_val *v) {
+  if (!code_) refuse("a value of type 'symbol'");
+
   const char *s = yyjson_get_str(v) + 2;
   size_t len = yyjson_get_len(v) - 2;
 
@@ -604,6 +654,12 @@ SEXP Reader::build_tagged(yyjson_val *v) {
   SEXPTYPE type = type_name == nullptr ? kNoType : sexptype_of(type_name);
   bool wants_s4 = ((s4 != nullptr) && yyjson_get_bool(s4)) ||
                   (type_name != nullptr && std::strcmp(type_name, "S4") == 0);
+
+  // Refused before anything under it is read or made, an environment's shell
+  // included.
+  if (!code_ && !is_data(type)) {
+    refuse(std::string("a value of type '") + Rf_type2char(type) + "'");
+  }
 
   // An environment is numbered before anything it holds is read, since what
   // it holds is where a reference back to it comes from, and its attributes
@@ -704,6 +760,7 @@ SEXP Reader::build_attribs(yyjson_val *v) {
     }
     SET_STRING_ELT(nms, (R_xlen_t)idx, name);
     UNPROTECT(1);
+    Step step(trail(), name, 0, CRUMB_ATTRIBUTE);
     SET_VECTOR_ELT(out, (R_xlen_t)idx, build(val));
   }
 
@@ -759,6 +816,13 @@ void Reader::gate(SEXP x, SEXP attrs) {
 
   if (Rf_isS4(x) ||
       (attrs != R_NilValue && Rf_getAttrib(x, s7_class) != R_NilValue)) {
+    // The check is code the class supplies, and the document picks it by
+    // naming the class, so a read that rebuilds no code refuses the value
+    // rather than hand back one its class has not passed.
+    if (!code_) {
+      refuse(Rf_isS4(x) ? "an S4 object"
+                        : "a value carrying an `S7_class` attribute");
+    }
     SEXP value = PROTECT(quoted(x));
     validate_(value);
     UNPROTECT(1);
@@ -788,6 +852,11 @@ SEXP Reader::build_fun(yyjson_val *v, const char *type) {
 
 SEXP Reader::build_hooked(yyjson_val *v, const char *tag) {
   check_tags(v, {tag, kTagId});
+
+  // Each of these is rebuilt by code the session holds, picked by the class
+  // the document names: a `json_revive()` method, or the machinery of R6 or
+  // S7 finding or building the class.
+  if (!code_) refuse(std::string("a `") + tag + "` tag");
 
   int64_t id = marked(v, kTagId);
 
@@ -854,12 +923,13 @@ void finalize_doc(SEXP xp) {
 
 }  // namespace typedjson
 
-// The arguments come in as bare SEXPs, which `.Call()` protects for as long as
-// this runs. Taken as `cpp11::raws` and `cpp11::list`, they would sit on
-// cpp11's preserve list until a destructor that an R error raised in the walk
-// skips, and a refused document would stay in memory for the rest of the
-// session.
-[[cpp11::register]] cpp11::sexp typedjson_read_(SEXP bytes, SEXP hooks) {
+// The document and the hooks come in as bare SEXPs, which `.Call()` protects
+// for as long as this runs. Taken as `cpp11::raws` and `cpp11::list`, they
+// would sit on cpp11's preserve list until a destructor that an R error raised
+// in the walk skips, and a refused document would stay in memory for the rest
+// of the session.
+[[cpp11::register]] cpp11::sexp typedjson_read_(SEXP bytes, SEXP hooks,
+                                                bool code) {
   using namespace typedjson;
 
   yyjson_read_err err;
@@ -875,7 +945,7 @@ void finalize_doc(SEXP xp) {
   // cpp11's preserve list until its destructor runs, so it is owned the way
   // the document is rather than living on the stack, where an R error raised
   // in the walk would skip that destructor.
-  Reader *reader = new Reader(cpp11::list(hooks));
+  Reader *reader = new Reader(cpp11::list(hooks), code);
   SEXP keeper = PROTECT(guard(reader, finalize_reader));
   SEXP out = PROTECT(reader->build(yyjson_doc_get_root(parsed)));
   std::vector<std::string> lossy = reader->lossy();
