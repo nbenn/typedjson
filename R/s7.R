@@ -24,9 +24,14 @@ json_state.S7_any <- function(x) s7_class_state(x)
 #' @export
 json_state.S7_missing <- function(x) s7_class_state(x)
 
+# From S7 1.0.0 an object holds its class behind a class reference. That is
+# an environment whose `class` binding is the class, and the objects of one
+# class share it. The reference is recorded by the class it holds. Like an
+# environment, it goes into the reference table, so the objects of one
+# document share one class reference again on the way back.
 #' @export
 json_state.S7_class_ref <- function(x) {
-  tagged_state(tag_s7, list(reference = x$class))
+  tagged_state(tag_s7, list(class_ref = x$class))
 }
 
 s7_class_state <- function(x) {
@@ -79,10 +84,15 @@ s7_record <- function(x) {
 # such a class has always written is unchanged.
 s7_definition <- function(x) {
 
+  # From S7 1.0.0 the constructor of a class gets an environment of its own.
+  # That environment binds the class reference, and its parent is where the
+  # constructor was defined. The `new_class()` call on the way back adds such
+  # an environment again, so the constructor is recorded as it was defined,
+  # and a class read back writes the document it came from.
   constructor <- attr(x, "constructor")
   constructor_env <- environment(constructor)
+
   if (!is.null(get0(".S7_class_ref", constructor_env, inherits = FALSE))) {
-    # new_class() recreates its own reference wrapper on the read.
     environment(constructor) <- parent.env(constructor_env)
   }
 
@@ -179,10 +189,8 @@ s7_revive <- function(state) {
     )
   }
 
-  if (!is.null(state[["reference"]])) {
-    reference <- environment(state[["reference"]])[[".S7_class_ref"]]
-    stopifnot(is.environment(reference))
-    return(reference)
+  if (!is.null(state[["class_ref"]])) {
+    return(s7_class_ref(state[["class_ref"]]))
   }
 
   # A definition carries a constructor and a reference does not, so the
@@ -207,6 +215,30 @@ s7_revive <- function(state) {
   }
 
   s7_class(state)
+}
+
+# S7 1.0.0 binds the reference of a class in the environment of its
+# constructor, and an object of the class holds that reference. A class that
+# an older S7 built binds none, as in a package installed before S7 was
+# updated. S7 1.0.0 then stores the class itself in an object, and so does the
+# read. An older S7 reads neither form from `_S7_class`, so it cannot revive a
+# class reference at all.
+s7_class_ref <- function(class) {
+
+  if (!inherits(class, "S7_class")) {
+    stop("a recorded S7 class reference needs an S7 class", call. = FALSE)
+  }
+
+  if (package_version(getNamespaceVersion(need_s7())) < "1.0.0") {
+    stop(
+      "an S7 class reference needs the S7 package 1.0.0 or later",
+      call. = FALSE
+    )
+  }
+
+  get0(
+    ".S7_class_ref", environment(class), inherits = FALSE, ifnotfound = class
+  )
 }
 
 s7_generator <- function(state) {

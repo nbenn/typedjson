@@ -63,6 +63,60 @@ test_that("S7 objects share the class reconstructed in their document", {
   expect_identical(json_write_str(back), doc)
 })
 
+test_that("a class reference is recorded by the class it holds", {
+  skip_if_not_installed("S7", "1.0.0")
+
+  named <- corpus_generator("CorpusS7Named")
+  obj <- named(x = 1)
+  doc <- json_write_str(obj)
+
+  expect_match(
+    doc, '"_S7_class":{"~s7":{"class_ref":{"~s7":{"class":"CorpusS7Named"',
+    fixed = TRUE
+  )
+  expect_true(identical(attr(json_read_str(doc), "_S7_class"),
+                        attr(obj, "_S7_class")))
+})
+
+test_that("an object of a class an older S7 built holds the class itself", {
+  skip_if_not_installed("S7", "1.0.0")
+
+  global <- globalenv()
+  legacy <- S7::new_class(
+    "CorpusS7Legacy", properties = list(x = S7::class_double),
+    package = "R_GlobalEnv"
+  )
+  assign("CorpusS7Legacy", legacy, envir = global)
+  withr::defer(rm("CorpusS7Legacy", envir = global))
+
+  doc <- json_write_str(legacy(x = 1))
+
+  # An older S7 binds no class reference, as in a package installed before
+  # S7 was updated, and S7 1.0.0 then stores the class itself in an object.
+  rm(".S7_class_ref", envir = environment(legacy))
+  back <- json_read_str(doc)
+
+  expect_true(identical(attr(back, "_S7_class"), legacy))
+  expect_true(identical(S7::S7_class(back), legacy))
+  expect_identical(back@x, 1)
+})
+
+test_that("an older S7 refuses a class reference, naming the version", {
+  skip_if_not_installed("S7")
+  skip_if(utils::packageVersion("S7") >= "1.0.0")
+
+  doc <- paste0(
+    '{"~s7":{"class_ref":',
+    '{"~s7":{"class":"CorpusS7Named","package":"R_GlobalEnv"}}}}'
+  )
+
+  expect_error(
+    json_read_str(doc),
+    "an S7 class reference needs the S7 package 1.0.0 or later",
+    fixed = TRUE
+  )
+})
+
 test_that("resolved S7 constructor bindings round-trip without promises", {
   skip_if_not_installed("S7")
   skip_if(utils::packageVersion("S7") <= "0.2.2")
@@ -253,6 +307,15 @@ test_that("an S7 reference without a package is refused rather than guessed", {
   expect_error(
     json_read_str('{"~s7":{"class":"CorpusS7","package":null}}'),
     "needs a `package` to find it in or a `constructor` to rebuild it from",
+    fixed = TRUE
+  )
+})
+
+test_that("a class reference holding no S7 class is refused", {
+
+  expect_error(
+    json_read_str('{"~s7":{"class_ref":1.0}}'),
+    "a recorded S7 class reference needs an S7 class",
     fixed = TRUE
   )
 })
