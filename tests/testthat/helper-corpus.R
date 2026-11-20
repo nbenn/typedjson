@@ -319,7 +319,8 @@ corpus_env_missing <- function() {
   env
 }
 
-round_trip_failures <- function(values, self_contained = FALSE, code = TRUE) {
+round_trip_failures <- function(values, self_contained = FALSE, code = TRUE,
+                                same = identical) {
 
   failed <- character()
 
@@ -333,7 +334,7 @@ round_trip_failures <- function(values, self_contained = FALSE, code = TRUE) {
       error = function(e) structure(conditionMessage(e), class = "corpus_error")
     )
 
-    if (!roundtrip_equivalent(got, values[[nm]])) {
+    if (!same(got, values[[nm]])) {
       failed <- c(failed, nm)
     }
   }

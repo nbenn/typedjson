@@ -18,11 +18,11 @@ roundtrip_equivalent <- function(object, expected) {
 
 expect_roundtrip_equivalent <- function(object, expected) {
   if (identical(object, expected)) {
-    expect_identical(object, expected)
+    testthat::expect_identical(object, expected)
     return(invisible(object))
   }
   expect_env_equivalent(object, expected)
-  expect_identical(env_sharing(object), env_sharing(expected))
+  testthat::expect_identical(env_sharing(object), env_sharing(expected))
   invisible(object)
 }
 

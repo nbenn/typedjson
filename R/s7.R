@@ -81,7 +81,7 @@ s7_definition <- function(x) {
 
   constructor <- attr(x, "constructor")
   constructor_env <- environment(constructor)
-  if (!is.null(get0(".S7_class_ref", envir = constructor_env, inherits = FALSE))) {
+  if (!is.null(get0(".S7_class_ref", constructor_env, inherits = FALSE))) {
     # new_class() recreates its own reference wrapper on the read.
     environment(constructor) <- parent.env(constructor_env)
   }

@@ -47,8 +47,11 @@ test_that("an S7 object comes back through its generator", {
 test_that("S7 objects share the class reconstructed in their document", {
   skip_if_not_installed("S7")
 
-  objects <- list(class = CorpusS7, first = CorpusS7(x = 1, y = "a"),
-    second = CorpusS7(x = 2, y = "b"))
+  objects <- list(
+    class = CorpusS7,
+    first = CorpusS7(x = 1, y = "a"),
+    second = CorpusS7(x = 2, y = "b")
+  )
   doc <- json_write_str(objects)
   back <- json_read_str(doc)
 

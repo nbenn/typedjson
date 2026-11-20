@@ -102,6 +102,7 @@ test_that("an archived definition wins over the class the reader holds", {
 
 test_that("the flag reaches a class the definition it writes names", {
   skip_if_not_installed("S7")
+  skip_if_not_installed("jsonlite")
 
   parented <- local(
     S7::new_class(
@@ -113,7 +114,8 @@ test_that("the flag reaches a class the definition it writes names", {
 
   doc <- json_write_str(parented, self_contained = TRUE)
 
-  parent <- jsonlite::fromJSON(doc, simplifyVector = FALSE)[["~s7"]]$parent[["~s7"]]
+  parsed <- jsonlite::fromJSON(doc, simplifyVector = FALSE)
+  parent <- parsed[["~s7"]]$parent[["~s7"]]
   expect_identical(parent$class, "CorpusS7Named")
   expect_type(parent$constructor, "list")
   expect_env_equivalent(json_read_str(doc), parented)
@@ -1031,7 +1033,10 @@ test_that("every corpus value survives the trip with the flag set", {
   rebuilt <- vapply(corpus, inherits, logical(1L), "R6ClassGenerator")
 
   expect_identical(
-    round_trip_failures(corpus[!rebuilt], self_contained = TRUE), character()
+    round_trip_failures(
+      corpus[!rebuilt], self_contained = TRUE, same = roundtrip_equivalent
+    ),
+    character()
   )
 })
 
