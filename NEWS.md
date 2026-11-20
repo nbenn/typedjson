@@ -1,32 +1,37 @@
-# typedjson (development version)
+# typedjson 0.1.2
 
-* An S7 object round-trips under S7 1.0.0, which keeps the class in a `_S7_class` attribute, behind a class reference that the objects of the class share.
-  The writer records that reference by the class it holds, so objects written together share one class reference again on the way back.
-  A document written with an older S7 still reads, and one holding a class reference needs S7 1.0.0 (#120).
+## New features
 
-* A `self_contained` flag on both writers carries an S7 class definition even where a package would find the class again, for a document meant as an archive rather than a wire format. See `vignette("design")` for what it leaves referenced (#65).
+* Both writers take `self_contained`, for a document meant as an archive.
+  It carries every S7 class definition and `R6` generator, and writes `R6` instances whole, so the document reads where the class is gone.
+  It asks no `json_state()` method that a class author wrote.
+  See `vignette("design")` for what it still records by name (#65, #69, #73, #101).
 
-* The `self_contained` flag carries an `R6` class generator as well, recording what the generator binds apart from R6's own machinery and putting that back into an empty generator on the way in, so a document holding one reads where the class is gone. A generator the default refuses for want of a name that finds it again is carried rather than refused (#69).
+* Both readers take `code`, for a document that cannot be trusted.
+  Set to `FALSE`, they read it as data alone.
+  Every value that is code, or that the reader would call into R to rebuild or check, is refused with an error of class `typedjson_code_refusal` (#121).
 
-* The `self_contained` flag writes an `R6` instance whole, as the environment it is, without asking its class for a `json_state()` method, so a document holding one reads where neither the class nor R6 is available. Everything the instance holds is written, a field a method would leave out included, and a handle it holds stops the write (#73).
+* An active binding is recorded by the function it runs and comes back active, so an environment holding one round-trips rather than being refused.
+  Neither the writer nor the reader calls the function (#99).
 
-* A function definition inside a body no longer carries the file it was parsed from into the document. The parser keeps that source reference as part of the `function` call rather than as an attribute, where the writer did not look for one (#98).
+## Bug fixes
 
-* Reading a document no longer runs a call recorded with the S4 bit or an `S7_class` attribute. Either one sends the value to the class's validity check, which, unlike every other hook, was handed it outside `quote()`, so R evaluated the call on the way in (#96).
+* S7 objects round-trip under S7 1.0.0, and objects written together come back sharing one class reference.
+  A document written with an older S7 still reads, while one holding a class reference needs S7 1.0.0 (#120).
 
-* The S4 bit comes back on every type the reader builds. Complex, raw, language, pairlist, environment and function values used to lose it, a method definition among them, and with the bit went the class's validity check, which runs only on a value carrying it, so an edited document could read into a value its class rejects. A document asking for the bit on an object R shares, which is `NULL`, a symbol, a primitive or an environment recorded by name, no longer sets it on that object for the rest of the session (#96).
+* Reading a document no longer runs a call recorded with the S4 bit or an `S7_class` attribute (#96).
 
-* An active binding is recorded by the function it runs rather than refused, and comes back active, so an environment holding one round-trips, as does an `R6` instance with an active field under the `self_contained` flag. The function is called on neither side, which is how `serialize()` records one too (#99).
+* A document that carries attributes on an environment recorded by name, such as the global environment, is refused.
+  The reader used to set them on that environment, where they stayed for the rest of the session (#103).
 
-* The `self_contained` flag asks no `json_state()` method a class author wrote, for any class rather than for an `R6` instance alone, since the record one writes is read back through a `json_revive()` method found by name. A value whose class has such a method is written by the rule for its type, as `serialize()` writes every object, so a field the method leaves out is written and a handle it stands in for stops the write. The package's own methods still run, so an S7 class and an `R6` generator are carried, and a reference class instance is refused whatever methods its class has (#101).
+* The S4 bit, and with it the class's validity check, comes back on complex, raw, language, pairlist, environment and function values.
+  A document can no longer set the bit on an object R shares, such as `NULL` or a symbol, where it stayed for the rest of the session (#96).
 
-* A document carrying attributes on an environment recorded by name, such as the global environment or a namespace, is refused, as one carrying attributes on `NULL` or on a primitive already was. The reader used to set them on the environment the name finds, where they stayed for the rest of the session (#103).
+* A function definition inside a body no longer carries the file it was parsed from into the document (#98).
 
-* A document R refuses partway through the read, such as one whose `dim` does not fit its value, one asking for a coercion R will not make or one holding a NUL in a string, is let go of along with every value it had numbered by then. Both used to stay in memory for the rest of the session, where a document the reader refuses itself never did (#110).
+* A document that R refuses partway through a read, such as one whose `dim` does not fit its value, no longer stays in memory for the rest of the session (#110).
 
-* Reading a long name no longer understates R's count of vector memory. A name of 128 bytes or more that R already held under a copy with another encoding mark, as it holds a non-ASCII symbol the parser has read, lowered the count on every read by an amount taken from the name's hash rather than its length, wrapping it past zero in a session holding less, and a name over R's 10,000-byte limit did so on its way to being refused. A symbol the reader creates from a non-ASCII name of 128 bytes or more now has a name without an encoding mark, as one the parser creates already has (#116).
-
-* Both readers take `code`, which at `FALSE` reads a document as data alone, for one from somewhere it cannot be trusted. Every value that is code, or that the reader would call into R to rebuild or to check, is refused where it sits, naming the path: a symbol, a call, a pairlist and an expression, a closure and a primitive, an environment, the `~r6class`, `~s7` and `~x` tags, and a value carrying the S4 bit or an `S7_class` attribute. A refusal is an error of class `typedjson_code_refusal`, so a caller can tell a document refused for what it records from one that is not JSON at all. Vectors, lists, attributes and the `~z` specials read as they always have, so a factor, a date and a data frame still come back, and a document the flag does not refuse reads as the default reads it (#121).
+* Reading a long name no longer understates R's count of vector memory, which could wrap past zero (#116).
 
 # typedjson 0.1.1
 
