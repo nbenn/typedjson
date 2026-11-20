@@ -5,6 +5,7 @@
 ## Update
 
 This version fixes the test ERRORs that the r-devel-linux-x86_64-debian-gcc, r-devel-linux-x86_64-fedora-clang and r-devel-linux-x86_64-fedora-gcc flavours report for 0.1.1.
+CRAN asked for them to be corrected before 2026-12-11.
 The failing tests round-trip S7 objects, which 0.1.1 cannot do under S7 1.0.0.
 
 ## Bundled code
