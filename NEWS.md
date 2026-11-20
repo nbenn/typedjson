@@ -1,6 +1,8 @@
 # typedjson (development version)
 
-* Updates for compatibility with S7 > 0.2.2.
+* An S7 object round-trips under S7 1.0.0, which keeps the class in a `_S7_class` attribute, behind a class reference that the objects of the class share.
+  The writer records that reference by the class it holds, so objects written together share one class reference again on the way back.
+  A document written with an older S7 still reads, and one holding a class reference needs S7 1.0.0 (#120).
 
 * A `self_contained` flag on both writers carries an S7 class definition even where a package would find the class again, for a document meant as an archive rather than a wire format. See `vignette("design")` for what it leaves referenced (#65).
 

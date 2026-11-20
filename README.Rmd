@@ -140,7 +140,9 @@ A primitive closes over nothing, so it is recorded by the name that finds it aga
 
 S3 falls out with no special case: an S3 object is a base type plus a `class` attribute. S4 falls out too, with the S4 bit recorded separately, and an S4 object is rebuilt from its own contents — the class definition is needed to *use* it, not to read it back.
 
-S7 needs one special case, since the `S7_class` attribute holds a generator containing constructor closures. The class name and package are recorded and looked up on read, so the object round-trips directly.
+S7 needs one special case, since the attribute holding an object's class leads to a generator containing constructor closures.
+S7 1.0.0 names that attribute `_S7_class`, where an older S7 named it `S7_class`.
+The class name and package are recorded and looked up on read, so the object round-trips directly.
 
 An R6 class generator is recorded by the class it names and the package it was defined in, so it comes back as the object it was written from rather than as a copy. That lookup runs on the way out too: a generator that no name finds again, or a class that names more than one, is refused where it is written rather than on the read that fails months later.
 

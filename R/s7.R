@@ -38,7 +38,10 @@ s7_class_state <- function(x) {
   tagged_state(tag_s7, s7_record(x))
 }
 
-# Record what identifies a class rather than walking S7's implementation.
+# A class object is mostly S7's own machinery rather than the class an author
+# wrote, so the walk never enters one. Before S7 1.0.0 a walk was refused
+# there, since a base class held a validator closing over the promise that
+# built it. Each form below records what identifies the class instead.
 s7_record <- function(x) {
 
   if (inherits(x, "S7_class")) {

@@ -62,7 +62,7 @@ identical(json_write_str(json_read_str(doc)), doc)
 
 The second falls out of the first once foreign documents are read under the same grammar rather than a separate lossy mode. It holds for every document this package writes; a foreign one settles after a single round trip, since a mixed-type array such as `[1, "a"]` has to come back as a list. A writer flag is what qualifies it, since a document holds its bytes where it is read and written the same way: the `self_contained` flag below is the case that matters, a carried definition being recorded as a name again by a writer that was not asked for one, or refused by it where the definition is of an `R6` class.
 
-Four values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test — and a closure over such an environment is stated the same way, since it is that environment plus a formals and a body that do come back identical. An S7 class a document carries the definition of is the first case reached through a class rather than through an environment written on its own: S7 builds the constructor of a class that has a parent in an environment of its own, that environment is recorded by its contents like any other, and so no by-value scheme can hand back the object that was written. Base R does not manage it either, `identical(unserialize(serialize(x, NULL)), x)` being `FALSE` for an S7 object in the same session. An `R6` class a document carries the definition of goes a step further, since the class is an environment itself: it comes back a new generator whatever its parts close over, equivalent to the one written apart from holding its parent where that held the expression finding one. An `R6` instance the flag writes whole needs no case of its own, being an environment recorded by its contents like any other. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
+Four values are not asked to meet the first contract as it stands. An environment recorded by its contents comes back as a different object, exactly as `unserialize(serialize(e, NULL))` does, so the property it holds is stated as the weaker one rather than left to make `identical()` the wrong test — and a closure over such an environment is stated the same way, since it is that environment plus a formals and a body that do come back identical. An S7 class a document carries the definition of is the first case reached through a class rather than through an environment written on its own: S7 builds the constructor of a class that has a parent in an environment of its own, that environment is recorded by its contents like any other, and so no by-value scheme can hand back the object that was written. From S7 1.0.0 that holds for every class, since `new_class()` gives each constructor an environment of its own, and the read builds a new one. Base R does not manage it either, `identical(unserialize(serialize(x, NULL)), x)` being `FALSE` for an S7 object in the same session. An `R6` class a document carries the definition of goes a step further, since the class is an environment itself: it comes back a new generator whatever its parts close over, equivalent to the one written apart from holding its parent where that held the expression finding one. An `R6` instance the flag writes whole needs no case of its own, being an environment recorded by its contents like any other. A string R has not declared an encoding for is the same move at a smaller scale: a document carries one encoding, so the string comes back declared UTF-8, and stating the trip on its bytes is what keeps `identical()` from being the wrong test under a locale that cannot represent them.
 
 - **Exact.** The relation above, which every other value in scope meets, and which an environment recorded by name meets too. A string carrying no encoding declaration meets it on its bytes.
 - **Equivalent.** Same bindings by name and by value, the value of an active binding being the function it runs, same locked and active status, and a parent that is itself equivalent. A closure meets it where its formals and body are identical and the environment it closes over is equivalent.
@@ -290,7 +290,15 @@ S3 falls out with no special case at all: an S3 object is a base type plus a `cl
 
 S4 falls out too, since slots are attributes, with two riders — the S4 bit is recorded separately because `typeof()` reports `S4` rather than the data type, and the class definition is needed to use the object rather than to read it back.
 
-S7 needs exactly one special case. Properties are stored as attributes and come through the ordinary rule, but the `S7_class` attribute holds the class generator, and a walk into one lands in S7's own machinery rather than in anything the class declares — a base class holds a validator closing over the promise that built it. So a class is recorded by what identifies it rather than by its contents. With that in place an S7 object round-trips directly, which removes the need for a hand-written record layer above it.
+S7 needs exactly one special case.
+Properties are stored as attributes and come through the ordinary rule, but the attribute holding the class does not.
+S7 1.0.0 names it `_S7_class` and puts a class reference there.
+That is an environment whose `class` binding is the class generator, and the objects of the class share it.
+An older S7 named it `S7_class` and put the generator there itself.
+Either way, a walk into the generator lands in S7's own machinery rather than in anything the class declares.
+Before S7 1.0.0 the walk was even refused there, since a base class held a validator closing over the promise that built it.
+So a class is recorded by what identifies it rather than by its contents, and a class reference by the class it holds.
+With that in place an S7 object round-trips directly, which removes the need for a hand-written record layer above it.
 
 Which of the two forms a class takes is decided by `package`, which S7 sets for a class defined in a package and leaves `NULL` for every class defined outside one. That is the same question as whether a name finds the class again in another session, so a package-scoped class is recorded as the class and package it names, and a class with no package carries its definition.
 
@@ -318,7 +326,20 @@ Each class the definition names is recorded the same way, by what identifies it 
 {"~s7": {"union": [{"~s7": "class_double"}, {"~s7": "class_character"}]}}
 ```
 
-The class vector is an ordinary attribute and the `S7_class` record resolves without reading it, so the two can disagree in a document that has been edited. They are compared where the object is rebuilt, since dispatch would otherwise follow the one while the properties came from the other.
+A class reference is recorded by the class it holds, in either of the two forms.
+Like an environment, it goes into the reference table, so the objects of one document share one class reference again on the way back.
+
+```json
+{"~s7": {"class_ref": {"~s7": {"class": "Point", "package": "somepkg"}}}}
+```
+
+S7 1.0.0 still reads the `S7_class` attribute, so a document written with an older S7 reads as it did.
+A class that an older S7 built has no class reference, as with a package not reinstalled since S7 was updated.
+An object of such a class comes back holding the class itself, the way S7 1.0.0 stores it.
+An older S7 reads neither the `_S7_class` attribute nor a class reference.
+Where an older S7 is installed, the reader refuses a class reference rather than rebuild an object that S7 cannot use.
+
+The class vector is an ordinary attribute and the `~s7` record resolves without reading it, so the two can disagree in a document that has been edited. They are compared where the object is rebuilt, since dispatch would otherwise follow the one while the properties came from the other.
 
 Both of those rebuild the object from the document rather than construct one, which reaches past the point where the class would have decided whether to produce it at all: an S4 object arrives without its `initialize` method having run, and an S7 object without its `constructor`. The check the class does supply is therefore run where the object is rebuilt — `methods::validObject()` on the S4 side and `S7::validate()` on the S7 side — which is what stands between a hand-edited document and a value the class itself rejects. Neither disturbs a good round trip, a document written from a valid object describing a valid one, and the S7 call earns its keep twice over, since it checks property types as well and so catches a property the document omits or spells as something else. The lookup that finds the class is allowed to find one and not to fetch one, so a document naming a package this session has not loaded reads the way it did before the check existed rather than stopping at it.
 
@@ -529,7 +550,7 @@ json_write_str(Archived(n = 1))
 ```
 
 ```json
-{"~t": "object", "~a": {"class": ["somepkg::Archived", "S7_object"], "S7_class": {"~s7": {"class": "Archived", "package": "somepkg", "parent": {"~s7": "S7_object"}, "properties": {}, "abstract": false, "constructor": {"~t": "closure", "~v": {}}, "validator": null}}, "n": 1.0}}
+{"~t": "object", "~a": {"class": ["somepkg::Archived", "S7_object"], "_S7_version": 1, "_S7_class": {"~s7": {"class_ref": {"~s7": {"class": "Archived", "package": "somepkg", "parent": {"~s7": "S7_object"}, "properties": {}, "abstract": false, "constructor": {"~t": "closure", "~v": {}}, "validator": null}}}}, "n": 1.0}}
 ```
 
 The class is built in the global environment above because that is what a class defined in a package has and a class defined in a chunk does not: a constructor closing over an environment a name finds again. The constructor is recorded by the ordinary closure rule wherever it sits, so a class built inside a frame of its own carries that frame's bindings into every document an instance of it is written to, which is the environment rule holding rather than a cost of the flag.
@@ -659,7 +680,7 @@ json_read_str("[1, 9007199254740993]")
 
 The format records code as faithfully as data, which is the point of it for a session persisting its own state and the danger in it for one reading a file that arrived from outside, such as a board a browser uploaded. A call comes back a call, and one spliced into an expression with `bquote()` runs when that expression is evaluated; a closure runs where it is called. Other values hold no code themselves but reach code the session holds, picked by what the document names: an environment recorded by name can load the package it names, a `~x` tag is rebuilt by a `json_revive()` method found under the class it records, an `R6` or S7 class by its generator, and an S4 or S7 object is handed to the check its class supplies.
 
-With `code = FALSE` a reader neither rebuilds code nor calls into R to build or check a value, and every value that would take either is refused where it sits, naming the path the way the writer's refusals do: a symbol, a call, a pairlist and an expression, a closure and a primitive, an environment, the `~r6class`, `~s7` and `~x` tags, and a value carrying the S4 bit or an `S7_class` attribute. A refusal is an error of class `typedjson_code_refusal`, so a caller can tell a document refused for what it records from one that is not JSON at all.
+With `code = FALSE` a reader neither rebuilds code nor calls into R to build or check a value, and every value that would take either is refused where it sits, naming the path the way the writer's refusals do: a symbol, a call, a pairlist and an expression, a closure and a primitive, an environment, the `~r6class`, `~s7` and `~x` tags, and a value carrying the S4 bit or an `_S7_class` or `S7_class` attribute. A refusal is an error of class `typedjson_code_refusal`, so a caller can tell a document refused for what it records from one that is not JSON at all.
 
 ```{r, error = TRUE}
 doc <- '{"by": {"~t": "language", "~v": ["~:Sys.getenv", "HOME"]}}'
@@ -668,7 +689,7 @@ json_read_str(doc, code = FALSE)
 
 What is left is what describes data: the vector types, lists and `NULL`, attributes of any kind, and the `~z` specials. A factor, a date and a data frame therefore still come back, and every document the flag does not refuse comes back as the default reads it, which the test suite checks over the whole corpus. The flag decides whether a document is read and never what it reads as, which is what keeps it the one switch a reader takes. Refusing is also the answer plain mode gives on the way out, and for the same reason: a document that came back without the call it held would be the quiet change this package exists to prevent.
 
-A few of the refusals reach past code itself. An expression is refused although each of its elements is checked by the same rule, for the reason a pairlist is: both are where R keeps code. An S4 object is refused rather than read without its check, since the check is code the class supplies and the document picks it by naming the class. A value carrying an `S7_class` attribute is refused for the same check, an S7 object itself being refused already through its class, which is a `~s7` tag.
+A few of the refusals reach past code itself. An expression is refused although each of its elements is checked by the same rule, for the reason a pairlist is: both are where R keeps code. An S4 object is refused rather than read without its check, since the check is code the class supplies and the document picks it by naming the class. A value carrying an `_S7_class` or `S7_class` attribute is refused for the same check, an S7 object itself being refused already through its class, which is a `~s7` tag.
 
 ## API
 
