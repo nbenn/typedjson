@@ -115,20 +115,26 @@ test_that("an S7 class and an object of one are refused through the tag", {
 })
 
 # A class is a closure or a `~s7` tag, so a value read without code can carry
-# an `S7_class` attribute only where the document spelled one by hand. The
-# default hands such a value to S7 to check, which is code all the same.
+# an `_S7_class` or an `S7_class` attribute only where the document spelled
+# one by hand. The default hands such a value to S7 to check, which is code
+# all the same.
 test_that("a value only S7 could check is refused rather than read unchecked", {
 
-  lookalike <- paste0(
-    '{"~a":{"S7_class":{"~a":{"class":"S7_class"},"~v":[]},',
-    '"class":["thing","S7_object"]},"~v":[]}'
-  )
+  for (attr_name in c("_S7_class", "S7_class")) {
 
-  expect_error(
-    json_read_str(lookalike, code = FALSE),
-    code_refusal("a value carrying an `S7_class` attribute", "x"),
-    fixed = TRUE
-  )
+    lookalike <- paste0(
+      '{"~a":{"', attr_name, '":{"~a":{"class":"S7_class"},"~v":[]},',
+      '"class":["thing","S7_object"]},"~v":[]}'
+    )
+
+    expect_error(
+      json_read_str(lookalike, code = FALSE),
+      code_refusal(
+        paste0("a value carrying an `", attr_name, "` attribute"), "x"
+      ),
+      fixed = TRUE
+    )
+  }
 })
 
 test_that("a refusal names the path it stopped at", {

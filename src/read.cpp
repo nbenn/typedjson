@@ -812,19 +812,23 @@ void Reader::set_attribs(SEXP x, SEXP attrs) {
 // document is still what the value came from.
 void Reader::gate(SEXP x, SEXP attrs) {
 
-  static SEXP s7_class = Rf_install("S7_class");
-  static SEXP s7_class_ref = Rf_install("_S7_class");
+  // S7 1.0.0 keeps an object's class in `_S7_class`, where an older S7 kept
+  // it in `S7_class`.
+  static SEXP s7_class = Rf_install("_S7_class");
+  static SEXP s7_class_legacy = Rf_install("S7_class");
 
   if (Rf_isS4(x) ||
       (attrs != R_NilValue &&
        (Rf_getAttrib(x, s7_class) != R_NilValue ||
-        Rf_getAttrib(x, s7_class_ref) != R_NilValue))) {
+        Rf_getAttrib(x, s7_class_legacy) != R_NilValue))) {
     // The check is code the class supplies, and the document picks it by
     // naming the class, so a read that rebuilds no code refuses the value
     // rather than hand back one its class has not passed.
     if (!code_) {
-      refuse(Rf_isS4(x) ? "an S4 object"
-                        : "a value carrying an `S7_class` attribute");
+      if (Rf_isS4(x)) refuse("an S4 object");
+      refuse(Rf_getAttrib(x, s7_class) != R_NilValue
+                 ? "a value carrying an `_S7_class` attribute"
+                 : "a value carrying an `S7_class` attribute");
     }
     SEXP value = PROTECT(quoted(x));
     validate_(value);
