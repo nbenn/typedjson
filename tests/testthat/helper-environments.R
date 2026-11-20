@@ -10,20 +10,39 @@ expect_env_equivalent <- function(object, expected) {
   invisible(object)
 }
 
+# S7 1.0.0 gives the constructor of each class an environment of its own. A
+# class the reader rebuilds from its definition gets a new one, so it comes
+# back equivalent rather than identical. A value that holds no S7 class still
+# has to come back identical.
 roundtrip_equivalent <- function(object, expected) {
-  if (identical(object, expected)) return(TRUE)
-  is.null(env_difference(object, expected)) &&
+
+  if (identical(object, expected)) {
+    return(TRUE)
+  }
+
+  holds_s7_class(expected) &&
+    is.null(env_difference(object, expected)) &&
     identical(env_sharing(object), env_sharing(expected))
 }
 
 expect_roundtrip_equivalent <- function(object, expected) {
-  if (identical(object, expected)) {
+
+  if (identical(object, expected) || !holds_s7_class(expected)) {
     testthat::expect_identical(object, expected)
     return(invisible(object))
   }
+
   expect_env_equivalent(object, expected)
   testthat::expect_identical(env_sharing(object), env_sharing(expected))
   invisible(object)
+}
+
+# An object holds its class through its attributes, and a class can sit in a
+# list at any depth.
+holds_s7_class <- function(x) {
+  inherits(x, c("S7_class", "S7_class_ref")) ||
+    (is.list(x) && any(vapply(x, holds_s7_class, logical(1L)))) ||
+    any(vapply(attributes(x), holds_s7_class, logical(1L)))
 }
 
 env_difference <- function(x, y, at = "x", seen = env_pairs()) {
