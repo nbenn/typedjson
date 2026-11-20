@@ -202,11 +202,15 @@
 #' recorded by what identifies it rather than walked into — one S7 itself
 #' binds by the name it holds there, an S3 class by its class vector, a
 #' union by its members, and a class of your own by the two forms above —
-#' since every refusal a walk into one hits is inside S7's own machinery
-#' rather than in the class you wrote. The class vector an object records
-#' is checked against the class it resolves to, so a document where the two
-#' disagree is refused rather than dispatching on the one and taking its
-#' properties from the other.
+#' since a walk into one lands in S7's own machinery rather than in the class
+#' you wrote. The class vector an object records is checked against the class
+#' it resolves to, so a document where the two disagree is refused rather
+#' than dispatching on the one and taking its properties from the other.
+#' The objects of one document that share a class come back sharing it, a
+#' class the reader rebuilds from its definition included.
+#' From S7 1.0.0 an object holds its class behind a class reference, which is
+#' recorded by the class it holds.
+#' A document holding a class reference needs S7 1.0.0 to be read.
 #'
 #' Which of the two a class gets is a default rather than a rule, and it is
 #' the `self_contained` flag that overrides it. A document written with that
@@ -336,12 +340,13 @@
 #' value, and every value that would take either is refused where it sits,
 #' naming the path: a symbol, a call, a pairlist and an expression, a closure
 #' and a primitive, an environment, the `~r6class`, `~s7` and `~x` tags, and a
-#' value carrying the S4 bit or an `S7_class` attribute. A refusal is an error
-#' of class `typedjson_code_refusal`, so a caller can tell a document refused
-#' for what it records from one that is not JSON at all. What is left is what
-#' describes data, which is the vector types, lists and `NULL`, attributes and
-#' the `~z` specials, so a factor, a date and a data frame still come back, and
-#' a document the flag does not refuse comes back as the default reads it.
+#' value carrying the S4 bit or an `_S7_class` or `S7_class` attribute. A
+#' refusal is an error of class `typedjson_code_refusal`, so a caller can tell
+#' a document refused for what it records from one that is not JSON at all.
+#' What is left is what describes data, which is the vector types, lists and
+#' `NULL`, attributes and the `~z` specials, so a factor, a date and a data
+#' frame still come back, and a document the flag does not refuse comes back
+#' as the default reads it.
 #'
 #' @param x Value to write.
 #' @param path Path to write to or read from.

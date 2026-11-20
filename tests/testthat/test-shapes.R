@@ -30,7 +30,9 @@ test_that("the corpus covers every shape it claims to", {
 })
 
 test_that("every shape and list configuration survives a round trip", {
-  expect_identical(round_trip_failures(corpus), character())
+  expect_identical(
+    round_trip_failures(corpus, same = roundtrip_equivalent), character()
+  )
 })
 
 test_that("a value survives in every position it can occupy", {
@@ -50,7 +52,7 @@ test_that("a value survives in every position it can occupy", {
         error = function(e) structure(conditionMessage(e), class = "corpus_err")
       )
 
-      if (!identical(got, value)) {
+      if (!roundtrip_equivalent(got, value)) {
         failed <- c(failed, paste0(nm, " @ ", where))
       }
     }

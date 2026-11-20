@@ -42,7 +42,7 @@ test_that("every corpus value survives a file round trip", {
 
   for (nm in names(corpus)) {
     json_write(corpus[[nm]], path)
-    if (!identical(json_read(path), corpus[[nm]])) {
+    if (!roundtrip_equivalent(json_read(path), corpus[[nm]])) {
       failed <- c(failed, nm)
     }
   }

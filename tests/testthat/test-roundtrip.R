@@ -1,5 +1,7 @@
 test_that("every corpus value survives a round trip", {
-  expect_identical(round_trip_failures(corpus), character())
+  expect_identical(
+    round_trip_failures(corpus, same = roundtrip_equivalent), character()
+  )
 })
 
 test_that("the corpus covers what the format has to say", {
@@ -18,7 +20,7 @@ test_that("a document this package writes reads and writes back to itself", {
     doc <- json_write_str(corpus[[nm]])
     again <- json_write_str(json_read_str(doc))
 
-    if (!identical(json_read_str(again), json_read_str(doc))) {
+    if (!roundtrip_equivalent(json_read_str(again), json_read_str(doc))) {
       reshaped <- c(reshaped, nm)
     }
 
@@ -103,7 +105,9 @@ test_that("indenting changes whitespace and nothing else", {
 
   for (nm in names(corpus)) {
     x <- corpus[[nm]]
-    expect_identical(json_read_str(json_write_str(x, pretty = TRUE)), x)
+    expect_roundtrip_equivalent(
+      json_read_str(json_write_str(x, pretty = TRUE)), x
+    )
   }
 
   expect_match(json_write_str(list(a = 1), pretty = TRUE), "\n")

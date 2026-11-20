@@ -134,6 +134,10 @@ inline bool has_key(SEXP x, const char *key) {
 // recorded by what it binds, the way an environment is, rebuilds a new
 // generator instead, and is a reference like any other.
 inline bool records_by_name(const char *tag, SEXP state) {
+  if (std::strcmp(tag, kTagS7) == 0) {
+    return TYPEOF(state) == STRSXP ||
+           (has_key(state, "package") && !has_key(state, "constructor"));
+  }
   return std::strcmp(tag, kTagR6Class) == 0 && !has_key(state, kEnvBindings);
 }
 
