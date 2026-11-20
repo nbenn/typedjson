@@ -44,20 +44,20 @@ The second holds modulo whitespace and key order: attributes come back as a set,
 
 Two rules decide the shape. A JSON array of scalars is an atomic vector and a JSON object is a named list, so both containers mean what they mean everywhere else. A length-one vector is written bare wherever an array could not be mistaken for it.
 
-| R value                                | Document                                    |
-|----------------------------------------|---------------------------------------------|
-| `1L`                                   | `1`                                         |
-| `1`                                    | `1.0`                                       |
-| `"a"`                                  | `"a"`                                       |
-| `TRUE`                                 | `true`                                      |
-| `NULL`                                 | `null`                                      |
-| `c(1, 2.5)`                            | `[1.0,2.5]`                                 |
-| `c(1L, 2L)`                            | `[1,2]`                                     |
-| `list(a = 1, b = 2)`                   | `{"a":1.0,"b":2.0}`                         |
-| `list(name = "config", retries = 3L)`  | `{"name":"config","retries":3}`             |
-| `list(list(id = "a"), list(id = "b"))` | `[{"id":"a"},{"id":"b"}]`                   |
-| `list(1, 2)`                           | `[[1.0],[2.0]]`                             |
-| `c(a = 1, b = 2)`                      | `{"~a":{"names":["a","b"]},"~v":[1.0,2.0]}` |
+| R value | Document |
+|----|----|
+| `1L` | `1` |
+| `1` | `1.0` |
+| `"a"` | `"a"` |
+| `TRUE` | `true` |
+| `NULL` | `null` |
+| `c(1, 2.5)` | `[1.0,2.5]` |
+| `c(1L, 2L)` | `[1,2]` |
+| `list(a = 1, b = 2)` | `{"a":1.0,"b":2.0}` |
+| `list(name = "config", retries = 3L)` | `{"name":"config","retries":3}` |
+| `list(list(id = "a"), list(id = "b"))` | `[{"id":"a"},{"id":"b"}]` |
+| `list(1, 2)` | `[[1.0],[2.0]]` |
+| `c(a = 1, b = 2)` | `{"~a":{"names":["a","b"]},"~v":[1.0,2.0]}` |
 
 Brackets survive in exactly one position, and there they are load-bearing: around an array element they are the only thing separating `list(1, 2)` from `c(1, 2)`. Everywhere else — the document root, an object value, an attribute value, the payload of a tagged object — a length-one vector is bare, so a record reads the way any other tool would write it.
 
@@ -93,12 +93,12 @@ The type rides in the payload too, wherever the payload can state it — the dec
 
 A call is its elements, so it is written as them, with the argument names R stores as tags riding in the payload. Nothing is deparsed, which matters because a call may carry an arbitrary R object as a constant in its tree: `str2lang(deparse(x))` hands back a call to `c()` where a double vector went in, and a constant needing more than 15 significant digits comes back rounded.
 
-| R value                            | Document                                             |
-|------------------------------------|------------------------------------------------------|
-| `as.name("x")`                     | `"~:x"`                                              |
-| `quote(mpg ~ wt)`                  | `{"~t":"language","~v":["~:~","~:mpg","~:wt"]}`      |
-| `quote(f(0.1, a = x))`             | `{"~t":"language","~v":{"":"~:f","":0.1,"a":"~:x"}}` |
-| `formals(function(x, y = 2) NULL)` | `{"~t":"pairlist","~v":{"x":"~:","y":2.0}}`          |
+| R value | Document |
+|----|----|
+| `as.name("x")` | `"~:x"` |
+| `quote(mpg ~ wt)` | `{"~t":"language","~v":["~:~","~:mpg","~:wt"]}` |
+| `quote(f(0.1, a = x))` | `{"~t":"language","~v":{"":"~:f","":0.1,"a":"~:x"}}` |
+| `formals(function(x, y = 2) NULL)` | `{"~t":"pairlist","~v":{"x":"~:","y":2.0}}` |
 
 A symbol takes the prefix tag rather than a tagged object of its own, since a call is mostly symbols and the object form costs more than twice the bytes. The empty symbol — what `x[, 1]` holds where a row index would go, and what a formals entry with no default holds — is the tag with nothing after it.
 
@@ -216,11 +216,11 @@ Worked through end to end in `vignette("handles", package = "typedjson")`: a chu
 
 Measured on one machine, over a 522 KB R value of nested lists of character, double, integer and logical vectors:
 
-|                                         | document | write  | read   | round-trips exactly |
-|-----------------------------------------|----------|--------|--------|---------------------|
-| `json_write_str()` / `json_read_str()`  | 89 KB    | 1.9 ms | 1.7 ms | yes                 |
-| `toJSON()` / `fromJSON()`               | 61 KB    | 184 ms | 4.5 ms | no                  |
-| `serializeJSON()` / `unserializeJSON()` | 186 KB   | 721 ms | 260 ms | no                  |
+|  | document | write | read | round-trips exactly |
+|----|----|----|----|----|
+| `json_write_str()` / `json_read_str()` | 89 KB | 1.9 ms | 1.7 ms | yes |
+| `toJSON()` / `fromJSON()` | 61 KB | 184 ms | 4.5 ms | no |
+| `serializeJSON()` / `unserializeJSON()` | 186 KB | 721 ms | 260 ms | no |
 
 Writing is roughly 97 times faster than `toJSON()` and 380 times faster than `serializeJSON()`, because both of those walk the value in R before anything reaches C. The read column is not like for like: `fromJSON()` was called with `simplifyVector = FALSE`, so it builds plain lists and does less work than the other two, and it still returns a different value from the one that went in.
 
