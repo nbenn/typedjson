@@ -93,8 +93,8 @@ tagged_state <- function(tag, state) {
   structure(list(tag, state), class = "typedjson_state")
 }
 
-refuse <- function(...) {
-  stop(errorCondition(paste0(...), class = "typedjson_refusal"))
+refuse <- function(..., class = character()) {
+  stop(errorCondition(paste0(...), class = c(class, "typedjson_refusal")))
 }
 
 class_text <- function(class) {

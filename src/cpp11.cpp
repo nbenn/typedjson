@@ -6,10 +6,10 @@
 #include <R_ext/Visibility.h>
 
 // read.cpp
-cpp11::sexp typedjson_read_(SEXP bytes, SEXP hooks);
-extern "C" SEXP _typedjson_typedjson_read_(SEXP bytes, SEXP hooks) {
+cpp11::sexp typedjson_read_(SEXP bytes, SEXP hooks, bool code);
+extern "C" SEXP _typedjson_typedjson_read_(SEXP bytes, SEXP hooks, SEXP code) {
   BEGIN_CPP11
-    return cpp11::as_sexp(typedjson_read_(cpp11::as_cpp<cpp11::decay_t<SEXP>>(bytes), cpp11::as_cpp<cpp11::decay_t<SEXP>>(hooks)));
+    return cpp11::as_sexp(typedjson_read_(cpp11::as_cpp<cpp11::decay_t<SEXP>>(bytes), cpp11::as_cpp<cpp11::decay_t<SEXP>>(hooks), cpp11::as_cpp<cpp11::decay_t<bool>>(code)));
   END_CPP11
 }
 // write.cpp
@@ -30,7 +30,7 @@ extern "C" SEXP _typedjson_typedjson_write_file_(SEXP x, SEXP path, SEXP pretty,
 
 extern "C" {
 static const R_CallMethodDef CallEntries[] = {
-    {"_typedjson_typedjson_read_",       (DL_FUNC) &_typedjson_typedjson_read_,       2},
+    {"_typedjson_typedjson_read_",       (DL_FUNC) &_typedjson_typedjson_read_,       3},
     {"_typedjson_typedjson_write_",      (DL_FUNC) &_typedjson_typedjson_write_,      4},
     {"_typedjson_typedjson_write_file_", (DL_FUNC) &_typedjson_typedjson_write_file_, 5},
     {NULL, NULL, 0}

@@ -104,6 +104,11 @@ test_that("bytes that are not valid UTF-8 are refused where they sit", {
     "cannot write a string that is not valid UTF-8 at `x`",
     fixed = TRUE
   )
+  expect_error(
+    json_write_str(structure(1L, note = list(a = bad))),
+    'cannot write a string that is not valid UTF-8 at `attr(x, "note")$a`',
+    fixed = TRUE
+  )
 })
 
 test_that("the sequences UTF-8 excludes are refused as well", {

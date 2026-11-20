@@ -179,13 +179,20 @@ Plain output is not read back as the value that wrote it; that is what the defau
 
 ## Reading foreign JSON
 
-One grammar, applied to whatever is handed over. Nothing is inferred from content, only from the lexeme and the shape — no `NA` from `"NA"`, no `Inf` from `"Inf"`, no date from an ISO-8601-looking string, no data frame from an array of objects. There is no strict mode and no lossy mode, because there is only one set of rules.
+One grammar, applied to whatever is handed over. Nothing is inferred from content, only from the lexeme and the shape — no `NA` from `"NA"`, no `Inf` from `"Inf"`, no date from an ISO-8601-looking string, no data frame from an array of objects. There is no lossy mode, because there is only one set of rules.
 
 Integers beyond what R holds are read as doubles, and a number that cannot survive that conversion exactly is reported through a warning naming the literal rather than passed off as exact.
 
 What the `~` prefix reserves is refused outright. A key beginning with a single `~` is a format tag, so one this reader cannot use as a name is an error; the sole exception is `~zNA_character_`, since a name is a string and that is the only name JSON has no way to carry. A string is more selective, because `~/data` has to stay a path: the tag is the prefix plus a reserved discriminator, which is `z` for what JSON has no lexeme for and `:` for a symbol, and an unknown one is an error while every other tilde-leading string is text.
 
 The writer doubles the prefix on a string of your own, which is what makes the namespace safe to reserve in the first place. A document written against a later version of the format therefore fails loudly here instead of coming back as the wrong value.
+
+A document from somewhere it cannot be trusted is read with `code = FALSE`, the one switch a reader takes, which refuses rather than reading anything differently. By default a reader rebuilds whatever a document records, a call or a closure included, and calls into the session's own code where the document names a class to revive or to check. With the flag it does neither, and each such value is refused where it sits, naming the path. Vectors, lists, attributes and the `~z` specials read as they always do, so a factor, a date and a data frame still come back.
+
+``` r
+json_read_str('{"by": {"~t": "language", "~v": ["~:Sys.getenv", "HOME"]}}', code = FALSE)
+#> Error: cannot read a value of type 'language' with `code = FALSE` at `x$by`
+```
 
 ## Persisting a class the default rule does not fit
 

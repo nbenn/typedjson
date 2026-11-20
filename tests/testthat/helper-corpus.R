@@ -319,7 +319,7 @@ corpus_env_missing <- function() {
   env
 }
 
-round_trip_failures <- function(values, self_contained = FALSE) {
+round_trip_failures <- function(values, self_contained = FALSE, code = TRUE) {
 
   failed <- character()
 
@@ -327,7 +327,8 @@ round_trip_failures <- function(values, self_contained = FALSE) {
 
     got <- tryCatch(
       json_read_str(
-        json_write_str(values[[nm]], self_contained = self_contained)
+        json_write_str(values[[nm]], self_contained = self_contained),
+        code = code
       ),
       error = function(e) structure(conditionMessage(e), class = "corpus_error")
     )
